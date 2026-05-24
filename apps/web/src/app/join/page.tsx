@@ -1,0 +1,205 @@
+"use client";
+
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { Household, HouseholdInvite, User } from "@shopping-assistant/shared-types";
+import { api } from "../../lib/api";
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: "בעלים",
+  admin: "מנהל",
+  adult_member: "חבר מבוגר",
+  limited_member: "חבר מוגבל"
+};
+
+type Phase = "loading" | "auth" | "link_sent" | "preview" | "joining" | "done" | "error";
+
+export default function JoinPage() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const token = params.get("token") ?? "";
+
+  const [invite, setInvite] = useState<HouseholdInvite>();
+  const [household, setHousehold] = useState<Household>();
+  const [currentUser, setCurrentUser] = useState<User>();
+  const [phone, setPhone] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (!token) { setPhase("error"); setError("קישור הזמנה חסר"); return; }
+    api.lookupInvite(token)
+      .then((result) => {
+        setInvite(result.invite);
+        setHousehold(result.household);
+        return api.me()
+          .then((me) => { setCurrentUser(me.user); setPhase("preview"); })
+          .catch(() => setPhase("auth"));
+      })
+      .catch(() => { setPhase("error"); setError("ההזמנה לא נמצאה או שפגה תוקפה"); });
+  }, [token]);
+
+  async function sendMagicLink(event: React.FormEvent) {
+    event.preventDefault();
+    if (!phone.trim()) return;
+    setError(undefined);
+    try {
+      // Pass the join URL as `next` so the magic link redirects back here after auth
+      const nextUrl = `/join?token=${encodeURIComponent(token)}`;
+      await api.requestMagicLink(phone.trim(), nextUrl);
+      setPhase("link_sent");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בשליחת הקישור");
+    }
+  }
+
+  async function join() {
+    setPhase("joining");
+    setError(undefined);
+    try {
+      const nameToSend = displayName.trim() || undefined;
+      await api.joinHousehold(token, nameToSend);
+      setPhase("done");
+      setTimeout(() => router.replace("/dashboard"), 1800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בהצטרפות");
+      setPhase("preview");
+    }
+  }
+
+  // ── Static states ──────────────────────────────────────────────────────────
+
+  if (phase === "loading") {
+    return <div className="login-page"><div className="login-box">טוען...</div></div>;
+  }
+
+  if (phase === "error") {
+    return (
+      <div className="login-page">
+        <div className="login-box status error">{error}</div>
+      </div>
+    );
+  }
+
+  if (phase === "done") {
+    return (
+      <div className="login-page">
+        <div className="login-box" style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "2rem", marginBottom: 8 }}>✓</div>
+          <div style={{ fontWeight: 600 }}>הצטרפת בהצלחה!</div>
+          <div className="muted" style={{ marginTop: 4 }}>עובר לדשבורד...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Household summary card (shown in all non-terminal phases) ──────────────
+
+  const householdCard = invite && household && (
+    <div style={{ background: "var(--surface, #f8f9fa)", borderRadius: 10, padding: "14px 18px", marginBottom: 20, textAlign: "center" }}>
+      <div style={{ fontSize: "1.2rem", fontWeight: 700 }}>{household.name}</div>
+      <div className="muted" style={{ marginTop: 4 }}>תפקיד: <strong>{ROLE_LABELS[invite.role] ?? invite.role}</strong></div>
+      {invite.personalBudgetMonthly !== undefined && (
+        <div className="muted" style={{ marginTop: 2 }}>
+          תקציב אישי: {invite.personalBudgetMonthly.toLocaleString()} ₪/חודש
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Phase: auth — enter phone to get magic link ────────────────────────────
+
+  if (phase === "auth") {
+    return (
+      <div className="login-page">
+        <section className="login-box">
+          <h1 className="page-title">הצטרפות לבית</h1>
+          {householdCard}
+          <p className="muted" style={{ marginBottom: 14 }}>הזן את מספר הטלפון שלך כדי לקבל קישור כניסה:</p>
+          <form className="form" onSubmit={sendMagicLink}>
+            <label>
+              מספר טלפון
+              <input
+                className="input"
+                dir="ltr"
+                type="tel"
+                value={phone}
+                placeholder="+972501234567"
+                autoComplete="tel"
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </label>
+            <button className="button" type="submit" disabled={!phone.trim()}>
+              שלח קישור כניסה
+            </button>
+          </form>
+          {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
+        </section>
+      </div>
+    );
+  }
+
+  // ── Phase: link_sent — waiting for user to click magic link ───────────────
+
+  if (phase === "link_sent") {
+    return (
+      <div className="login-page">
+        <section className="login-box" style={{ textAlign: "center" }}>
+          <h1 className="page-title">בדוק את ה-WhatsApp שלך</h1>
+          {householdCard}
+          <div style={{ fontSize: "2.5rem", margin: "12px 0" }}>📲</div>
+          <p>שלחנו לך קישור כניסה ב-WhatsApp.</p>
+          <p className="muted" style={{ marginTop: 6 }}>לחיצה על הקישור תחזיר אותך לכאן אוטומטית.</p>
+        </section>
+      </div>
+    );
+  }
+
+  // ── Phase: preview — authenticated, ready to join ─────────────────────────
+
+  if (phase === "preview" || phase === "joining") {
+    // The admin pre-set a name in the invite → skip the name input entirely.
+    // Otherwise show the name field only if the user has no display name yet.
+    const needsName = !currentUser?.displayName && !invite?.invitedName;
+    const greetingName = currentUser?.displayName ?? invite?.invitedName;
+    return (
+      <div className="login-page">
+        <section className="login-box">
+          <h1 className="page-title">הצטרפות לבית</h1>
+          {householdCard}
+          {greetingName && (
+            <p className="muted" style={{ textAlign: "center", marginBottom: 12 }}>
+              שלום {greetingName} 👋
+            </p>
+          )}
+          <div className="form">
+            {needsName && (
+              <label>
+                השם שלך (יוצג לשאר חברי הבית)
+                <input
+                  className="input"
+                  value={displayName}
+                  placeholder="שם פרטי"
+                  autoComplete="given-name"
+                  onChange={(e) => setDisplayName(e.target.value)}
+                />
+              </label>
+            )}
+            <button
+              className="button"
+              style={{ width: "100%" }}
+              disabled={phase === "joining" || (needsName && !displayName.trim())}
+              onClick={join}
+            >
+              {phase === "joining" ? "מצטרף..." : "הצטרף לבית"}
+            </button>
+          </div>
+          {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
+        </section>
+      </div>
+    );
+  }
+
+  return null;
+}
