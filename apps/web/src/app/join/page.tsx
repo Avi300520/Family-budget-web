@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import type { Household, HouseholdInvite, User } from "@shopping-assistant/shared-types";
 import { api } from "../../lib/api";
 
@@ -14,7 +14,8 @@ const ROLE_LABELS: Record<string, string> = {
 
 type Phase = "loading" | "auth" | "link_sent" | "preview" | "joining" | "done" | "error";
 
-export default function JoinPage() {
+// Inner component — must be inside <Suspense> because it calls useSearchParams()
+function JoinPageInner() {
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get("token") ?? "";
@@ -202,4 +203,14 @@ export default function JoinPage() {
   }
 
   return null;
+}
+
+// Default export wraps the inner component in Suspense — required by Next.js 15
+// whenever useSearchParams() is used during static generation.
+export default function JoinPage() {
+  return (
+    <Suspense fallback={<div className="login-page"><div className="login-box">טוען...</div></div>}>
+      <JoinPageInner />
+    </Suspense>
+  );
 }
