@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Webhook } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Household, Subscription } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
@@ -37,12 +37,6 @@ export default function BillingPage() {
     }
   }
 
-  async function activateMockPayment() {
-    if (!household) return;
-    await api.mockPaymentWebhook(household.id, planCode, checkoutSessionId ?? `manual_${Date.now()}`);
-    await load();
-  }
-
   if (error) return <AppShell><LoadState error={error} /></AppShell>;
   if (!household) return <AppShell><LoadState /></AppShell>;
 
@@ -59,13 +53,9 @@ export default function BillingPage() {
           <h2>Plus</h2>
           <div className="metric">19.90 ש"ח</div>
           <div className="row">
-            <button className="button secondary" onClick={createCheckout}>
+            <button className="button" onClick={createCheckout}>
               <CreditCard size={18} aria-hidden />
-              יצירת checkout
-            </button>
-            <button className="button" onClick={activateMockPayment}>
-              <Webhook size={18} aria-hidden />
-              הפעלת webhook
+              שדרג ל-Plus
             </button>
           </div>
           {checkoutSessionId && <div className="status">checkout {checkoutSessionId.slice(0, 8)}</div>}
