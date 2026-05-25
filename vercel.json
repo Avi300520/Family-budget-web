@@ -1,11 +1,6 @@
 {
-  "installCommand": "pnpm install --frozen-lockfile",
+  "installCommand": "corepack enable && pnpm install --frozen-lockfile",
   "buildCommand": "pnpm --filter @shopping-assistant/web build",
   "outputDirectory": "apps/web/.next",
-  "framework": "nextjs",
-  "git": {
-    "deploymentEnabled": {
-      "main": true
-    }
-  }
+  "framework": "nextjs"
 }
