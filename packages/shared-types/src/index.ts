@@ -40,6 +40,9 @@ export interface Household {
   updatedAt: string;
 }
 
+/** Palette keys for member avatar colours. Matches tokens.css --m-* variables. */
+export type MemberColorKey = "mom" | "dad" | "teen" | "kid" | "kid2";
+
 export interface HouseholdMember {
   id: string;
   householdId: string;
@@ -50,6 +53,9 @@ export interface HouseholdMember {
   status: "invited" | "active" | "removed";
   /** Monthly personal budget amount — tracked separately from the household budget. */
   personalBudgetMonthly?: number;
+  /** Persisted avatar colour key. Assigned at member creation from Iteration 6 onward.
+   *  Backfilled for pre-existing rows via migration 0018. */
+  color?: MemberColorKey;
 }
 
 export type HouseholdExpenseApprovalStatus = "pending" | "approved" | "rejected" | "expired";

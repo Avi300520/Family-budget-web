@@ -30,7 +30,7 @@ const CATEGORY_COLORS: Record<ShoppingCategoryId, string> = {
 };
 
 type ViewVariant = "cards" | "list";
-type MemberInfo = { userId: string; displayName?: string };
+type MemberInfo = { userId: string; displayName?: string; colorKey?: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // categoryId is always set: new items are categorized at insert time; legacy
@@ -338,7 +338,7 @@ function ItemRow({
         )}
         {member ? (
           <span title={member.displayName ? `הוסיף: ${member.displayName}` : undefined}>
-            <Avatar memberId={member.userId} displayName={member.displayName} size="sm" />
+            <Avatar memberId={member.userId} displayName={member.displayName} colorKey={member.colorKey} size="sm" />
           </span>
         ) : (
           <span style={{ width: 24, height: 24, flexShrink: 0 }} aria-hidden />
@@ -558,7 +558,7 @@ export default function ShoppingListPage() {
       setItems(list.items);
       const map: Record<string, MemberInfo> = {};
       for (const m of membersRes.members) {
-        map[m.userId] = { userId: m.userId, displayName: m.displayName };
+        map[m.userId] = { userId: m.userId, displayName: m.displayName, colorKey: m.color };
       }
       setMemberMap(map);
     } catch (err) {

@@ -160,7 +160,7 @@ export default function MembersPage() {
                 {!isEditing ? (
                   <div className="row between" style={{ alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Avatar memberId={m.userId} displayName={m.displayName} size="lg" />
+                      <Avatar memberId={m.userId} displayName={m.displayName} colorKey={m.color} size="lg" />
                       <div>
                         <span style={{ fontWeight: 700 }}>{displayName}</span>
                         <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.85rem" }}>{ROLE_LABELS[m.role] ?? m.role}</span>
@@ -190,7 +190,7 @@ export default function MembersPage() {
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Avatar memberId={m.userId} displayName={m.displayName} size="lg" />
+                      <Avatar memberId={m.userId} displayName={m.displayName} colorKey={m.color} size="lg" />
                       <span style={{ fontWeight: 700 }}>{displayName}</span>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

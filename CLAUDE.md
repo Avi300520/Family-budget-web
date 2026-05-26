@@ -258,6 +258,47 @@ The Iteration 5 mobile smoke was accepted as CSS-level simulation (responsive ru
 
 ---
 
+## Iteration 6 Complete ✅ — DB-backed member colours
+
+**Branches (both repos):** `feat/member-color-iteration-6`
+
+Member avatar colour now comes from the **API** (`HouseholdMember.color`), not from a
+client-only hash. The deterministic hash stays only as a defensive fallback.
+
+**What changed (Frontend):**
+- `styles/members.ts` — `colorFor(memberId, assigned?)`: when the server provides a colour
+  key it wins; otherwise fall back to the FNV-1a `memberKeyFor(memberId)`. `memberKeyFor` is
+  byte-for-byte identical to the Backend `pickMemberColor`, so DB colour and fallback render
+  the same pixels (no flicker, no visual change).
+- `components/Avatar.tsx` — new optional `colorKey?: string | null` prop; passes it to
+  `colorFor`. When absent, hash fallback as before. No size/markup redesign.
+- `dashboard/page.tsx` — loads `api.listMembers` (in the same `Promise.all`, short-circuited
+  to `[]` for `limited_member`), builds a `userId → color` map, passes it to `ActivityFeed`
+  (avatar `colorKey`) and uses `membership.color` for the greeting avatar.
+- `settings/members/page.tsx` — member list avatars use `colorKey={m.color}`.
+- `shopping-list/page.tsx` — `MemberInfo` carries `colorKey`; "who added" avatars use it.
+
+**Shared packages:** `MemberColorKey` + `HouseholdMember.color?` in shared-types; api-client
+`updateMember` body gains `color?: string`. Synced from Backend via `pnpm sync:shared`
+(both packages byte-identical across repos).
+
+**limited_member privacy (verified, no regression):** the new `/members` colour-map fetch is
+short-circuited client-side for limited members AND household-only endpoints stay 403 server-side.
+Runtime smoke (memory-mode backend + Next dev): a limited-member dashboard fetched only `/me` +
+`/budget/current` — no `/members`, `/activity`, `/spending/*`, or `/project-budgets`. Their own
+avatar still renders their DB colour (`--m-dad`).
+
+**Gates:** typecheck ✅ · build (20 routes, dashboard 6.47 kB) ✅ · no new deps ✅ ·
+no new colour tokens (reuses `--m-*` palette) ✅ · no fake data ✅ · CORS untouched ✅ ·
+shared-types + api-client synced ✅ · Backend 154/154 tests ✅.
+Desktop visual smoke (owner): greeting avatar rendered `--m-mom` after the member's DB colour
+was forced to `mom` while its hash is `dad` — proving the UI consumes the DB colour, not the
+hash. (Screenshots unavailable in this environment; colour verified via computed styles, the
+recommended method.) **Mobile 375×812 smoke stays under the pre-deploy blocker above — this
+iteration changes no layout.**
+
+---
+
 ## Code Conventions
 
 **RTL Hebrew:** All pages are RTL by default. Phone inputs get `dir="ltr"`. Numbers render naturally LTR within RTL context.

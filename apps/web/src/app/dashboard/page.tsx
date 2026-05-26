@@ -588,7 +588,7 @@ function timeAgoHe(ts: string): string {
   return date.toLocaleDateString("he-IL", { day: "numeric", month: "short" });
 }
 
-function ActivityFeed({ entries }: { entries: ActivityEntry[] | undefined }) {
+function ActivityFeed({ entries, memberColorMap }: { entries: ActivityEntry[] | undefined; memberColorMap?: Map<string, string> }) {
   const isLoading = entries === undefined;
   const hasEntries = !isLoading && entries.length > 0;
 
@@ -625,6 +625,7 @@ function ActivityFeed({ entries }: { entries: ActivityEntry[] | undefined }) {
                 <Avatar
                   memberId={e.actorUserId}
                   displayName={e.actorName}
+                  colorKey={memberColorMap?.get(e.actorUserId)}
                   size="sm"
                   ariaLabel={e.actorName ?? "חבר משפחה"}
                 />
@@ -835,12 +836,14 @@ function FamilyView({
   role,
   activity,
   spendingByCategory,
+  memberColorMap,
 }: {
   budget: BudgetCurrent & { mySpentAmount: number };
   activeProjects: ProjectBudget[];
   role: string | undefined;
   activity: ActivityEntry[] | undefined;
   spendingByCategory: SpendingByCategoryEntry[] | undefined;
+  memberColorMap: Map<string, string>;
 }) {
   return (
     <div style={{ display: "grid", gap: "var(--sp-5)" }}>
@@ -859,7 +862,7 @@ function FamilyView({
       {/* Categories donut (real data) + Activity feed (real data) */}
       <div className="grid two">
         <CategoriesPanel spending={spendingByCategory} />
-        <ActivityFeed entries={activity} />
+        <ActivityFeed entries={activity} memberColorMap={memberColorMap} />
       </div>
     </div>
   );
@@ -879,6 +882,7 @@ export default function DashboardPage() {
   // empty state). Never invented data.
   const [activity, setActivity] = useState<ActivityEntry[]>();
   const [spendingByCategory, setSpendingByCategory] = useState<SpendingByCategoryEntry[]>();
+  const [memberColorMap, setMemberColorMap] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string>();
 
   async function load() {
@@ -893,7 +897,7 @@ export default function DashboardPage() {
         // Family-view-only endpoints get .catch(()=>fallback) so a single 403
         // (e.g. role flip mid-session) or transient network error does not
         // blank the entire dashboard — the affected panel just shows empty.
-        const [budgetData, projectsData, activityData, spendingData] = await Promise.all([
+        const [budgetData, projectsData, activityData, spendingData, membersData] = await Promise.all([
           api.budgetCurrent(me.household.id),
           isLimited
             ? Promise.resolve({ budgets: [] as ProjectBudget[] })
@@ -912,6 +916,11 @@ export default function DashboardPage() {
                 periodStart: "",
                 periodEnd: "",
               })),
+          isLimited
+            ? Promise.resolve({ members: [] as Array<HouseholdMember & { displayName?: string; phoneE164?: string }> })
+            : api.listMembers(me.household.id).catch(() => ({
+                members: [] as Array<HouseholdMember & { displayName?: string; phoneE164?: string }>,
+              })),
         ]);
         setBudget(budgetData);
         const today = new Date().toISOString().slice(0, 10);
@@ -922,6 +931,11 @@ export default function DashboardPage() {
         );
         setActivity(activityData.entries);
         setSpendingByCategory(spendingData.entries);
+        const colorMap = new Map<string, string>();
+        for (const m of membersData.members) {
+          if (m.color) colorMap.set(m.userId, m.color);
+        }
+        setMemberColorMap(colorMap);
       }
     } catch (err) {
       setError(
@@ -958,7 +972,7 @@ export default function DashboardPage() {
       {/* Greeting row */}
       <div className="row between" style={{ marginBottom: "var(--sp-6)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)" }}>
-          <Avatar memberId={user.id} displayName={user.displayName} size="lg" />
+          <Avatar memberId={user.id} displayName={user.displayName} colorKey={membership?.color} size="lg" />
           <div>
             <p className="h2" style={{ margin: 0 }}>
               שלום {greetingName} 👋
@@ -988,6 +1002,7 @@ export default function DashboardPage() {
           role={role}
           activity={activity}
           spendingByCategory={spendingByCategory}
+          memberColorMap={memberColorMap}
         />
       )}
     </AppShell>
