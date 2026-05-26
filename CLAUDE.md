@@ -253,6 +253,9 @@ verified end-to-end via Playwright)
 
 ## Iteration 5 Next Steps
 
+**🚫 PRE-DEPLOY BLOCKER — viewport smoke:**
+The Iteration 5 mobile smoke was accepted as CSS-level simulation (responsive rules force-applied at 1280px Playwright viewport because the Chrome extension was unavailable). **This is NOT sufficient for production deploy.** Before merging to main / deploying to Vercel, run a real Playwright/browser viewport smoke at **375×812** (actual `page.setViewportSize({width:375, height:812})` or Chrome extension `resize_window`). Confirm: no horizontal overflow, ActivityFeed wraps, Donut+legend don't overlap, panels single-column, ממתין pill visible.
+
 ---
 
 ## Code Conventions
