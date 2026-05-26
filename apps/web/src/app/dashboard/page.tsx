@@ -1,46 +1,724 @@
 "use client";
 
 import Link from "next/link";
-import { FolderOpen, ListChecks, ReceiptText, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { BudgetCurrent, Household, HouseholdMember, ProjectBudget, Receipt, User } from "@shopping-assistant/shared-types";
+import type {
+  BudgetCurrent,
+  Household,
+  HouseholdMember,
+  ProjectBudget,
+  User,
+} from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
 import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
+import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
+
+// ── Category display definitions (no spend data — Iteration 5 will wire real data) ──
+const CATEGORIES: ReadonlyArray<{ key: string; label: string; color: string }> = [
+  { key: "supermarket",       label: "קניות לבית",      color: "var(--teal)"    },
+  { key: "pharmacy_health",   label: "פארם ובריאות",    color: "var(--ocean)"   },
+  { key: "restaurants_cafes", label: "מסעדות וקפה",     color: "var(--coral)"   },
+  { key: "fuel_transport",    label: "דלק ותחבורה",     color: "var(--mustard)" },
+  { key: "kids",              label: "ילדים",            color: "var(--sage)"    },
+  { key: "entertainment",     label: "בילוי",            color: "var(--plum)"    },
+  { key: "other",             label: "אחר",              color: "var(--berry)"   },
+] as const;
 
 const ROLE_LABELS: Record<string, string> = {
   owner:          "בעלים",
   admin:          "מנהל",
   adult_member:   "חבר מבוגר",
-  limited_member: "חבר מוגבל"
+  limited_member: "חבר מוגבל",
 };
 
-const BURN_RATE_LABELS: Record<string, string> = {
-  on_track:      "על המסלול ✅",
-  slightly_high: "מעט מעל הקצב 🟡",
-  high_risk:     "סיכון גבוה 🟠",
-  exceeded:      "חרגנו 🔴"
-};
+// Deterministic color for project cards (derived from project id)
+const PROJECT_COLORS = [
+  "var(--teal)",
+  "var(--coral)",
+  "var(--plum)",
+  "var(--mustard)",
+  "var(--ocean)",
+  "var(--sage)",
+] as const;
 
-function progressColor(pct: number): string {
-  if (pct >= 100) return "rose";
-  if (pct >= 75) return "amber";
-  return "";
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function firstName(name?: string): string {
   if (!name) return "";
   return name.split(/\s+/)[0] ?? name;
 }
 
+function dateLabel(iso: string): string {
+  const parts = iso.split("-");
+  const mm = parts[1] ?? "";
+  const dd = parts[2] ?? "";
+  return `${dd}.${mm}.`;
+}
+
+function periodDays(budget: BudgetCurrent): { totalDays: number; daysIn: number } {
+  const start = new Date(budget.periodStart);
+  const end = new Date(budget.periodEnd);
+  const totalDays = Math.max(
+    1,
+    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  );
+  const daysIn = Math.max(0, totalDays - budget.daysRemaining);
+  return { totalDays, daysIn };
+}
+
+function projectColor(id: string): string {
+  const idx =
+    Math.abs(id.charCodeAt(0) + (id.charCodeAt(id.length - 1) ?? 0)) %
+    PROJECT_COLORS.length;
+  return PROJECT_COLORS[idx] ?? "var(--teal)";
+}
+
+function burnRatePill(status: string): { label: string; good: boolean } {
+  const map: Record<string, { label: string; good: boolean }> = {
+    on_track:      { label: "בקצב טוב",         good: true  },
+    slightly_high: { label: "מעט מעל הקצב",     good: false },
+    high_risk:     { label: "סיכון גבוה",        good: false },
+    exceeded:      { label: "חרגנו",             good: false },
+  };
+  return map[status] ?? { label: status, good: false };
+}
+
+// ── MonthProgress ─────────────────────────────────────────────────────────────
+function MonthProgress({ budget }: { budget: BudgetCurrent }) {
+  const { totalDays, daysIn } = periodDays(budget);
+  const usedPct =
+    budget.budgetAmount > 0 ? budget.spentAmount / budget.budgetAmount : 0;
+  const elapsedPct = daysIn / totalDays;
+  const { label: pillLabel, good: isGood } = burnRatePill(budget.burnRateStatus);
+  const usedPctClamped = Math.min(1, Math.max(0, usedPct));
+
+  return (
+    <div
+      style={{
+        borderRadius: "var(--r-5)",
+        padding: "var(--sp-8)",
+        background: "linear-gradient(135deg, var(--teal-dark) 0%, var(--teal) 100%)",
+        color: "white",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* decorative concentric rings */}
+      <svg
+        width="200"
+        height="200"
+        viewBox="0 0 200 200"
+        style={{ position: "absolute", insetInlineEnd: -40, top: -30, opacity: 0.1 }}
+        aria-hidden="true"
+      >
+        <circle cx="100" cy="100" r="80" stroke="white" strokeWidth="1.5" fill="none" />
+        <circle cx="100" cy="100" r="60" stroke="white" strokeWidth="1.5" fill="none" />
+        <circle cx="100" cy="100" r="40" stroke="white" strokeWidth="1.5" fill="none" />
+      </svg>
+
+      {/* date row */}
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 500,
+          opacity: 0.82,
+          marginBottom: "var(--sp-4)",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        יום <span className="mono">{daysIn}</span> מתוך{" "}
+        <span className="mono">{totalDays}</span>
+      </div>
+
+      {/* main row: amount + status pill */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: "var(--sp-5)",
+          flexWrap: "wrap",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 13, opacity: 0.82, marginBottom: "var(--sp-2)" }}>
+            הוצאתם החודש
+          </div>
+          <div
+            className="mono"
+            style={{
+              fontSize: 44,
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
+              lineHeight: 1,
+            }}
+          >
+            ₪{budget.spentAmount.toLocaleString("he-IL")}
+          </div>
+          <div style={{ marginTop: "var(--sp-2)", fontSize: 13, opacity: 0.82 }}>
+            מתוך תקציב של{" "}
+            <span className="mono" style={{ fontWeight: 600 }}>
+              ₪{budget.budgetAmount.toLocaleString("he-IL")}
+            </span>
+            {" • "}נשארו{" "}
+            <span className="mono" style={{ fontWeight: 600 }}>
+              ₪{budget.remainingAmount.toLocaleString("he-IL")}
+            </span>
+          </div>
+        </div>
+
+        {/* status pill */}
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "var(--sp-2)",
+            padding: "8px 14px",
+            borderRadius: 999,
+            background: isGood
+              ? "color-mix(in srgb, white 18%, transparent)"
+              : "color-mix(in srgb, var(--coral) 85%, transparent)",
+            fontSize: 13,
+            fontWeight: 600,
+            flexShrink: 0,
+            alignSelf: "flex-start",
+          }}
+        >
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 999,
+              background: isGood
+                ? "color-mix(in srgb, var(--pos) 30%, white)"
+                : "var(--coral-soft)",
+              flexShrink: 0,
+            }}
+          />
+          {pillLabel}
+        </span>
+      </div>
+
+      {/* dual progress bar */}
+      <div style={{ marginTop: "var(--sp-6)", position: "relative", zIndex: 1 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 11,
+            marginBottom: 6,
+            opacity: 0.82,
+          }}
+        >
+          <span>הוצאה / תקציב</span>
+          <span className="mono">{Math.round(usedPct * 100)}%</span>
+        </div>
+        <div
+          style={{
+            height: 8,
+            background: "color-mix(in srgb, white 18%, transparent)",
+            borderRadius: 999,
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          {/* spend fill */}
+          <div
+            style={{
+              width: `${usedPctClamped * 100}%`,
+              height: "100%",
+              background: "white",
+              borderRadius: 999,
+            }}
+          />
+          {/* day-elapsed marker */}
+          <div
+            style={{
+              position: "absolute",
+              insetInlineStart: `${elapsedPct * 100}%`,
+              top: -3,
+              bottom: -3,
+              width: 2,
+              background: "color-mix(in srgb, white 70%, transparent)",
+            }}
+          />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 10,
+            marginTop: 4,
+            opacity: 0.7,
+          }}
+        >
+          <span className="mono">{dateLabel(budget.periodStart)}</span>
+          <span>היום</span>
+          <span className="mono">{dateLabel(budget.periodEnd)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PendingApprovals ──────────────────────────────────────────────────────────
+// Empty state — no admin-side list endpoint yet.
+// Iteration 5 will add: GET /api/v1/households/:id/pending-approvals
+function PendingApprovals({ role }: { role: string | undefined }) {
+  if (role !== "owner" && role !== "admin") return null;
+  return (
+    <section
+      style={{
+        background: "var(--coral-bg)",
+        border: "1px solid var(--coral-soft)",
+        borderRadius: "var(--r-4)",
+        padding: "var(--sp-5)",
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--sp-4)",
+      }}
+      aria-label="בקשות ממתינות לאישור"
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 999,
+          background: "var(--coral-soft)",
+          display: "grid",
+          placeItems: "center",
+          fontSize: 20,
+          flexShrink: 0,
+        }}
+        aria-hidden="true"
+      >
+        🔔
+      </div>
+      <div>
+        <div className="h4">בקשות ממתינות לאישור</div>
+        <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
+          בקשות מחברי הבית יופיעו כאן כשתהיינה בקשות ממתינות.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── ProjectsStrip ─────────────────────────────────────────────────────────────
+// Thermometer shown at pct=0 — no per-project spend from listProjectBudgets.
+// Wire actual accumulated spend in Iteration 5 via getProjectBudgetDetail.
+function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
+  const visible = projects.slice(0, 3);
+
+  return (
+    <section className="card" style={{ padding: "var(--sp-6)" }}>
+      <div className="row between" style={{ marginBottom: "var(--sp-5)" }}>
+        <div>
+          <h3 className="h3">פרויקטים פעילים</h3>
+          <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
+            חסכונות לטווח
+          </div>
+        </div>
+        <Link className="btn sm ghost" href="/budget" style={{ textDecoration: "none" }}>
+          נהל
+        </Link>
+      </div>
+
+      {visible.length === 0 ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            padding: "var(--sp-10) 0",
+            gap: "var(--sp-3)",
+          }}
+        >
+          <span style={{ fontSize: 36 }} aria-hidden="true">🏗️</span>
+          <span style={{ fontWeight: 500, color: "var(--text-1)" }}>אין פרויקטים פעילים</span>
+          <span className="muted" style={{ fontSize: 13 }}>
+            צור פרויקט כדי לחסוך לקניות גדולות
+          </span>
+          <Link
+            className="button"
+            href="/budget"
+            style={{ textDecoration: "none", marginTop: "var(--sp-2)" }}
+          >
+            + פרויקט חדש
+          </Link>
+        </div>
+      ) : (
+        <div className="grid three">
+          {visible.map((p) => {
+            const color = projectColor(p.id);
+            return (
+              <Link
+                key={p.id}
+                href={`/budget/project/${p.id}`}
+                style={{
+                  padding: "var(--sp-4)",
+                  borderRadius: "var(--r-3)",
+                  background: "var(--cream-1)",
+                  border: "1px solid var(--cream-3)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--sp-3)",
+                  textDecoration: "none",
+                  color: "inherit",
+                  boxShadow: "var(--elev-1)",
+                }}
+              >
+                {/* project header */}
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)" }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "var(--r-2)",
+                      background: "var(--teal-bg)",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: 18,
+                      flexShrink: 0,
+                      color,
+                    }}
+                    aria-hidden="true"
+                  >
+                    📁
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        fontSize: 14,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.name}
+                    </div>
+                    {p.endDate && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        יעד: {p.endDate}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* amount + thermometer */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-end",
+                  }}
+                >
+                  <div>
+                    <div className="label" style={{ marginBottom: "var(--sp-1)" }}>
+                      תקציב פרויקט
+                    </div>
+                    <span
+                      className="mono"
+                      style={{ fontSize: 20, fontWeight: 700, color }}
+                    >
+                      ₪{p.totalAmount.toLocaleString("he-IL")}
+                    </span>
+                  </div>
+                  <Thermometer pct={0} color={color} height={72} />
+                </div>
+
+                <div className="muted" style={{ fontSize: 11, textAlign: "center" }}>
+                  צבירה תופיע כאן בקרוב
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── CategoriesPanel ───────────────────────────────────────────────────────────
+// Shows the 7 canonical categories as equal-weight color segments (taxonomy reference).
+// Actual per-category spend will be wired in Iteration 5.
+function CategoriesPanel() {
+  const segments = CATEGORIES.map((c) => ({
+    value: 1,
+    color: c.color,
+    label: c.label,
+  }));
+
+  return (
+    <section className="card" style={{ padding: "var(--sp-6)" }}>
+      <div className="row between" style={{ marginBottom: "var(--sp-5)" }}>
+        <div>
+          <h3 className="h3">קטגוריות</h3>
+          <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
+            כמה הולך לאן
+          </div>
+        </div>
+        <Link
+          href="/dashboard/spending"
+          className="btn sm ghost"
+          style={{ textDecoration: "none" }}
+        >
+          פירוט
+        </Link>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--sp-6)",
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <Donut
+          size={160}
+          thickness={20}
+          segments={segments}
+          ariaLabel="7 קטגוריות תקציב"
+        />
+        <div style={{ flex: 1, minWidth: 140, display: "grid", gap: "var(--sp-3)" }}>
+          {CATEGORIES.map((c) => (
+            <div
+              key={c.key}
+              style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}
+            >
+              <div
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 999,
+                  background: c.color,
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: 13, color: "var(--text-1)" }}>{c.label}</span>
+            </div>
+          ))}
+          <div className="muted" style={{ fontSize: 11, marginTop: "var(--sp-1)" }}>
+            פירוט הוצאה לפי קטגוריה יופיע בקרוב
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── ActivityFeed (placeholder) ────────────────────────────────────────────────
+// Backend endpoint for household activity feed will be wired in Iteration 5.
+function ActivityFeed() {
+  return (
+    <section className="card" style={{ padding: "var(--sp-6)" }}>
+      <div style={{ marginBottom: "var(--sp-4)" }}>
+        <h3 className="h3">הפעילות שלנו</h3>
+        <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
+          פעולות אחרונות בבית
+        </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "var(--sp-10) var(--sp-4)",
+          gap: "var(--sp-3)",
+          textAlign: "center",
+          minHeight: 200,
+        }}
+      >
+        <span style={{ fontSize: 36 }} aria-hidden="true">💬</span>
+        <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
+          פעילות תופיע כאן
+        </span>
+        <span className="muted" style={{ fontSize: 13 }}>
+          אחרי שתשלחו הודעות ב-WhatsApp,
+          <br />
+          הפעולות יתאגדו כאן למשפחה.
+        </span>
+      </div>
+    </section>
+  );
+}
+
+// ── InsightsStrip (placeholder) ───────────────────────────────────────────────
+// Smart insights will be wired in Iteration 7.
+function InsightsStrip() {
+  return (
+    <section className="card" style={{ padding: "var(--sp-6)" }}>
+      <div style={{ marginBottom: "var(--sp-4)" }}>
+        <h3 className="h3">תובנות</h3>
+        <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
+          מבוסס על ההתנהגות שלכם
+        </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "var(--sp-8) var(--sp-4)",
+          gap: "var(--sp-3)",
+          textAlign: "center",
+          minHeight: 180,
+        }}
+      >
+        <span style={{ fontSize: 36 }} aria-hidden="true">✨</span>
+        <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
+          תובנות חכמות בקרוב
+        </span>
+        <span className="muted" style={{ fontSize: 13 }}>
+          ניתוח הרגלי ההוצאה שלכם יופיע כאן
+          <br />
+          אחרי כמה שבועות של שימוש.
+        </span>
+      </div>
+    </section>
+  );
+}
+
+// ── LimitedMemberView ─────────────────────────────────────────────────────────
+// Personal budget only — no household data exposed. Business logic preserved from
+// before Iteration 3.
+function LimitedMemberView({
+  budget,
+  membership,
+}: {
+  budget: BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number };
+  membership?: HouseholdMember;
+}) {
+  const limit = membership?.personalBudgetMonthly;
+  const hasLimit = typeof limit === "number" && limit > 0;
+  const personalSpent = budget.myPersonalSpent;
+  const pct = hasLimit
+    ? Math.min(100, Math.round((personalSpent / limit) * 100))
+    : 0;
+
+  let progressClass = "";
+  if (pct >= 100) progressClass = "rose";
+  else if (pct >= 75) progressClass = "amber";
+
+  return (
+    <>
+      <section className="hero-panel">
+        <h2>התקציב האישי שלי החודש</h2>
+        {hasLimit ? (
+          <>
+            <div className="hero-metric">
+              <span className="mono">{personalSpent.toLocaleString()}</span>
+              <span className="denominator"> / {limit.toLocaleString()} ₪</span>
+            </div>
+            <div className="progress">
+              <div
+                className={`progress-fill${progressClass ? ` ${progressClass}` : ""}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              נוצלו <span className="mono">{pct}%</span> מהתקציב האישי החודשי
+            </div>
+            <div className="help-box">
+              <div className="help-line">
+                📌 הוצאות אישיות — שלח <strong>#אישי</strong> בסוף ההודעה.
+              </div>
+              <div className="help-line">
+                🏠 קניות לבית — נרשמות לתקציב הבית ללא הגבלה.
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="hero-metric">
+              <span className="mono">{personalSpent.toLocaleString()}</span>
+              <span className="denominator"> ₪</span>
+            </div>
+            <div className="muted">סך ההוצאות האישיות שלי החודש</div>
+            <div className="help-box">
+              <div className="help-line">
+                📌 הוצאות אישיות — שלח <strong>#אישי</strong> בסוף ההודעה.
+              </div>
+            </div>
+          </>
+        )}
+        <div className="muted" style={{ marginTop: 14 }}>
+          נשארו <span className="mono">{budget.daysRemaining}</span> ימים במחזור הנוכחי.
+        </div>
+      </section>
+
+      <div className="quick-actions">
+        <Link
+          className="button secondary"
+          href="/shopping-list"
+          style={{ textDecoration: "none" }}
+        >
+          🛒 רשימת קניות
+        </Link>
+        <Link
+          className="button secondary"
+          href="/my-requests"
+          style={{ textDecoration: "none" }}
+        >
+          הבקשות שלי
+        </Link>
+      </div>
+    </>
+  );
+}
+
+// ── FamilyView — DashboardA (story-first) ────────────────────────────────────
+function FamilyView({
+  budget,
+  activeProjects,
+  role,
+}: {
+  budget: BudgetCurrent & { mySpentAmount: number };
+  activeProjects: ProjectBudget[];
+  role: string | undefined;
+}) {
+  return (
+    <div style={{ display: "grid", gap: "var(--sp-5)" }}>
+      {/* Pending approvals alert (owner/admin only, empty state) */}
+      <PendingApprovals role={role} />
+
+      {/* Hero row: MonthProgress + InsightsStrip placeholder */}
+      <div className="grid two">
+        <MonthProgress budget={budget} />
+        <InsightsStrip />
+      </div>
+
+      {/* Project budgets strip */}
+      <ProjectsStrip projects={activeProjects} />
+
+      {/* Categories donut + Activity feed placeholder */}
+      <div className="grid two">
+        <CategoriesPanel />
+        <ActivityFeed />
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [user, setUser] = useState<User>();
   const [household, setHousehold] = useState<Household>();
   const [membership, setMembership] = useState<HouseholdMember>();
-  const [budget, setBudget] = useState<BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number }>();
+  const [budget, setBudget] = useState<
+    BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number }
+  >();
   const [activeProjects, setActiveProjects] = useState<ProjectBudget[]>([]);
-  const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([]);
   const [error, setError] = useState<string>();
 
   async function load() {
@@ -52,28 +730,41 @@ export default function DashboardPage() {
       setMembership(me.membership);
       if (me.household) {
         const isLimited = me.membership?.role === "limited_member";
-        const [budgetData, projectsData, receiptsData] = await Promise.all([
+        const [budgetData, projectsData] = await Promise.all([
           api.budgetCurrent(me.household.id),
-          isLimited ? Promise.resolve({ budgets: [] as ProjectBudget[] }) : api.listProjectBudgets(me.household.id).catch(() => ({ budgets: [] as ProjectBudget[] })),
-          isLimited ? Promise.resolve({ receipts: [] as Receipt[] }) : api.receipts().catch(() => ({ receipts: [] as Receipt[] }))
+          isLimited
+            ? Promise.resolve({ budgets: [] as ProjectBudget[] })
+            : api.listProjectBudgets(me.household.id).catch(() => ({
+                budgets: [] as ProjectBudget[],
+              })),
         ]);
         setBudget(budgetData);
         const today = new Date().toISOString().slice(0, 10);
-        setActiveProjects(projectsData.budgets.filter((p) => p.isActive && (!p.endDate || p.endDate >= today)));
-        setRecentReceipts(receiptsData.receipts.slice(0, 4));
+        setActiveProjects(
+          projectsData.budgets.filter(
+            (p) => p.isActive && (!p.endDate || p.endDate >= today)
+          )
+        );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "לא הצלחנו לטעון את הדשבורד. נסה לרענן.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "לא הצלחנו לטעון את הדשבורד. נסה לרענן."
+      );
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
   if (error) {
     return (
       <AppShell>
         <LoadState error={error} />
-        <Link className="button" href="/login">כניסה</Link>
+        <Link className="button" href="/login">
+          כניסה
+        </Link>
       </AppShell>
     );
   }
@@ -81,179 +772,45 @@ export default function DashboardPage() {
 
   const role = membership?.role;
   const isLimited = role === "limited_member";
-  const userName = user.displayName ?? user.phoneE164;
-  const greetingName = firstName(user.displayName) || userName;
+  const greetingName =
+    firstName(user.displayName) || user.displayName || user.phoneE164;
   const roleLabel = ROLE_LABELS[role ?? ""] ?? "";
 
   return (
     <AppShell>
-      <div className="row between" style={{ marginBottom: 22 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      {/* Greeting row */}
+      <div className="row between" style={{ marginBottom: "var(--sp-6)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)" }}>
           <Avatar memberId={user.id} displayName={user.displayName} size="lg" />
           <div>
-            <p className="greeting">שלום {greetingName} 👋</p>
-            <div className="muted" style={{ marginTop: 4 }}>
+            <p className="h2" style={{ margin: 0 }}>
+              שלום {greetingName} 👋
+            </p>
+            <div className="muted" style={{ marginTop: "var(--sp-1)" }}>
               {household.name}
-              {roleLabel && <span className="role-pill" style={{ marginInlineStart: 10 }}>{roleLabel}</span>}
+              {roleLabel && (
+                <span className="role-pill" style={{ marginInlineStart: 10 }}>
+                  {roleLabel}
+                </span>
+              )}
             </div>
           </div>
         </div>
-        <button className="button secondary" onClick={load}>
+        <button className="button secondary" onClick={load} type="button">
           <RefreshCw size={18} aria-hidden />
           רענון
         </button>
       </div>
 
-      {isLimited ? <LimitedMemberView budget={budget} membership={membership} /> : null}
-      {!isLimited ? <FamilyView budget={budget} activeProjects={activeProjects} recentReceipts={recentReceipts} /> : null}
+      {isLimited ? (
+        <LimitedMemberView budget={budget} membership={membership} />
+      ) : (
+        <FamilyView
+          budget={budget}
+          activeProjects={activeProjects}
+          role={role}
+        />
+      )}
     </AppShell>
-  );
-}
-
-// ── Limited-member view (only personal budget; no household budget shown) ───
-function LimitedMemberView({
-  budget,
-  membership
-}: {
-  budget: BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number };
-  membership?: HouseholdMember;
-}) {
-  const limit = membership?.personalBudgetMonthly;
-  const hasLimit = typeof limit === "number" && limit > 0;
-  const personalSpent = budget.myPersonalSpent;
-  const pct = hasLimit ? Math.min(100, Math.round((personalSpent / limit) * 100)) : 0;
-  const colorClass = progressColor(pct);
-
-  return (
-    <>
-      <section className="hero-panel">
-        <h2>התקציב האישי שלי החודש</h2>
-        {hasLimit ? (
-          <>
-            <div className="hero-metric">
-              {personalSpent.toLocaleString()}
-              <span className="denominator"> / {limit.toLocaleString()} ₪</span>
-            </div>
-            <div className="progress">
-              <div className={`progress-fill ${colorClass}`} style={{ width: `${pct}%` }} />
-            </div>
-            <div className="muted" style={{ fontSize: 13 }}>נוצלו {pct}% מהתקציב האישי החודשי</div>
-            <div className="help-box">
-              <div className="help-line">📌 הוצאות אישיות — שלח <strong>#אישי</strong> בסוף ההודעה.</div>
-              <div className="help-line">🏠 קניות לבית — נרשמות לתקציב הבית ללא הגבלה.</div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="hero-metric">{personalSpent.toLocaleString()} <span className="denominator">₪</span></div>
-            <div className="muted">סך ההוצאות האישיות שלי החודש</div>
-            <div className="help-box">
-              <div className="help-line">📌 הוצאות אישיות — שלח <strong>#אישי</strong> בסוף ההודעה.</div>
-            </div>
-          </>
-        )}
-        <div className="muted" style={{ marginTop: 14 }}>נשארו {budget.daysRemaining} ימים במחזור הנוכחי.</div>
-      </section>
-
-      <div className="quick-actions">
-        <Link className="button secondary" href="/shopping-list" style={{ textDecoration: "none" }}>
-          <ListChecks size={18} aria-hidden />
-          רשימת קניות
-        </Link>
-        <Link className="button secondary" href="/my-requests" style={{ textDecoration: "none" }}>
-          הבקשות שלי
-        </Link>
-      </div>
-    </>
-  );
-}
-
-// ── Owner / admin / adult_member view ─────────────────────────────────────
-function FamilyView({
-  budget,
-  activeProjects,
-  recentReceipts
-}: {
-  budget: BudgetCurrent & { mySpentAmount: number };
-  activeProjects: ProjectBudget[];
-  recentReceipts: Receipt[];
-}) {
-  const pct = budget.budgetAmount > 0
-    ? Math.min(100, Math.round((budget.spentAmount / budget.budgetAmount) * 100))
-    : 0;
-  const colorClass = progressColor(pct);
-  const burnLabel = BURN_RATE_LABELS[budget.burnRateStatus] ?? budget.burnRateStatus;
-
-  return (
-    <>
-      <section className="grid three">
-        <div className="panel">
-          <h2>נשאר החודש</h2>
-          <div className="metric">{budget.remainingAmount.toLocaleString()} <span style={{ fontSize: 18, color: "var(--muted)" }}>₪</span></div>
-          <div className="muted">{budget.daysRemaining} ימים עד סוף המחזור</div>
-        </div>
-        <Link href="/dashboard/spending" className="panel" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
-          <h2>נוצל ↗</h2>
-          <div className="metric">{budget.spentAmount.toLocaleString()} <span style={{ fontSize: 18, color: "var(--muted)" }}>₪</span></div>
-          <div className="muted">מתוך {budget.budgetAmount.toLocaleString()} ₪</div>
-          <div className="progress">
-            <div className={`progress-fill ${colorClass}`} style={{ width: `${pct}%` }} />
-          </div>
-        </Link>
-        <div className="panel">
-          <h2>קצב</h2>
-          <div className="metric" style={{ fontSize: 22 }}>{burnLabel}</div>
-          <div className="muted">מחזור {budget.periodStart} עד {budget.periodEnd}</div>
-        </div>
-      </section>
-
-      {activeProjects.length > 0 && (
-        <section className="panel" style={{ marginTop: 16 }}>
-          <div className="row between" style={{ alignItems: "baseline" }}>
-            <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <FolderOpen size={20} aria-hidden /> תקציבי פרויקט פעילים
-            </h2>
-            <Link href="/budget" className="muted" style={{ fontSize: 13, textDecoration: "none" }}>נהל</Link>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-            {activeProjects.slice(0, 4).map((p) => (
-              <Link key={p.id} href={`/budget/project/${p.id}`} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)", color: "inherit", textDecoration: "none" }}>
-                <div>
-                  <span style={{ fontWeight: 600 }}>{p.name}</span>
-                  {p.endDate && <span className="muted" style={{ marginInlineStart: 8, fontSize: 13 }}>עד {p.endDate}</span>}
-                </div>
-                <span className="muted">{p.totalAmount.toLocaleString()} ₪</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {recentReceipts.length > 0 && (
-        <section className="panel" style={{ marginTop: 16 }}>
-          <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <ReceiptText size={20} aria-hidden /> קבלות אחרונות
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
-            {recentReceipts.map((r) => (
-              <Link href={`/receipts/${r.id}/review`} key={r.id} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)", color: "inherit", textDecoration: "none" }}>
-                <span>{r.parsedJson?.merchantName ?? "קבלה"}</span>
-                <span className="muted">{r.parsedJson?.totalAmount ? `${r.parsedJson.totalAmount.toLocaleString()} ₪` : r.status}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <div className="quick-actions" style={{ marginTop: 16 }}>
-        <Link className="button secondary" href="/shopping-list" style={{ textDecoration: "none" }}>
-          <ListChecks size={18} aria-hidden />
-          רשימת קניות
-        </Link>
-        <Link className="button secondary" href="/export" style={{ textDecoration: "none" }}>
-          ייצוא CSV
-        </Link>
-      </div>
-    </>
   );
 }
