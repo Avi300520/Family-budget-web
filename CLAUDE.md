@@ -1,0 +1,231 @@
+# Family Budget Web — Agent Context
+
+## Product Overview
+
+**קופה משפחתית** (Family Budget) is a WhatsApp-first household budget manager for Israeli families. The frontend (this repo) is the secondary web dashboard — **WhatsApp IS the product.** This web app handles what requires visual admin surfaces: household member setup, budget review, monthly summaries, settings.
+
+**North star:** Every interaction should feel warm and family-resonant, not like another fintech tool.
+
+---
+
+## Architecture — Dual Repo Setup
+
+Two independent codebases, independent deployments:
+
+| Repo | Purpose | Deploy |
+|------|---------|--------|
+| **Backend** (`C:\Users\avrahamm\Desktop\Shopping assistant`) | WhatsApp webhook, NLP, database, business logic | Hetzner |
+| **Frontend** (`C:\Users\avrahamm\Desktop\Family-budget-web`) | Next.js 15 web dashboard (RTL Hebrew) | Vercel |
+
+**Critical rule:** `packages/shared-types` and `packages/api-client` are **copies** in this repo. After any Backend change to those packages, run `pnpm sync:shared` to copy them here. Otherwise, the Frontend build will fail with stale types.
+
+---
+
+## Sync-Shared Script
+
+Location: Backend repo at `scripts/sync-shared.ps1` (Windows) or `scripts/sync-shared.sh` (Bash/Mac/Linux).
+
+**When to run:**
+- After any change to Backend `packages/shared-types/src/` or `packages/api-client/src/`
+- Before Frontend `pnpm build` or `pnpm typecheck`
+- Typically: run after finishing a Backend task, before committing
+
+**What it does:**
+1. Copies `packages/shared-types/src/**` from Backend to Frontend
+2. Copies `packages/api-client/src/**` from Backend to Frontend
+3. Leaves everything else untouched
+4. Non-destructive: if destination is missing, creates it
+
+**Example:**
+```powershell
+cd C:\Users\avrahamm\Desktop\Shopping assistant
+pnpm sync:shared  # or ./scripts/sync-shared.ps1
+```
+
+**If forgotten:** Frontend typecheck will fail with "Cannot find module '@shopping-assistant/shared-types'" or similar. Fix by manually running the script, then `pnpm typecheck` again.
+
+---
+
+## Git Branches & Deployment
+
+### Current Status (as of May 26, 2026)
+
+| Repo | Branch | Latest Commit | GitHub URL | Notes |
+|------|--------|---------------|-----------|-------|
+| Frontend | `feat/dashboard-story-iteration-3` | 64192ea | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/dashboard-story-iteration-3) | Iteration 3 complete, pushed |
+| Frontend | `feat/design-tokens-iteration-0` | a9ff04d | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/design-tokens-iteration-0) | Iteration 0-2 complete + hardening |
+| Backend | `feat/sync-shared-script` | d1e3027 | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/sync-shared-script) | sync-shared script + docs |
+
+**Latest Iteration 3 commit (64192ea):**
+- `feat(web): redesign dashboard story view (Iteration 3)`
+  - MonthProgress: teal-gradient hero, dual spend/elapsed progress bars, burn-rate pill
+  - PendingApprovals: coral empty state — owner/admin only, no endpoint yet (Iteration 5 gap)
+  - ProjectsStrip: Thermometer per project at pct=0 (no accumulated spend from listProjectBudgets)
+  - CategoriesPanel: Donut 7-category color taxonomy, no spend numbers yet
+  - ActivityFeed: warm placeholder empty state
+  - InsightsStrip: warm placeholder empty state
+  - LimitedMemberView: personal budget logic preserved, zero household data leakage
+  - APIs used: api.me(), api.budgetCurrent(), api.listProjectBudgets() — no new endpoints
+  - All gates: typecheck ✅  build (20/20) ✅  no hex ✅  no new deps ✅  no fake data ✅
+
+**CORS gap documented (no backend change made):**
+- Backend `apps/api/src/http.ts` uses exact-match whitelist: `[config.WEB_APP_URL, config.ADMIN_APP_URL]`
+- For Vercel production: set `WEB_APP_URL` env var to the production Vercel URL on Hetzner
+- Vercel preview deploys will be CORS-blocked (each PR gets a unique subdomain not in the list)
+- Fix: Iteration 5 add pattern-match support (e.g., allow `*.vercel.app` or per-deploy env inject)
+
+**Hardening patch (a9ff04d — Iteration 2):**
+- ActivityHeatmap: slice(-days) for most recent N days
+- Negative values: safePositiveNumber() guard on Donut, BarsChart, StackedBar
+- Thermometer: pct=0 shows empty state (cream bulb)
+- Accessibility: optional ariaLabel props on all main charts
+
+---
+
+## Iterations 0–2 Complete
+
+### Iteration 0 — Design Tokens Foundation (1 day)
+**Files created/modified:**
+- `apps/web/src/styles/tokens.css` — **single source of truth** for all CSS custom properties (--teal, --coral, --m-mom, --sp-3, --r-2, etc.)
+- `apps/web/src/styles/primitives.css` — reusable CSS classes (.panel, .button, .avatar, .grid, .row.between, etc.)
+- `apps/web/src/styles/tokens.ts` — TypeScript mirror (string references only, not values)
+- `apps/web/src/styles/members.ts` — `colorFor(memberId)` function using FNV-1a hash for deterministic, SSR-stable member colours
+- `apps/web/src/app/globals.css` — import tokens + primitives, removed old palette
+- `apps/web/src/app/layout.tsx` — added Heebo + JetBrains Mono fonts
+- Backend: `scripts/sync-shared.ps1` + `scripts/sync-shared.sh` — cross-repo synchronization
+
+**Key principle:** No hex codes outside `tokens.css`. No numeric padding/margin. All design tokens centralized.
+
+### Iteration 1 — Avatar + Who-Did-What (1 day)
+**Files created/modified:**
+- `apps/web/src/components/Avatar.tsx` — pure component displaying member initials with colour from `colorFor()`. Sizes: sm (24px), md (32px), lg (44px), xl (60px).
+- `apps/web/src/app/dashboard/page.tsx` — added Avatar(lg) in greeting
+- `apps/web/src/app/settings/members/page.tsx` — Avatar list for members + cleanup (removed hardcoded colours)
+- `apps/web/src/app/shopping-list/page.tsx` — loads members in parallel, maps userId → {displayName}, renders Avatar(sm) for "who added" field
+
+**Key principle:** Every action displays with actor's colour. This is what differentiates "קופה משפחתית" from generic budget app.
+
+### Iteration 2 — Internal Chart Library (1 day)
+**Files created/modified:**
+- `apps/web/src/components/charts.tsx` — 741 lines, 7 exported components + 2 helpers, pure SVG/CSS, zero external chart dependencies:
+  - `clamp(val, min, max)` — guards NaN with `if (!isFinite(val)) return min;`
+  - `Donut(size, thickness, segments, total)` — pie chart with centre label
+  - `ProgressRing(size, thickness, value 0-1, color)` — circular progress indicator
+  - `Thermometer(pct 0-1, color, height)` — vertical fill indicator
+  - `BarsChart(data, height, color)` — vertical bar chart with labels
+  - `StackedBar(data, height, radius)` — horizontal stacked bar
+  - `Sparkline(data[], width, height, color, filled)` — mini trend line
+  - `ActivityHeatmap(members[], days=14)` — 2D grid, CSS opacity for intensity (HEAT_OPACITY={0:0, 1:0.2, 2:0.45, 3:0.7, 4:1})
+
+**Key principle:** No external dependencies. All colours from `tokens.ts`. No Math.random, no fake data in prod. Every component has empty state, NaN guards, accessible aria labels.
+
+---
+
+## Known Issues Before Iteration 3
+
+1. **ActivityHeatmap:** Slice direction needs verification — counts array should be oldest→newest, but visual order might be reversed
+2. **Charts negative values:** Need validation that negative spending is handled gracefully (clamped or hidden)
+3. **Thermometer pct=0:** Should show empty visual, not disappear
+4. **Aria labels:** Some components have optional aria-label/title — should default to localized Hebrew if not provided
+5. **CORS:** Before Iteration 3 deploy, verify Backend `apps/api/src/middleware/cors.ts` allows `*.vercel.app` and custom domain
+
+---
+
+## Iteration 3 Complete ✅
+
+**Delivered:** Rebuilt `apps/web/src/app/dashboard/page.tsx` as DashboardA (story-first layout).
+Branch: `feat/dashboard-story-iteration-3` (commit 64192ea), pushed to GitHub.
+
+**What's still placeholder (needs Iteration 5 backend):**
+- `PendingApprovals`: needs `GET /api/v1/households/:id/pending-approvals`
+- `ProjectsStrip` Thermometer fill: needs `spent` on `ProjectBudget` from listProjectBudgets, or a batch endpoint
+- `CategoriesPanel` real spend: needs `GET /api/v1/households/:id/purchases/by-category?period=current`
+- `ActivityFeed`: needs household-wide activity timeline endpoint
+- CORS preview-deploy support: needs pattern-match allowlist in `apps/api/src/http.ts`
+
+## Iteration 4 Next Steps (Shopping List + RouteMap + Categorization)
+
+Iteration 4 requires Backend changes (new endpoints). **Always run `pnpm sync:shared` after any Backend `packages/shared-types` or `packages/api-client` change.**
+
+---
+
+## Code Conventions
+
+**RTL Hebrew:** All pages are RTL by default. Phone inputs get `dir="ltr"`. Numbers render naturally LTR within RTL context.
+
+**CSS Primitives:** Use `.panel`, `.button[.secondary|.warn]`, `.progress`, `.grid.two/.three`, `.row.between`, `.mono`, `.avatar`. Don't invent new classes.
+
+**Colours:** Always `var(--tealish)`, never `#2196f3`. Fallback for future-proofing: `var(--teal, #2196f3)` if needed, but primary source is `tokens.css`.
+
+**Fonts:** Heebo for UI (Hebrew), JetBrains Mono for numbers/codes. Loaded via `next/font/google` in `layout.tsx`.
+
+**Accessibility:** Every interactive element has `aria-label`, `role`, or `title`. Aria labels in Hebrew where user-facing.
+
+---
+
+## Testing & Verification
+
+Before each iteration commit:
+1. `pnpm typecheck` — zero errors
+2. `pnpm build` — production build succeeds
+3. `pnpm lint` (if configured)
+4. Manual verification:
+   - Desktop (1280px): all pages load, no visual glitches
+   - Mobile (390px): responsive, text readable
+   - Different roles: owner/admin/limited_member each see correct views
+   - WhatsApp integration: send test messages from Backend, confirm replies parse correctly
+
+---
+
+## Deployment
+
+**Frontend:** Vercel, auto-deploy on GitHub push to `main`. Preview deploys on PR.
+**Backend:** Hetzner, manual or CI-based (see Backend CLAUDE.md).
+
+**Before Iteration 3 goes live:**
+- Create PR from `feat/design-tokens-iteration-0`
+- Review + merge to `main`
+- Vercel auto-deploys
+- Confirm `NEXT_PUBLIC_API_URL` in `.env.local` (dev) and Vercel (prod) points to correct Backend
+- Test full flow: WhatsApp message → Backend → Frontend dashboard updates correctly
+
+---
+
+## File Structure
+
+```
+apps/web/
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx          (imports fonts, tokens, primitives)
+│   │   ├── globals.css         (@import tokens + primitives)
+│   │   ├── dashboard/
+│   │   │   └── page.tsx        (story view + limited_member view)
+│   │   ├── settings/
+│   │   │   └── members/
+│   │   │       └── page.tsx    (member list + colours)
+│   │   ├── shopping-list/
+│   │   │   └── page.tsx        (items with who-added avatars)
+│   │   └── ...
+│   ├── components/
+│   │   ├── Avatar.tsx          (member initials + colour)
+│   │   ├── charts.tsx          (7 chart components)
+│   │   └── ...
+│   ├── lib/
+│   │   ├── api.ts              (typed fetch client)
+│   │   └── ...
+│   └── styles/
+│       ├── tokens.css          (CSS custom properties - SOURCE OF TRUTH)
+│       ├── primitives.css      (class utilities)
+│       ├── tokens.ts           (TypeScript mirror)
+│       └── members.ts          (colorFor function)
+└── ...
+```
+
+---
+
+## Contact & Questions
+
+- **Product owner:** avi300520@gmail.com
+- **Backend repo:** https://github.com/Avi300520/Family-budget
+- **Frontend repo:** https://github.com/Avi300520/Family-budget-web
