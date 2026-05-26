@@ -118,8 +118,10 @@ export interface ShoppingListItem {
   status: "active" | "purchased" | "removed";
   source: "whatsapp_text" | "web" | "receipt_suggestion" | "recurring";
   notes?: string;
-  /** Supermarket-route category. Optional for legacy rows pre-Iteration 4. */
-  categoryId?: ShoppingCategoryId;
+  /** Supermarket-route category. Always populated: new items are categorized at
+   *  insert time; legacy pre-0017 rows are categorized via read-fallback in
+   *  rowToShoppingListItem (computed, not persisted). */
+  categoryId: ShoppingCategoryId;
   createdAt: string;
   updatedAt: string;
 }

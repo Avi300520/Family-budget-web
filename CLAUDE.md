@@ -52,10 +52,10 @@ pnpm sync:shared  # or ./scripts/sync-shared.ps1
 
 | Repo | Branch | Latest Commit | GitHub URL | Notes |
 |------|--------|---------------|-----------|-------|
-| Frontend | `feat/shopping-route-iteration-4` | 3f38e96 | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/shopping-route-iteration-4) | Iteration 4 complete |
+| Frontend | `feat/shopping-route-iteration-4` | TBD (patch) | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/shopping-route-iteration-4) | Iteration 4 + hardening patch |
 | Frontend | `feat/dashboard-story-iteration-3` | 7bd4222 | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/dashboard-story-iteration-3) | Iteration 3 complete |
 | Frontend | `feat/design-tokens-iteration-0` | a9ff04d | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/design-tokens-iteration-0) | Iteration 0-2 complete + hardening |
-| Backend  | `feat/shopping-route-iteration-4` | 3e8c95e | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/shopping-route-iteration-4) | Iteration 4 complete |
+| Backend  | `feat/shopping-route-iteration-4` | TBD (patch) | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/shopping-route-iteration-4) | Iteration 4 + hardening patch |
 | Backend  | `feat/sync-shared-script`         | d1e3027 | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/sync-shared-script) | sync-shared script + docs |
 
 **Latest Iteration 3 commit (64192ea):**
@@ -145,7 +145,7 @@ Branch: `feat/dashboard-story-iteration-3` (commit 64192ea), pushed to GitHub.
 - `ActivityFeed`: needs household-wide activity timeline endpoint
 - CORS preview-deploy support: needs pattern-match allowlist in `apps/api/src/http.ts`
 
-## Iteration 4 Complete ✅
+## Iteration 4 Complete ✅ (including hardening patch)
 
 **Delivered:** Shopping list rebuilt as a supermarket-route experience
 (`apps/web/src/app/shopping-list/page.tsx`) and Backend categorizes items
@@ -155,19 +155,33 @@ at insert time into 7 fixed categories. Branches:
 **Shared-types added** (`packages/shared-types/src/shoppingCategories.ts`):
 7 categories — `vegetables`, `bakery`, `dairy`, `pantry`, `snacks`,
 `frozen`, `household` — each with `id` / `nameHe` / `icon` / `order`.
-`ShoppingListItem.categoryId?: ShoppingCategoryId` added (optional so
-legacy rows still type-check).
+`ShoppingListItem.categoryId: ShoppingCategoryId` — **required, always
+populated** (not optional). Backend guarantees it: new items are
+categorized at insert; legacy pre-0017 rows are categorized via
+`rowToShoppingListItem` read-fallback (no DB write). Frontend
+`categoryOf(item)` returns `item.categoryId` directly — no `??` needed.
 
 **Frontend page:** ShoppingHeader + RouteMap + CardsView/ListView toggle
 + ItemRow with Avatar(sm). All colours via tokens, no new hex, no fake
-data. Items without `categoryId` render under "pantry".
+data.
+
+**Backend patch (same branch):**
+- `rowToShoppingListItem`: if `category_id IS NULL`, computes
+  `categorize(normalizedName ?? rawText)` at read time — no DB write.
+  This fixes legacy items showing as "pantry" regardless of their name.
+- `ask_shopping_list` fast-path and `QUERY_LIST` NLP handler both now call
+  `organizeShoppingListText()`. "תביא לי את הרשימה" now returns the same
+  7-category grouped format as the web send-to-WhatsApp button.
+- Migration 0017 has full safety comment block: IF EXISTS, NULL-allowable
+  CHECK, production safety query, backfill rationale.
+- CORS WIP (`http.ts` pattern-match) stashed as `cors-vercel-preview-wip`
+  — deferred to Iteration 5.
 
 **Backend:** Migration 0017 swaps the unused `category_id uuid` column
 for `category_id text` with a CHECK constraint. `addShoppingItem` calls
 `categorize()` (deterministic Hebrew regex lexicon, no LLM — gap doc'd).
-`organizeShoppingListText` now groups by stored category, falls back to
-on-the-fly `categorize()` for legacy items, and renders quantity/adder/
-urgency/note per line.
+`organizeShoppingListText` groups by stored category, falls back to
+on-the-fly `categorize()` for legacy items.
 
 ## Iteration 5 Next Steps
 

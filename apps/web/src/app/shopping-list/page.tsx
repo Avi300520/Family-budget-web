@@ -33,8 +33,10 @@ type ViewVariant = "cards" | "list";
 type MemberInfo = { userId: string; displayName?: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// categoryId is always set: new items are categorized at insert time; legacy
+// pre-0017 rows are categorized via Backend read-fallback in rowToShoppingListItem.
 function categoryOf(item: ShoppingListItem): ShoppingCategoryId {
-  return item.categoryId ?? SHOPPING_CATEGORY_FALLBACK;
+  return item.categoryId;
 }
 
 function groupByCategory(
