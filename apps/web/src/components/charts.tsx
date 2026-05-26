@@ -24,6 +24,12 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+/** Ensures a value is non-negative and finite (for chart quantitative data). */
+function safePositiveNumber(val: number): number {
+  if (!isFinite(val) || val < 0) return 0;
+  return val;
+}
+
 function initials(name?: string): string {
   if (!name?.trim()) return "?";
   const parts = name.trim().split(/\s+/);
@@ -64,6 +70,8 @@ export interface DonutProps {
   totalValue?: string;
   /** Subscript below the centre number. */
   totalSub?: string;
+  /** Accessibility label for the donut. Shown if provided. */
+  ariaLabel?: string;
 }
 
 export function Donut({
@@ -73,14 +81,20 @@ export function Donut({
   totalLabel,
   totalValue,
   totalSub,
+  ariaLabel,
 }: DonutProps) {
   const r = (size - thickness) / 2;
   const c = 2 * Math.PI * r;
-  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  // Sanitize segment values before calculating total
+  const sanitized = segments.map((s) => ({
+    ...s,
+    value: safePositiveNumber(s.value),
+  }));
+  const total = sanitized.reduce((s, x) => s + x.value, 0) || 1;
 
   // Build arcs
   let acc = 0;
-  const arcs = segments
+  const arcs = sanitized
     .filter((s) => s.value > 0)
     .map((s, i) => {
       const len = clamp((s.value / total) * c, 0.01, c - 0.01);
@@ -92,13 +106,17 @@ export function Donut({
   const hasLabel = totalLabel || totalValue || totalSub;
 
   return (
-    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+    <div
+      style={{ position: "relative", width: size, height: size, flexShrink: 0 }}
+      aria-label={ariaLabel}
+      role={ariaLabel ? "img" : undefined}
+    >
       <svg
         width={size}
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         style={{ transform: "rotate(-90deg)" }}
-        aria-hidden="true"
+        aria-hidden={!ariaLabel}
       >
         {/* track */}
         <circle
@@ -199,6 +217,8 @@ export interface ProgressRingProps {
   color?: string;
   trackColor?: string;
   children?: React.ReactNode;
+  /** Accessibility label for the ring. Shown if provided. */
+  ariaLabel?: string;
 }
 
 export function ProgressRing({
@@ -208,6 +228,7 @@ export function ProgressRing({
   color = "var(--teal)",
   trackColor = "var(--cream-3)",
   children,
+  ariaLabel,
 }: ProgressRingProps) {
   const r = (size - thickness) / 2;
   const c = 2 * Math.PI * r;
@@ -218,13 +239,15 @@ export function ProgressRing({
   return (
     <div
       style={{ position: "relative", width: size, height: size, flexShrink: 0 }}
+      aria-label={ariaLabel}
+      role={ariaLabel ? "img" : undefined}
     >
       <svg
         width={size}
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         style={{ transform: "rotate(-90deg)" }}
-        aria-hidden="true"
+        aria-hidden={!ariaLabel}
       >
         <circle
           cx={size / 2}
@@ -337,7 +360,7 @@ export function Thermometer({
           width: bulbSize,
           height: bulbSize,
           borderRadius: 999,
-          background: color,
+          background: p > 0 ? color : "var(--cream-3)",
           marginTop: -4,
           border: "3px solid var(--cream-2)",
           boxShadow: "var(--elev-1)",
@@ -375,6 +398,8 @@ export interface BarsChartProps {
   color?: string;
   /** Override max value (useful for consistent scale across charts). */
   max?: number;
+  /** Accessibility label for the chart. Shown if provided. */
+  ariaLabel?: string;
 }
 
 export function BarsChart({
@@ -382,8 +407,15 @@ export function BarsChart({
   height = 140,
   color = "var(--teal)",
   max,
+  ariaLabel,
 }: BarsChartProps) {
-  if (data.length === 0) {
+  // Sanitize data values before processing
+  const sanitized = data.map((d) => ({
+    ...d,
+    value: safePositiveNumber(d.value),
+  }));
+
+  if (sanitized.length === 0) {
     return (
       <div
         style={{
@@ -392,6 +424,7 @@ export function BarsChart({
           alignItems: "center",
           justifyContent: "center",
         }}
+        aria-label={ariaLabel || "אין נתונים"}
       >
         <span className="muted" style={{ fontSize: 13 }}>
           אין נתונים
@@ -400,7 +433,7 @@ export function BarsChart({
     );
   }
 
-  const maxVal = max || Math.max(...data.map((d) => d.value), 1);
+  const maxVal = max || Math.max(...sanitized.map((d) => d.value), 1);
 
   return (
     <div
@@ -410,9 +443,11 @@ export function BarsChart({
         gap: 8,
         height: height + 28,
       }}
-      aria-hidden="true"
+      aria-label={ariaLabel}
+      role={ariaLabel ? "img" : undefined}
+      aria-hidden={!ariaLabel}
     >
-      {data.map((d, i) => {
+      {sanitized.map((d, i) => {
         const barH = Math.max((d.value / maxVal) * height, d.value > 0 ? 4 : 2);
         return (
           <div
@@ -476,15 +511,23 @@ export interface StackedBarProps {
   height?: number;
   /** Border radius in px. Default 8. */
   radius?: number;
+  /** Accessibility label for the bar. Shown if provided. */
+  ariaLabel?: string;
 }
 
 export function StackedBar({
   data = [],
   height = 32,
   radius = 8,
+  ariaLabel,
 }: StackedBarProps) {
-  const total = data.reduce((s, d) => s + d.value, 0) || 1;
-  const nonZero = data.filter((d) => d.value > 0);
+  // Sanitize data values before processing
+  const sanitized = data.map((d) => ({
+    ...d,
+    value: safePositiveNumber(d.value),
+  }));
+  const total = sanitized.reduce((s, d) => s + d.value, 0) || 1;
+  const nonZero = sanitized.filter((d) => d.value > 0);
 
   if (nonZero.length === 0) {
     return (
@@ -494,7 +537,7 @@ export function StackedBar({
           borderRadius: radius,
           background: "var(--cream-3)",
         }}
-        aria-label="אין נתונים"
+        aria-label={ariaLabel || "אין נתונים"}
       />
     );
   }
@@ -508,7 +551,9 @@ export function StackedBar({
         overflow: "hidden",
         background: "var(--cream-3)",
       }}
-      aria-hidden="true"
+      aria-label={ariaLabel}
+      role={ariaLabel ? "img" : undefined}
+      aria-hidden={!ariaLabel}
     >
       {nonZero.map((d, i) => (
         <div
@@ -542,6 +587,8 @@ export interface SparklineProps {
   strokeWidth?: number;
   /** Whether to fill the area under the line. */
   filled?: boolean;
+  /** Accessibility label for the sparkline. Shown if provided. */
+  ariaLabel?: string;
 }
 
 export function Sparkline({
@@ -551,6 +598,7 @@ export function Sparkline({
   color = "var(--teal)",
   strokeWidth = 2,
   filled = false,
+  ariaLabel,
 }: SparklineProps) {
   const nonEmpty = data.filter((v) => isFinite(v));
 
@@ -560,7 +608,8 @@ export function Sparkline({
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        aria-hidden="true"
+        aria-label={ariaLabel}
+        aria-hidden={!ariaLabel}
       >
         <line
           x1={0}
@@ -602,7 +651,8 @@ export function Sparkline({
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      aria-hidden="true"
+      aria-label={ariaLabel}
+      aria-hidden={!ariaLabel}
       style={{ overflow: "visible" }}
     >
       {filled && fillPath && (
@@ -670,7 +720,8 @@ export function ActivityHeatmap({
     <div style={{ display: "grid", gap: 6 }}>
       {members.map((m) => {
         const memberColor = m.color ?? colorFor(m.userId);
-        const counts = m.counts.slice(0, days);
+        // Show last N days (newest), not first N (oldest)
+        const counts = m.counts.slice(-days);
         // Pad with zeros if fewer than `days` entries
         const paddedCounts: number[] =
           counts.length < days
