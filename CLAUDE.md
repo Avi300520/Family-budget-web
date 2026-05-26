@@ -223,10 +223,26 @@ on-the-fly `categorize()` for legacy items.
 - `LimitedMemberView` unchanged — still shows personal budget only.
 - Family endpoints are short-circuited client-side AND blocked server-side
   with 403, so a role flip mid-session never leaks household data.
+- Visual smoke 2026-05-26 (dev servers running, real cookies, Playwright):
+  network log captured during a limited-member dashboard load shows only
+  `GET /me` and `GET /budget/current` — no calls to `/activity`,
+  `/spending/by-category`, `/spending/by-member`, `/spending/by-weekday`,
+  or `/project-budgets`.
+
+**ActivityFeed privacy scope (Option A — household-shared only):**
+Personal expenses (`expense_type='personal'`) are filtered out at the
+Backend store level — they never reach the Frontend, regardless of who
+logged them. ActivityFeed shows: household expenses + project expenses
+(rendered with `(פרויקט)` suffix) + active shopping items + pending
+household approvals. This matches the system-wide invariant that personal
+spending is invisible to other family members. Documented in detail in
+the Backend CLAUDE.md "Activity-feed privacy scope" section.
 
 **Gates:** typecheck ✅ · build (20 routes, dashboard 6.37 kB) ✅ ·
 no new deps ✅ · no new hex ✅ · no fake data ✅ · CORS untouched ✅ ·
-shared-types synced ✅
+shared-types synced ✅ · backend 148/148 tests ✅ · visual smoke ✅
+(owner @ 1280 + 375 with data and empty states, limited_member privacy
+verified end-to-end via Playwright)
 
 ## Iteration 5 Next Steps
 
