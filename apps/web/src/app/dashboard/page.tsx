@@ -4,10 +4,12 @@ import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
+  ActivityEntry,
   BudgetCurrent,
   Household,
   HouseholdMember,
   ProjectBudget,
+  SpendingByCategoryEntry,
   User,
 } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
@@ -446,15 +448,26 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
   );
 }
 
-// ── CategoriesPanel ───────────────────────────────────────────────────────────
-// Shows the 7 canonical categories as equal-weight color segments (taxonomy reference).
-// Actual per-category spend will be wired in Iteration 5.
-function CategoriesPanel() {
-  const segments = CATEGORIES.map((c) => ({
-    value: 1,
-    color: c.color,
-    label: c.label,
-  }));
+// ── CategoriesPanel (Iteration 5 — wired to real spending) ────────────────────
+// Real spend numbers from GET /api/v1/households/:id/spending/by-category.
+// Donut segments are sized proportionally to the actual ILS amount per
+// category. Categories with zero spend are listed below the donut at low
+// opacity (taxonomy reference) but excluded from the donut to avoid a
+// misleading "equal-weight" visual.
+function CategoriesPanel({ spending }: { spending: SpendingByCategoryEntry[] | undefined }) {
+  // Total spend across all categories, used to decide empty-vs-data state.
+  const totalSpent = spending?.reduce((sum, s) => sum + s.spent, 0) ?? 0;
+  const hasData = spending && totalSpent > 0;
+
+  // Build donut segments only from categories with positive spend, preserving
+  // the canonical CATEGORIES order so colours are stable across renders.
+  const spentByKey = new Map<string, number>(
+    (spending ?? []).map((s) => [s.category, s.spent])
+  );
+  const segments = CATEGORIES
+    .map((c) => ({ key: c.key, label: c.label, color: c.color, spent: spentByKey.get(c.key) ?? 0 }))
+    .filter((s) => s.spent > 0)
+    .map((s) => ({ value: s.spent, color: s.color, label: s.label }));
 
   return (
     <section className="card" style={{ padding: "var(--sp-6)" }}>
@@ -462,7 +475,9 @@ function CategoriesPanel() {
         <div>
           <h3 className="h3">קטגוריות</h3>
           <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
-            כמה הולך לאן
+            {hasData
+              ? `סה"כ ${totalSpent.toLocaleString()} ש"ח החודש`
+              : "כמה הולך לאן"}
           </div>
         </div>
         <Link
@@ -474,50 +489,109 @@ function CategoriesPanel() {
         </Link>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--sp-6)",
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <Donut
-          size={160}
-          thickness={20}
-          segments={segments}
-          ariaLabel="7 קטגוריות תקציב"
-        />
-        <div style={{ flex: 1, minWidth: 140, display: "grid", gap: "var(--sp-3)" }}>
-          {CATEGORIES.map((c) => (
-            <div
-              key={c.key}
-              style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}
-            >
-              <div
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 999,
-                  background: c.color,
-                  flexShrink: 0,
-                }}
-              />
-              <span style={{ fontSize: 13, color: "var(--text-1)" }}>{c.label}</span>
-            </div>
-          ))}
-          <div className="muted" style={{ fontSize: 11, marginTop: "var(--sp-1)" }}>
-            פירוט הוצאה לפי קטגוריה יופיע בקרוב
+      {hasData ? (
+        <div
+          style={{
+            display: "flex",
+            gap: "var(--sp-6)",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <Donut
+            size={160}
+            thickness={20}
+            segments={segments}
+            ariaLabel="התפלגות הוצאות לפי קטגוריה"
+          />
+          <div style={{ flex: 1, minWidth: 140, display: "grid", gap: "var(--sp-3)" }}>
+            {CATEGORIES.map((c) => {
+              const spent = spentByKey.get(c.key) ?? 0;
+              const isActive = spent > 0;
+              return (
+                <div
+                  key={c.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--sp-2)",
+                    opacity: isActive ? 1 : 0.4,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 999,
+                      background: c.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ flex: 1, fontSize: 13, color: "var(--text-1)" }}>{c.label}</span>
+                  {isActive && (
+                    <span className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
+                      {spent.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "var(--sp-8) var(--sp-4)",
+            gap: "var(--sp-2)",
+            textAlign: "center",
+            minHeight: 160,
+          }}
+        >
+          <span style={{ fontSize: 32 }} aria-hidden="true">📊</span>
+          <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
+            עדיין אין הוצאות החודש
+          </span>
+          <span className="muted" style={{ fontSize: 13 }}>
+            כשתרשמו הוצאות, ההתפלגות תופיע כאן.
+          </span>
+        </div>
+      )}
     </section>
   );
 }
 
-// ── ActivityFeed (placeholder) ────────────────────────────────────────────────
-// Backend endpoint for household activity feed will be wired in Iteration 5.
-function ActivityFeed() {
+// ── ActivityFeed (Iteration 5 — wired to real data) ──────────────────────────
+// Renders entries from GET /api/v1/households/:id/activity. Avatar coloured by
+// actorUserId via the shared colorFor() helper (no Hebrew name → "?" initial).
+// "needsApproval" entries get a coral pill so owner/admin can spot them fast.
+
+// Deterministic, no `Intl.RelativeTimeFormat` (locale fragility). Hebrew labels
+// for the most common ranges; otherwise fall back to short date.
+function timeAgoHe(ts: string): string {
+  const now = Date.now();
+  const then = new Date(ts).getTime();
+  if (!Number.isFinite(then)) return "";
+  const seconds = Math.max(0, Math.floor((now - then) / 1000));
+  if (seconds < 60) return "עכשיו";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `לפני ${minutes} דק׳`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `לפני ${hours} שעות`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `לפני ${days} ימים`;
+  // Older than a week → short date (no year for current-year entries).
+  const date = new Date(ts);
+  return date.toLocaleDateString("he-IL", { day: "numeric", month: "short" });
+}
+
+function ActivityFeed({ entries }: { entries: ActivityEntry[] | undefined }) {
+  const isLoading = entries === undefined;
+  const hasEntries = !isLoading && entries.length > 0;
+
   return (
     <section className="card" style={{ padding: "var(--sp-6)" }}>
       <div style={{ marginBottom: "var(--sp-4)" }}>
@@ -526,28 +600,104 @@ function ActivityFeed() {
           פעולות אחרונות בבית
         </div>
       </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "var(--sp-10) var(--sp-4)",
-          gap: "var(--sp-3)",
-          textAlign: "center",
-          minHeight: 200,
-        }}
-      >
-        <span style={{ fontSize: 36 }} aria-hidden="true">💬</span>
-        <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
-          פעילות תופיע כאן
-        </span>
-        <span className="muted" style={{ fontSize: 13 }}>
-          אחרי שתשלחו הודעות ב-WhatsApp,
-          <br />
-          הפעולות יתאגדו כאן למשפחה.
-        </span>
-      </div>
+
+      {isLoading ? (
+        <div className="muted" style={{ padding: "var(--sp-6) 0", textAlign: "center", fontSize: 13 }}>
+          טוען פעילות…
+        </div>
+      ) : hasEntries ? (
+        <ul style={{ display: "grid", gap: "var(--sp-3)", listStyle: "none", padding: 0, margin: 0 }}>
+          {entries.slice(0, 12).map((e, idx) => (
+            <li
+              key={`${e.ts}-${idx}`}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "var(--sp-3)",
+                padding: "var(--sp-2) 0",
+                borderBottom:
+                  idx === Math.min(entries.length, 12) - 1
+                    ? "none"
+                    : "1px solid var(--line-1)",
+              }}
+            >
+              {e.actorUserId ? (
+                <Avatar
+                  memberId={e.actorUserId}
+                  displayName={e.actorName}
+                  size="sm"
+                  ariaLabel={e.actorName ?? "חבר משפחה"}
+                />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 999,
+                    background: "var(--surface-2)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    fontSize: 13,
+                  }}
+                >
+                  {e.icon ?? "•"}
+                </span>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, color: "var(--text-1)", lineHeight: 1.4 }}>
+                  {e.actorName && (
+                    <span style={{ fontWeight: 500 }}>{e.actorName} </span>
+                  )}
+                  <span>{e.detailHe}</span>
+                </div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                  {timeAgoHe(e.ts)}
+                </div>
+              </div>
+              {e.needsApproval && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    background: "var(--coral-bg, var(--coral))",
+                    color: "var(--coral-ink, white)",
+                    flexShrink: 0,
+                  }}
+                >
+                  ממתין
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "var(--sp-10) var(--sp-4)",
+            gap: "var(--sp-3)",
+            textAlign: "center",
+            minHeight: 200,
+          }}
+        >
+          <span style={{ fontSize: 36 }} aria-hidden="true">💬</span>
+          <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
+            פעילות תופיע כאן
+          </span>
+          <span className="muted" style={{ fontSize: 13 }}>
+            אחרי שתשלחו הודעות ב-WhatsApp,
+            <br />
+            הפעולות יתאגדו כאן למשפחה.
+          </span>
+        </div>
+      )}
     </section>
   );
 }
@@ -682,10 +832,14 @@ function FamilyView({
   budget,
   activeProjects,
   role,
+  activity,
+  spendingByCategory,
 }: {
   budget: BudgetCurrent & { mySpentAmount: number };
   activeProjects: ProjectBudget[];
   role: string | undefined;
+  activity: ActivityEntry[] | undefined;
+  spendingByCategory: SpendingByCategoryEntry[] | undefined;
 }) {
   return (
     <div style={{ display: "grid", gap: "var(--sp-5)" }}>
@@ -701,10 +855,10 @@ function FamilyView({
       {/* Project budgets strip */}
       <ProjectsStrip projects={activeProjects} />
 
-      {/* Categories donut + Activity feed placeholder */}
+      {/* Categories donut (real data) + Activity feed (real data) */}
       <div className="grid two">
-        <CategoriesPanel />
-        <ActivityFeed />
+        <CategoriesPanel spending={spendingByCategory} />
+        <ActivityFeed entries={activity} />
       </div>
     </div>
   );
@@ -719,6 +873,11 @@ export default function DashboardPage() {
     BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number }
   >();
   const [activeProjects, setActiveProjects] = useState<ProjectBudget[]>([]);
+  // Iteration 5 — household activity & per-category spend. undefined = not
+  // loaded yet; empty array = endpoint responded with no entries (clean
+  // empty state). Never invented data.
+  const [activity, setActivity] = useState<ActivityEntry[]>();
+  const [spendingByCategory, setSpendingByCategory] = useState<SpendingByCategoryEntry[]>();
   const [error, setError] = useState<string>();
 
   async function load() {
@@ -730,12 +889,27 @@ export default function DashboardPage() {
       setMembership(me.membership);
       if (me.household) {
         const isLimited = me.membership?.role === "limited_member";
-        const [budgetData, projectsData] = await Promise.all([
+        // Family-view-only endpoints get .catch(()=>fallback) so a single 403
+        // (e.g. role flip mid-session) or transient network error does not
+        // blank the entire dashboard — the affected panel just shows empty.
+        const [budgetData, projectsData, activityData, spendingData] = await Promise.all([
           api.budgetCurrent(me.household.id),
           isLimited
             ? Promise.resolve({ budgets: [] as ProjectBudget[] })
             : api.listProjectBudgets(me.household.id).catch(() => ({
                 budgets: [] as ProjectBudget[],
+              })),
+          isLimited
+            ? Promise.resolve({ entries: [] as ActivityEntry[] })
+            : api.householdActivity(me.household.id, 50).catch(() => ({
+                entries: [] as ActivityEntry[],
+              })),
+          isLimited
+            ? Promise.resolve({ entries: [] as SpendingByCategoryEntry[], periodStart: "", periodEnd: "" })
+            : api.spendingByCategory(me.household.id).catch(() => ({
+                entries: [] as SpendingByCategoryEntry[],
+                periodStart: "",
+                periodEnd: "",
               })),
         ]);
         setBudget(budgetData);
@@ -745,6 +919,8 @@ export default function DashboardPage() {
             (p) => p.isActive && (!p.endDate || p.endDate >= today)
           )
         );
+        setActivity(activityData.entries);
+        setSpendingByCategory(spendingData.entries);
       }
     } catch (err) {
       setError(
@@ -809,6 +985,8 @@ export default function DashboardPage() {
           budget={budget}
           activeProjects={activeProjects}
           role={role}
+          activity={activity}
+          spendingByCategory={spendingByCategory}
         />
       )}
     </AppShell>

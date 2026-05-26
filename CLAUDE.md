@@ -52,10 +52,12 @@ pnpm sync:shared  # or ./scripts/sync-shared.ps1
 
 | Repo | Branch | Latest Commit | GitHub URL | Notes |
 |------|--------|---------------|-----------|-------|
-| Frontend | `feat/shopping-route-iteration-4` | TBD (patch) | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/shopping-route-iteration-4) | Iteration 4 + hardening patch |
+| Frontend | `feat/activity-spending-iteration-5` | TBD | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/activity-spending-iteration-5) | Iteration 5 — DashboardA wired to real data |
+| Frontend | `feat/shopping-route-iteration-4` | e53a901 | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/shopping-route-iteration-4) | Iteration 4 + hardening patch |
 | Frontend | `feat/dashboard-story-iteration-3` | 7bd4222 | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/dashboard-story-iteration-3) | Iteration 3 complete |
 | Frontend | `feat/design-tokens-iteration-0` | a9ff04d | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/design-tokens-iteration-0) | Iteration 0-2 complete + hardening |
-| Backend  | `feat/shopping-route-iteration-4` | TBD (patch) | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/shopping-route-iteration-4) | Iteration 4 + hardening patch |
+| Backend  | `feat/activity-spending-iteration-5` | TBD | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/activity-spending-iteration-5) | Iteration 5 — activity + spending endpoints |
+| Backend  | `feat/shopping-route-iteration-4` | 1802596 | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/shopping-route-iteration-4) | Iteration 4 + hardening patch |
 | Backend  | `feat/sync-shared-script`         | d1e3027 | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/sync-shared-script) | sync-shared script + docs |
 
 **Latest Iteration 3 commit (64192ea):**
@@ -182,6 +184,49 @@ for `category_id text` with a CHECK constraint. `addShoppingItem` calls
 `categorize()` (deterministic Hebrew regex lexicon, no LLM — gap doc'd).
 `organizeShoppingListText` groups by stored category, falls back to
 on-the-fly `categorize()` for legacy items.
+
+## Iteration 5 Complete ✅ — DashboardA wired to real data
+
+**Branches (both repos):** `feat/activity-spending-iteration-5`
+
+**What changed (Frontend `apps/web/src/app/dashboard/page.tsx`):**
+- `CategoriesPanel` now takes `spending: SpendingByCategoryEntry[]` and renders
+  proportional Donut segments + a per-category list with ILS amounts. When
+  total spend is 0 a warm empty state replaces the donut. Categories with no
+  spend appear in the legend at 40% opacity (taxonomy reference only).
+- `ActivityFeed` now takes `entries: ActivityEntry[]` and renders the unified
+  expense + shopping + approval feed (capped at 12 visible rows). Each row
+  has Avatar(sm) coloured by `actorUserId`, Hebrew template text from the
+  server, Hebrew relative-time label (`timeAgoHe`), and an optional coral
+  "ממתין" pill for `needsApproval`. Three states: loading / empty / data.
+- `FamilyView` receives `activity` and `spendingByCategory` as new props.
+- Main page loads `householdActivity` + `spendingByCategory` in the same
+  `Promise.all` as budget + projects. `limited_member` short-circuits to
+  empty arrays — never even calls the endpoint (extra defence on top of the
+  Backend 403). Each endpoint has its own `.catch(() => fallback)` so a
+  transient failure on one panel doesn't blank the dashboard.
+
+**What is NOT wired in this iteration (intentional):**
+- `spending/by-member` — endpoint + api-client method ready; UI will arrive
+  in DashboardB (Iteration 9).
+- `spending/by-weekday` — endpoint + api-client method ready; will likely
+  surface inside the Insights strip later or in DashboardB.
+- `InsightsStrip` — still placeholder (Iteration 7).
+- `PendingApprovals` — empty state preserved; depends on a list endpoint
+  not built in this iteration (the activity feed already surfaces pending
+  approvals as rows with the "ממתין" pill).
+
+**Endpoints consumed:** `api.householdActivity`, `api.spendingByCategory`
+(in addition to the pre-existing `me`, `budgetCurrent`, `listProjectBudgets`).
+
+**limited_member privacy:**
+- `LimitedMemberView` unchanged — still shows personal budget only.
+- Family endpoints are short-circuited client-side AND blocked server-side
+  with 403, so a role flip mid-session never leaks household data.
+
+**Gates:** typecheck ✅ · build (20 routes, dashboard 6.37 kB) ✅ ·
+no new deps ✅ · no new hex ✅ · no fake data ✅ · CORS untouched ✅ ·
+shared-types synced ✅
 
 ## Iteration 5 Next Steps
 

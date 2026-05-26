@@ -319,6 +319,54 @@ export interface BudgetCurrent {
   burnRateStatus: "on_track" | "slightly_high" | "high_risk" | "exceeded";
 }
 
+// ── Iteration 5 — Activity & spending feed ────────────────────────────────────
+
+/** A single entry in the household activity feed (newest first). Composed from
+ *  multiple sources: purchases, shopping items, pending approvals. Pure
+ *  deterministic template strings — no LLM-generated copy. */
+export interface ActivityEntry {
+  /** ISO timestamp of the activity. Used for sort order and "X ago" rendering. */
+  ts: string;
+  kind: "expense" | "shopping" | "approval";
+  /** User id of the actor (if known) — Frontend uses it for Avatar colour. */
+  actorUserId?: string;
+  /** Display name of the actor (resolved server-side from members). */
+  actorName?: string;
+  /** Short Hebrew sentence describing the action. Templated, not free text. */
+  detailHe: string;
+  /** Amount in ILS when applicable (expense / pending approval). */
+  amount?: number;
+  /** Emoji icon picked from a small fixed palette — never LLM-generated. */
+  icon?: string;
+  /** True when an admin/owner needs to act on this entry. */
+  needsApproval?: boolean;
+}
+
+/** Per-category spend breakdown for a given period. */
+export interface SpendingByCategoryEntry {
+  /** Purchase.category — the same 7-bucket taxonomy used throughout the app. */
+  category: Purchase["category"];
+  /** Total ILS spent for the period (household-only, project-attributed excluded). */
+  spent: number;
+  /** Optional per-category budget cap. Not used yet — reserved for Iteration 6+. */
+  budget?: number;
+}
+
+/** Per-member spend breakdown for a given period. */
+export interface SpendingByMemberEntry {
+  userId: string;
+  displayName: string;
+  amount: number;
+}
+
+/** Per-weekday spend breakdown for a given period.
+ *  weekday is 0=Sunday … 6=Saturday (Israeli week start). */
+export interface SpendingByWeekdayEntry {
+  weekday: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  labelHe: string;
+  amount: number;
+}
+
 export interface AuthSessionPayload {
   accessToken?: string;
   user: User;

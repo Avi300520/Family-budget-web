@@ -1,4 +1,5 @@
 import type {
+  ActivityEntry,
   AuthSessionPayload,
   BudgetCurrent,
   Household,
@@ -13,6 +14,9 @@ import type {
   ReceiptItem,
   ShoppingList,
   ShoppingListItem,
+  SpendingByCategoryEntry,
+  SpendingByMemberEntry,
+  SpendingByWeekdayEntry,
   Subscription,
   User,
   WebhookEvent,
@@ -191,6 +195,15 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ budget: ProjectBudget; purchases: Purchase[]; spent: number }>(`/api/v1/households/${householdId}/project-budgets/${budgetId}/purchases`),
     listHouseholdPurchasesForPeriod: (householdId: string) =>
       request<{ purchases: Purchase[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/purchases/period`),
+    // ── Iteration 5 — Activity & spending ──────────────────────────────────
+    householdActivity: (householdId: string, limit = 50) =>
+      request<{ entries: ActivityEntry[] }>(`/api/v1/households/${householdId}/activity?limit=${limit}`),
+    spendingByCategory: (householdId: string) =>
+      request<{ entries: SpendingByCategoryEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-category?period=current`),
+    spendingByMember: (householdId: string) =>
+      request<{ entries: SpendingByMemberEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-member?period=current`),
+    spendingByWeekday: (householdId: string) =>
+      request<{ entries: SpendingByWeekdayEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-weekday?period=current`),
     lookupInvite: (token: string) =>
       request<{ invite: HouseholdInvite; household: Household | undefined }>(`/api/v1/households/join?token=${encodeURIComponent(token)}`),
     joinHousehold: (inviteToken: string, displayName?: string) =>
