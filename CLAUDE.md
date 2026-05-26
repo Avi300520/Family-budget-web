@@ -238,6 +238,13 @@ household approvals. This matches the system-wide invariant that personal
 spending is invisible to other family members. Documented in detail in
 the Backend CLAUDE.md "Activity-feed privacy scope" section.
 
+**⚠️ Project expense visibility assumption — do not break silently:**
+Project expenses appear in the ActivityFeed because all project budgets are currently
+household-scoped (a project always belongs to one household and all members can see it).
+**If private projects are ever added**, the Backend `listHouseholdActivity` must gain an
+explicit `project_visibility` filter before that iteration ships. The current code has NO
+such filter — without it, private project spending would be silently visible to all members.
+
 **Gates:** typecheck ✅ · build (20 routes, dashboard 6.37 kB) ✅ ·
 no new deps ✅ · no new hex ✅ · no fake data ✅ · CORS untouched ✅ ·
 shared-types synced ✅ · backend 148/148 tests ✅ · visual smoke ✅

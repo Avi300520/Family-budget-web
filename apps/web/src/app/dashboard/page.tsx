@@ -661,10 +661,11 @@ function ActivityFeed({ entries }: { entries: ActivityEntry[] | undefined }) {
                 <span
                   style={{
                     fontSize: 11,
+                    fontWeight: 600,
                     padding: "2px 8px",
                     borderRadius: 999,
-                    background: "var(--coral-bg, var(--coral))",
-                    color: "var(--coral-ink, white)",
+                    background: "var(--coral)",
+                    color: "white",
                     flexShrink: 0,
                   }}
                 >
