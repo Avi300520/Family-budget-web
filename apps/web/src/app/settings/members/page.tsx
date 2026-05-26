@@ -4,6 +4,7 @@ import { Check, Pencil, Trash2, UserPlus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Household, HouseholdMember, HouseholdRole } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
+import { Avatar } from "../../../components/Avatar";
 import { LoadState } from "../../../components/LoadState";
 import { api } from "../../../lib/api";
 
@@ -155,20 +156,23 @@ export default function MembersPage() {
             const isEditing = editingId === m.id;
             const displayName = m.displayName ?? m.phoneE164 ?? "חבר";
             return (
-              <div key={m.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+              <div key={m.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--cream-3)" }}>
                 {!isEditing ? (
                   <div className="row between" style={{ alignItems: "center" }}>
-                    <div>
-                      <span style={{ fontWeight: 700 }}>{displayName}</span>
-                      <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.85rem" }}>{ROLE_LABELS[m.role] ?? m.role}</span>
-                      {m.phoneE164 && m.displayName && (
-                        <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.8rem" }} dir="ltr">{m.phoneE164}</span>
-                      )}
-                      {m.personalBudgetMonthly != null && (
-                        <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.85rem" }}>
-                          · תקציב אישי {m.personalBudgetMonthly.toLocaleString()} ₪/חודש
-                        </span>
-                      )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Avatar memberId={m.userId} displayName={m.displayName} size="lg" />
+                      <div>
+                        <span style={{ fontWeight: 700 }}>{displayName}</span>
+                        <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.85rem" }}>{ROLE_LABELS[m.role] ?? m.role}</span>
+                        {m.phoneE164 && m.displayName && (
+                          <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.8rem" }} dir="ltr">{m.phoneE164}</span>
+                        )}
+                        {m.personalBudgetMonthly != null && (
+                          <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.85rem" }}>
+                            · תקציב אישי {m.personalBudgetMonthly.toLocaleString()} ₪/חודש
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       {m.role !== "owner" && (
@@ -185,7 +189,10 @@ export default function MembersPage() {
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontWeight: 700 }}>{displayName}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Avatar memberId={m.userId} displayName={m.displayName} size="lg" />
+                      <span style={{ fontWeight: 700 }}>{displayName}</span>
+                    </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
                         תפקיד
@@ -266,7 +273,7 @@ export default function MembersPage() {
                   style={{ width: "100%" }}
                 />
                 {phoneError && (
-                  <div style={{ color: "var(--rose, #e53e3e)", fontSize: "0.82rem", marginTop: 4 }}>
+                  <div style={{ color: "var(--neg)", fontSize: "0.82rem", marginTop: 4 }}>
                     {phoneError}
                   </div>
                 )}

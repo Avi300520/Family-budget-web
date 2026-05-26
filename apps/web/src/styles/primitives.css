@@ -75,6 +75,30 @@
   padding: var(--sp-6);
 }
 
+/* avatar / member circle -----------------------------------------------------
+   Intentional pixel literals: fixed diameter sizes (sm=24, md=32, lg=44, xl=60)
+   are pixel-perfect by design — part of the family-budget UI kit visual rhythm.
+   Border width literals (1.5px sm, 2px default) are precise visual choices.
+   -------------------------------------------------------------------------- */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  border-radius: 999px;
+  background: var(--coral);          /* overridden inline by colorFor() */
+  color: var(--cream-2);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0;
+  flex-shrink: 0;
+  border: 2px solid var(--cream-2);
+  user-select: none;
+}
+.avatar.sm { width: 24px; height: 24px; font-size: 11px; border-width: 1.5px; }
+.avatar.lg { width: 44px; height: 44px; font-size: 16px; }
+.avatar.xl { width: 60px; height: 60px; font-size: 20px; }
+
 /* chip / pill ---------------------------------------------------------------- */
 .chip {
   display: inline-flex;

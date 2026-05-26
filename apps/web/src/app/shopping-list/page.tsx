@@ -2,14 +2,18 @@
 
 import { Check, Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Household, ShoppingListItem } from "@shopping-assistant/shared-types";
+import type { Household, HouseholdMember, ShoppingListItem } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
+import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
 import { api } from "../../lib/api";
+
+type MemberInfo = { userId: string; displayName?: string };
 
 export default function ShoppingListPage() {
   const [household, setHousehold] = useState<Household>();
   const [items, setItems] = useState<ShoppingListItem[]>([]);
+  const [memberMap, setMemberMap] = useState<Record<string, MemberInfo>>({});
   const [rawText, setRawText] = useState("חלב");
   const [error, setError] = useState<string>();
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent">("idle");
@@ -18,8 +22,17 @@ export default function ShoppingListPage() {
     try {
       const current = await api.currentHousehold();
       setHousehold(current.household);
-      const list = await api.shoppingList(current.household.id);
+      const [list, membersRes] = await Promise.all([
+        api.shoppingList(current.household.id),
+        api.listMembers(current.household.id).catch(() => ({ members: [] as Array<HouseholdMember & { displayName?: string }> }))
+      ]);
       setItems(list.items);
+      // Build userId → {userId, displayName} map for "who added" display
+      const map: Record<string, MemberInfo> = {};
+      for (const m of membersRes.members) {
+        map[m.userId] = { userId: m.userId, displayName: m.displayName };
+      }
+      setMemberMap(map);
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בטעינת הרשימה");
     }
@@ -89,28 +102,48 @@ export default function ShoppingListPage() {
         </button>
       </form>
       <div className="list" style={{ marginTop: 18 }}>
-        {items.map((item) => (
-          <div className="item-card row between" key={item.id}>
-            <div>
-              <strong>{item.normalizedName ?? item.rawText}</strong>
-              <div className="muted">{item.source} · {item.status}</div>
+        {items.map((item) => {
+          const adder = item.createdByUserId ? memberMap[item.createdByUserId] : undefined;
+          return (
+            <div className="item-card row between" key={item.id}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {adder ? (
+                  <Avatar memberId={adder.userId} displayName={adder.displayName} size="sm" />
+                ) : (
+                  /* placeholder keeps layout stable when no adder info */
+                  <span style={{ width: 24, height: 24, flexShrink: 0 }} aria-hidden />
+                )}
+                <div>
+                  <strong>{item.normalizedName ?? item.rawText}</strong>
+                  {item.quantity != null && item.quantity > 1 && (
+                    <span className="muted" style={{ marginInlineStart: 6, fontSize: 13 }}>
+                      ×{item.quantity}
+                    </span>
+                  )}
+                  {adder?.displayName && (
+                    <span className="muted" style={{ marginInlineStart: 6, fontSize: 12 }}>
+                      — {adder.displayName.split(/\s+/)[0]}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="row">
+                {item.status === "active" && (
+                  <button className="button secondary" onClick={() => update(item.id, "purchased")}>
+                    <Check size={18} aria-hidden />
+                    נקנה
+                  </button>
+                )}
+                {item.status !== "removed" && (
+                  <button className="button warn" onClick={() => update(item.id, "removed")}>
+                    <Trash2 size={18} aria-hidden />
+                    הסרה
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="row">
-              {item.status === "active" && (
-                <button className="button secondary" onClick={() => update(item.id, "purchased")}>
-                  <Check size={18} aria-hidden />
-                  נקנה
-                </button>
-              )}
-              {item.status !== "removed" && (
-                <button className="button warn" onClick={() => update(item.id, "removed")}>
-                  <Trash2 size={18} aria-hidden />
-                  הסרה
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {!activeItems.length && <div className="panel muted">הרשימה ריקה — הוסף פריטים מהוואטסאפ או מהשדה למעלה</div>}
       </div>
     </AppShell>

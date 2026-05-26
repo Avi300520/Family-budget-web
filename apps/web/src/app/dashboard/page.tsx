@@ -5,6 +5,7 @@ import { FolderOpen, ListChecks, ReceiptText, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { BudgetCurrent, Household, HouseholdMember, ProjectBudget, Receipt, User } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
+import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
 import { api } from "../../lib/api";
 
@@ -87,11 +88,14 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="row between" style={{ marginBottom: 22 }}>
-        <div>
-          <p className="greeting">שלום {greetingName} 👋</p>
-          <div className="muted" style={{ marginTop: 4 }}>
-            {household.name}
-            {roleLabel && <span className="role-pill" style={{ marginInlineStart: 10 }}>{roleLabel}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Avatar memberId={user.id} displayName={user.displayName} size="lg" />
+          <div>
+            <p className="greeting">שלום {greetingName} 👋</p>
+            <div className="muted" style={{ marginTop: 4 }}>
+              {household.name}
+              {roleLabel && <span className="role-pill" style={{ marginInlineStart: 10 }}>{roleLabel}</span>}
+            </div>
           </div>
         </div>
         <button className="button secondary" onClick={load}>
