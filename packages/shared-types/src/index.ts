@@ -1,3 +1,7 @@
+export * from "./shoppingCategories";
+
+import type { ShoppingCategoryId } from "./shoppingCategories";
+
 export type Currency = "ILS";
 export type UserStatus = "onboarding" | "active" | "blocked" | "deleted";
 export type HouseholdStatus = "trial" | "active" | "suspended" | "cancelled" | "deleted";
@@ -114,6 +118,8 @@ export interface ShoppingListItem {
   status: "active" | "purchased" | "removed";
   source: "whatsapp_text" | "web" | "receipt_suggestion" | "recurring";
   notes?: string;
+  /** Supermarket-route category. Optional for legacy rows pre-Iteration 4. */
+  categoryId?: ShoppingCategoryId;
   createdAt: string;
   updatedAt: string;
 }
