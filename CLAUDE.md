@@ -52,9 +52,11 @@ pnpm sync:shared  # or ./scripts/sync-shared.ps1
 
 | Repo | Branch | Latest Commit | GitHub URL | Notes |
 |------|--------|---------------|-----------|-------|
-| Frontend | `feat/dashboard-story-iteration-3` | 64192ea | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/dashboard-story-iteration-3) | Iteration 3 complete, pushed |
+| Frontend | `feat/shopping-route-iteration-4` | 3f38e96 | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/shopping-route-iteration-4) | Iteration 4 complete |
+| Frontend | `feat/dashboard-story-iteration-3` | 7bd4222 | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/dashboard-story-iteration-3) | Iteration 3 complete |
 | Frontend | `feat/design-tokens-iteration-0` | a9ff04d | [PR](https://github.com/Avi300520/Family-budget-web/pull/new/feat/design-tokens-iteration-0) | Iteration 0-2 complete + hardening |
-| Backend | `feat/sync-shared-script` | d1e3027 | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/sync-shared-script) | sync-shared script + docs |
+| Backend  | `feat/shopping-route-iteration-4` | 3e8c95e | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/shopping-route-iteration-4) | Iteration 4 complete |
+| Backend  | `feat/sync-shared-script`         | d1e3027 | [PR](https://github.com/Avi300520/Family-budget/pull/new/feat/sync-shared-script) | sync-shared script + docs |
 
 **Latest Iteration 3 commit (64192ea):**
 - `feat(web): redesign dashboard story view (Iteration 3)`
@@ -143,9 +145,31 @@ Branch: `feat/dashboard-story-iteration-3` (commit 64192ea), pushed to GitHub.
 - `ActivityFeed`: needs household-wide activity timeline endpoint
 - CORS preview-deploy support: needs pattern-match allowlist in `apps/api/src/http.ts`
 
-## Iteration 4 Next Steps (Shopping List + RouteMap + Categorization)
+## Iteration 4 Complete ✅
 
-Iteration 4 requires Backend changes (new endpoints). **Always run `pnpm sync:shared` after any Backend `packages/shared-types` or `packages/api-client` change.**
+**Delivered:** Shopping list rebuilt as a supermarket-route experience
+(`apps/web/src/app/shopping-list/page.tsx`) and Backend categorizes items
+at insert time into 7 fixed categories. Branches:
+`feat/shopping-route-iteration-4` on both repos.
+
+**Shared-types added** (`packages/shared-types/src/shoppingCategories.ts`):
+7 categories — `vegetables`, `bakery`, `dairy`, `pantry`, `snacks`,
+`frozen`, `household` — each with `id` / `nameHe` / `icon` / `order`.
+`ShoppingListItem.categoryId?: ShoppingCategoryId` added (optional so
+legacy rows still type-check).
+
+**Frontend page:** ShoppingHeader + RouteMap + CardsView/ListView toggle
++ ItemRow with Avatar(sm). All colours via tokens, no new hex, no fake
+data. Items without `categoryId` render under "pantry".
+
+**Backend:** Migration 0017 swaps the unused `category_id uuid` column
+for `category_id text` with a CHECK constraint. `addShoppingItem` calls
+`categorize()` (deterministic Hebrew regex lexicon, no LLM — gap doc'd).
+`organizeShoppingListText` now groups by stored category, falls back to
+on-the-fly `categorize()` for legacy items, and renders quantity/adder/
+urgency/note per line.
+
+## Iteration 5 Next Steps
 
 ---
 
