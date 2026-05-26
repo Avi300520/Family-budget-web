@@ -1,18 +1,50 @@
+/* =============================================================================
+   Family Budget — global stylesheet entry
+   1. Design tokens (single source of truth)
+   2. Design primitives (.card, .chip, .btn, .h1..h4, .mono, .bar, .grid, …)
+   3. Base resets
+   4. Legacy class layer — kept for existing pages until each one is rebuilt
+      in its respective iteration. These classes use *alias variables* that
+      point at the new tokens; do not add new entries here.
+   ============================================================================= */
+
+@import "../styles/tokens.css";
+@import "../styles/primitives.css";
+
+/* -----------------------------------------------------------------------------
+   ⚠ LEGACY ALIAS LAYER — TEMPORARY DEBT, REMOVE BY END OF ITERATION 3 ⚠
+
+   These names exist ONLY to keep the pre-Iteration-0 pages rendering
+   (dashboard, budget, settings/members, my-requests, …) until each is
+   rebuilt against the canonical tokens. Tracking:
+     • Iteration 1 (avatars/members)         → no aliases needed
+     • Iteration 3 (Dashboard "סיפור")        → drop --bg, --surface, --ink, --muted, --line, --nav
+     • Iteration 7 (Insights)                → drop --amber, --rose, --green
+   Rules while this layer exists:
+     • DO NOT add new names here.
+     • DO NOT introduce new usages of these aliases in any new code —
+       always reach for the canonical token (`var(--cream-3)` instead of
+       `var(--line)`, `var(--text-2)` instead of `var(--muted)`, etc).
+     • Existing usages are tracked in `grep -RInE 'var\(--(bg|rose|nav|ink|surface|line|amber|green|muted)\)' apps/web/src --exclude='globals.css'`.
+   -------------------------------------------------------------------------- */
 :root {
-  --bg: #f8f7f2;
-  --surface: #ffffff;
-  --ink: #182026;
-  --muted: #65717d;
-  --line: #ddd8ce;
-  --teal: #137f74;
-  --teal-dark: #0f655d;
-  --amber: #f3b53d;
-  --rose: #d75f4c;
-  --green: #2e8f5b;
-  --nav: #24313a;
+  --bg:        var(--cream-0);
+  --surface:   var(--cream-2);
+  --ink:       var(--text-0);
+  --muted:     var(--text-2);
+  --line:      var(--cream-3);
+  --amber:     var(--mustard);
+  --rose:      var(--berry);
+  --green:     var(--pos);
+  --nav:       var(--ink-0);
 }
 
-* {
+/* -----------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -20,10 +52,11 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: Arial, "Noto Sans Hebrew", sans-serif;
-  letter-spacing: 0;
+  background: var(--cream-0);
+  color: var(--text-0);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
@@ -42,6 +75,13 @@ textarea {
   font: inherit;
 }
 
+button {
+  cursor: pointer;
+}
+
+/* -----------------------------------------------------------------------------
+   Legacy classes (rebuilt iteration-by-iteration)
+   -------------------------------------------------------------------------- */
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -50,7 +90,7 @@ textarea {
 
 .side-nav {
   background: var(--nav);
-  color: white;
+  color: var(--on-ink-0);
   padding: 24px 18px;
   display: flex;
   flex-direction: column;
@@ -73,11 +113,12 @@ textarea {
   gap: 10px;
   padding: 10px 12px;
   border-radius: 8px;
-  color: #e9eef1;
+  color: var(--on-ink-1);
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--on-ink-0);
 }
 
 .main {
@@ -93,25 +134,13 @@ textarea {
   line-height: 1.2;
 }
 
-.grid {
-  display: grid;
-  gap: 16px;
-}
-
-.grid.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.grid.three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .panel,
 .item-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 18px;
+  box-shadow: var(--elev-1);
 }
 
 .panel h2,
@@ -124,10 +153,8 @@ textarea {
   font-size: 34px;
   font-weight: 800;
   margin: 6px 0;
-}
-
-.muted {
-  color: var(--muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .row {
@@ -135,10 +162,6 @@ textarea {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.row.between {
-  justify-content: space-between;
 }
 
 .form {
@@ -151,10 +174,10 @@ textarea {
 .textarea,
 .select {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
   padding: 11px 12px;
-  background: white;
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -164,9 +187,9 @@ textarea {
 
 .button {
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--teal);
-  color: white;
+  color: var(--on-color);
   min-height: 42px;
   padding: 0 14px;
   display: inline-flex;
@@ -175,6 +198,7 @@ textarea {
   gap: 8px;
   cursor: pointer;
   font-weight: 700;
+  transition: background var(--dur-1) var(--ease);
 }
 
 .button:hover {
@@ -182,12 +206,20 @@ textarea {
 }
 
 .button.secondary {
-  background: #e9ece8;
-  color: var(--ink);
+  background: var(--cream-3);
+  color: var(--text-0);
+}
+
+.button.secondary:hover {
+  background: var(--cream-4);
 }
 
 .button.warn {
-  background: var(--rose);
+  background: var(--neg);
+}
+
+.button.warn:hover {
+  background: var(--berry);
 }
 
 .button:disabled {
@@ -203,20 +235,20 @@ textarea {
 .status {
   border-radius: 999px;
   padding: 4px 9px;
-  background: #eef5f2;
-  color: var(--green);
+  background: var(--pos-bg);
+  color: var(--pos);
   font-weight: 700;
   font-size: 13px;
 }
 
 .status.warn {
-  background: #fff4df;
-  color: #a86b00;
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
 .status.error {
-  background: #ffe9e4;
-  color: var(--rose);
+  background: var(--neg-bg);
+  color: var(--neg);
 }
 
 .login-page {
@@ -228,10 +260,11 @@ textarea {
 
 .login-box {
   width: min(520px, 100%);
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 14px;
   padding: 28px;
+  box-shadow: var(--elev-2);
 }
 
 .dev-link {
@@ -242,9 +275,9 @@ textarea {
 .table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
@@ -256,7 +289,9 @@ textarea {
 }
 
 .table th {
-  background: #f0eee8;
+  background: var(--cream-1);
+  color: var(--text-1);
+  font-weight: 600;
 }
 
 .progress {
@@ -269,25 +304,25 @@ textarea {
 
 .progress-fill {
   height: 100%;
-  background: var(--green);
+  background: var(--pos);
   transition: width 0.3s ease;
 }
 
 .progress-fill.amber {
-  background: var(--amber);
+  background: var(--warn);
 }
 
 .progress-fill.rose {
-  background: var(--rose);
+  background: var(--neg);
 }
 
 .role-pill {
   display: inline-block;
   padding: 3px 12px;
   border-radius: 999px;
-  background: #eef5f2;
+  background: var(--teal-bg);
   color: var(--teal-dark);
-  border: 1px solid #cfe4de;
+  border: 1px solid var(--teal-soft);
   font-size: 13px;
   font-weight: 700;
 }
@@ -313,8 +348,9 @@ textarea {
 .hero-panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 24px;
+  box-shadow: var(--elev-1);
 }
 
 .hero-panel h2 {
@@ -329,6 +365,8 @@ textarea {
   font-weight: 800;
   line-height: 1;
   margin: 4px 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .hero-metric .denominator {
@@ -338,9 +376,9 @@ textarea {
 }
 
 .help-box {
-  background: #fbf8ef;
-  border: 1px solid #ece4cd;
-  border-radius: 8px;
+  background: var(--mustard-bg);
+  border: 1px solid var(--mustard-soft);
+  border-radius: 10px;
   padding: 12px 14px;
   font-size: 14px;
   line-height: 1.5;
@@ -366,10 +404,5 @@ textarea {
 
   .main {
     padding: 18px;
-  }
-
-  .grid.two,
-  .grid.three {
-    grid-template-columns: 1fr;
   }
 }

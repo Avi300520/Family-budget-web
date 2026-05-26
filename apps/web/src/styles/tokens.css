@@ -1,0 +1,116 @@
+/* =============================================================================
+   Family Budget — Design Tokens (single source of truth)
+   Ported from `Family budget app/theme.css`. Do not duplicate values elsewhere.
+   ============================================================================= */
+
+:root {
+  /* Cream surfaces ---------------------------------------------------------- */
+  --cream-0: #FBF8F1;     /* app background */
+  --cream-1: #F5F0E4;     /* alt background, sidebar nav-hover */
+  --cream-2: #FFFFFF;     /* card surface */
+  --cream-3: #ECE5D5;     /* raised, badge */
+  --cream-4: #DDD3BB;     /* subtle line on cream */
+
+  /* Charcoal sidebar -------------------------------------------------------- */
+  --ink-0: #1F2A33;
+  --ink-1: #2A3441;
+  --ink-2: #3A4452;
+
+  /* Text -------------------------------------------------------------------- */
+  --text-0: #1A2330;
+  --text-1: #4B5563;
+  --text-2: #7A8390;
+  --text-3: #B3B7BD;
+  --on-ink-0: #F5F0E4;
+  --on-ink-1: #B8BFC7;
+  --on-ink-2: #7A8390;
+
+  /* Brand accents ----------------------------------------------------------- */
+  --teal:        #0F766E;
+  --teal-dark:   #0B5C56;
+  --teal-soft:   #D4E5E2;
+  --teal-bg:     #E8F1EF;
+
+  --coral:       #D97757;
+  --coral-dark:  #B85F42;
+  --coral-soft:  #F5DCCF;
+  --coral-bg:    #FBEFE6;
+
+  --mustard:     #D4A23A;
+  --mustard-soft:#F2DFAA;
+  --mustard-bg:  #FBF1D9;
+
+  --sage:        #7B9B7E;
+  --sage-soft:   #D2DECF;
+  --sage-bg:     #E6EDE3;
+
+  --berry:       #A33B5B;
+  --berry-soft:  #E6BDCB;
+  --berry-bg:    #F5E1E8;
+
+  --plum:        #6B5294;
+  --plum-soft:   #D6CCE6;
+  --plum-bg:     #ECE5F5;
+
+  --ocean:       #3D6E89;
+  --ocean-soft:  #C4D5DF;
+  --ocean-bg:    #E4ECF1;
+
+  /* Functional -------------------------------------------------------------- */
+  --pos:    #2A8C5A;
+  --pos-bg: #E1EFE6;
+  --neg:    #B23A48;
+  --neg-bg: #F5DDE0;
+  --warn:   #C8801C;
+  --warn-bg:#FAEAD1;
+
+  /* Semantic neutrals
+     ---------------------------------------------------------------- */
+  --on-color:        #FFFFFF;  /* text/icon that sits on a brand-colored surface */
+  --scroll-hover:    #C9BFA5;  /* scrollbar thumb hover (between cream-3 and cream-4) */
+  --breakpoint-md:   820px;    /* single source for compact-layout breakpoint */
+
+  /* Family member colors (used by `members.ts` deterministic hash) ---------- */
+  --m-mom:   #D97757;  /* coral */
+  --m-dad:   #0F766E;  /* teal */
+  --m-teen:  #6B5294;  /* plum */
+  --m-kid:   #D4A23A;  /* mustard */
+  --m-kid2:  #3D6E89;  /* ocean */
+
+  /* Spacing (4px base) ------------------------------------------------------ */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* Radii — softer, family-friendly --------------------------------------- */
+  --r-1: 4px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 16px;
+  --r-5: 20px;
+  --r-6: 24px;
+
+  /* Type — populated by `next/font` in `layout.tsx` -----------------------
+     `--font-heebo` and `--font-jetbrains` are injected automatically by
+     `next/font/google` (see layout.tsx). We compose the final font stacks
+     here so components only need `var(--font-ui)` / `var(--font-mono)`. */
+  --font-ui:   var(--font-heebo, 'Heebo'), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-jetbrains, 'JetBrains Mono'), 'SF Mono', Menlo, monospace;
+
+  /* Elevation -------------------------------------------------------------- */
+  --elev-1: 0 1px 2px  rgba(31, 42, 51, 0.04), 0 1px 1px rgba(31, 42, 51, 0.03);
+  --elev-2: 0 4px 12px rgba(31, 42, 51, 0.06), 0 1px 2px rgba(31, 42, 51, 0.04);
+  --elev-3: 0 12px 32px rgba(31, 42, 51, 0.08), 0 2px 6px rgba(31, 42, 51, 0.05);
+
+  /* Motion ----------------------------------------------------------------- */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --ease:  cubic-bezier(0.2, 0, 0, 1);
+}
