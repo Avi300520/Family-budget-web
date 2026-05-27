@@ -439,12 +439,57 @@ matching.
 
 ---
 
+## Iteration 9 Complete ✅ — DashboardB + Member Activity Heatmap
+
+**Branch:** `feat/member-heatmap-iteration-9`
+
+**New route:** `/family/pulse` (owner/admin/adult_member only).
+
+**What was built:**
+
+- `apps/web/src/app/family/pulse/page.tsx` (new) — three-panel DashboardB:
+  1. **Member Spend Bars** — current-period spend per member from
+     `/spending/by-member`. Uses existing `BarsChart` from `charts.tsx`.
+  2. **Weekday Spend Bars** — current-period spend by day of week from
+     `/spending/by-weekday`. Uses existing `BarsChart`.
+  3. **Activity Heatmap** — per-member, per-day confirmed household
+     purchase counts for the last 14 days from the new
+     `/activity/heatmap` endpoint. Uses existing `ActivityHeatmap` from
+     `charts.tsx`. Personal + project expenses excluded.
+  Limited-member short-circuit: client-side role check prevents any
+  fetches; friendly Hebrew message shown instead.
+
+- `apps/web/src/components/AppShell.tsx` — `Activity` icon from
+  `lucide-react` added; new nav entry:
+  `{ href: "/family/pulse", label: "פעילות", roles: ["owner","admin","adult_member"] }`.
+  DashboardA `/dashboard` untouched.
+
+**Backend additions (synced via pnpm sync:shared):**
+- `MemberHeatmapRow` + `MemberActivityHeatmapResponse` in shared-types.
+- `memberActivityHeatmap(householdId, days?)` in api-client.
+- `GET /api/v1/households/:id/activity/heatmap?days=N` — days default 14,
+  max 31; limited_member → 403 (two-layer). No new migration.
+- MemoryStore + PostgresStore parity. 11 new tests in `heatmap.test.ts`.
+
+**Gates:** Frontend typecheck ✅ · build ✅ (**23 routes**, was 22;
+`/family/pulse` 1.62 kB First Load) · no new deps ✅ · no new CSS tokens ✅ ·
+no fake data ✅ · CORS untouched ✅ · shared-types + api-client synced
+byte-identical ✅ · Backend 189/189 tests ✅.
+**Real browser/mobile 375×812 smoke remains a pre-deploy blocker** (now
+extended to cover /family/pulse all 3 panels).
+
+**Deferred:** per-category budget caps; owner/admin own-wishlist web surface;
+mobile 375×812 real-viewport smoke; CORS preview matching; private-project
+visibility design.
+
+---
+
 ## Pre-deploy blockers / Release hardening ledger
 
 These items are NOT blockers for continuing product iterations, but they ARE blockers before merge to main, production deploy, or Vercel/Hetzner release.
 
 * [ ] Real mobile viewport smoke at 375x812, using actual browser/Playwright viewport, not CSS simulation.
-  Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, and pending approval pill.
+  Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, the /family/pulse route (all 3 panels), and pending approval pill.
 
 * [ ] Weekly-summary fallback integration proof.
   Prove that POST /dev/weekly-summary/run still writes/sends the original base weekly summary to the outbox if computeWeeklyInsights fails. The current structural try/catch is acceptable for iteration progression, but release needs an integration-level proof.
@@ -465,7 +510,7 @@ These items are NOT blockers for continuing product iterations, but they ARE blo
   Verify dashboard, shopping list, insights, activity feed, and budget views render only API-backed data or intentional empty states.
 
 * [ ] limited_member privacy release smoke.
-  Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, /households/:id/wishlist, and any later household-only endpoints.
+  Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, /households/:id/wishlist, /activity/heatmap, and any later household-only endpoints.
 
 * [ ] Wishlist sibling-visibility release smoke.
   Verify that no limited_member can see, mutate, or enumerate a sibling's wishlist item through /wishlist/me, /households/:id/wishlist, /wishlist/:itemId PATCH/DELETE, or QUERY_WISHLIST via WhatsApp.

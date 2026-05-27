@@ -449,6 +449,35 @@ export interface WishlistItem {
   updatedAt: string;
 }
 
+/** Iteration 9 — Member Activity Heatmap (owner/admin/adult_member only).
+ *
+ *  Per-member, per-day confirmed household purchase counts for the last N days.
+ *  Personal expenses and project-attributed expenses are excluded (consistent
+ *  with the household-budget invariant). Days are zero-filled so the Frontend
+ *  can render a complete grid without sparse-data logic.
+ */
+export interface MemberHeatmapRow {
+  userId: string;
+  displayName: string;
+  /** Persisted Iteration 6 avatar colour. Null when the member has no colour
+   *  assigned yet (rare — onboarding always assigns one). */
+  color: MemberColorKey | null;
+  /** Zero-filled list ordered chronologically, startDate → endDate inclusive.
+   *  `date` is always "YYYY-MM-DD" in Asia/Jerusalem local time. */
+  days: Array<{ date: string; count: number }>;
+}
+
+export interface MemberActivityHeatmapResponse {
+  /** ISO date string "YYYY-MM-DD" of the first day in the range (inclusive). */
+  startDate: string;
+  /** ISO date string "YYYY-MM-DD" of the last day in the range (inclusive). */
+  endDate: string;
+  /** Number of days covered (= endDate − startDate + 1, clamped 1–31). */
+  days: number;
+  /** One row per member who belongs to the household; ordered by displayName. */
+  rows: MemberHeatmapRow[];
+}
+
 export interface AuthSessionPayload {
   accessToken?: string;
   user: User;

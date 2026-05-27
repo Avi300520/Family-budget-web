@@ -7,6 +7,7 @@ import type {
   HouseholdInvite,
   HouseholdMember,
   HouseholdRole,
+  MemberActivityHeatmapResponse,
   OutboxMessage,
   ProjectBudget,
   Purchase,
@@ -210,6 +211,9 @@ export function createApiClient(options: ApiClientOptions) {
     // ── Iteration 7 — Insights / Weekly Wrapped ───────────────────────────
     weeklyInsights: (householdId: string, week: "current" | "last" = "current") =>
       request<WeeklyInsightsResponse>(`/api/v1/households/${householdId}/insights/weekly?week=${week}`),
+    // ── Iteration 9 — Member Activity Heatmap ─────────────────────────────
+    memberActivityHeatmap: (householdId: string, days = 14) =>
+      request<MemberActivityHeatmapResponse>(`/api/v1/households/${householdId}/activity/heatmap?days=${days}`),
     // ── Iteration 8 — Wishlist ─────────────────────────────────────────────
     createWishlistItem: (body: { title: string; note?: string; priceEst?: number; priority?: WishlistItemPriority }) =>
       request<{ item: WishlistItem }>("/api/v1/wishlist", {
