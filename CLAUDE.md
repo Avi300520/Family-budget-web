@@ -551,7 +551,7 @@ These items are NOT blockers for continuing product iterations, but they ARE blo
   Handle Vercel production domain and Hetzner API origin in a separate branch only. Do not mix with product iterations. Keep cors-vercel-preview-wip isolated until that work starts.
 
 * [ ] Production migration sanity.
-  Verify migrations apply cleanly from the current production-like DB state through 0018 and any later migrations. Confirm existing data survives and member colors are deterministic.
+  Verify migrations apply cleanly from the current production-like DB state through 0020 (incl. `category_budgets`) and any later migrations. Confirm existing data survives and member colors are deterministic.
 
 * [ ] Final shared packages audit.
   Run pnpm sync:shared and verify packages/shared-types/src/index.ts and packages/api-client/src/index.ts are byte-identical across Backend and Frontend repos.
