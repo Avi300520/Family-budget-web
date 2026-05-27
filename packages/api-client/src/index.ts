@@ -20,6 +20,7 @@ import type {
   Subscription,
   User,
   WebhookEvent,
+  WeeklyInsightsResponse,
   WhatsAppMessage
 } from "@shopping-assistant/shared-types";
 
@@ -204,6 +205,9 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ entries: SpendingByMemberEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-member?period=current`),
     spendingByWeekday: (householdId: string) =>
       request<{ entries: SpendingByWeekdayEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-weekday?period=current`),
+    // ── Iteration 7 — Insights / Weekly Wrapped ───────────────────────────
+    weeklyInsights: (householdId: string, week: "current" | "last" = "current") =>
+      request<WeeklyInsightsResponse>(`/api/v1/households/${householdId}/insights/weekly?week=${week}`),
     lookupInvite: (token: string) =>
       request<{ invite: HouseholdInvite; household: Household | undefined }>(`/api/v1/households/join?token=${encodeURIComponent(token)}`),
     joinHousehold: (inviteToken: string, displayName?: string) =>

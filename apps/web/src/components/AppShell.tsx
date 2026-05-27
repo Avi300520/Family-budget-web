@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, LayoutDashboard, ListChecks, Settings } from "lucide-react";
+import { BarChart3, LayoutDashboard, ListChecks, Settings, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { api } from "../lib/api";
@@ -20,6 +20,9 @@ const ALL_LINKS: NavLink[] = [
   { href: "/dashboard",        label: "דשבורד",        icon: LayoutDashboard, roles: "all" },
   { href: "/shopping-list",    label: "רשימת קניות",   icon: ListChecks,      roles: "all" },
   { href: "/budget",           label: "תקציב",          icon: BarChart3,       roles: ["owner", "admin", "adult_member"] },
+  // Iteration 7 — Insights / Weekly Wrapped. Privacy: same role scope as
+  // /budget (limited_member hidden client-side; server returns 403).
+  { href: "/insights",         label: "תובנות",         icon: Sparkles,        roles: ["owner", "admin", "adult_member"] },
   { href: "/settings",         label: "הגדרות",         icon: Settings,        roles: "all" }
 ];
 

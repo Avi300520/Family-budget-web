@@ -299,6 +299,84 @@ iteration changes no layout.**
 
 ---
 
+## Iteration 7 Complete ✅ — Insights / Weekly Wrapped (deterministic)
+
+**Branches (both repos):** `feat/insights-iteration-7`
+
+A new top-level **/insights** route renders a deterministic, server-composed
+weekly recap — Spotify-Wrapped-flavoured Hebrew cards for a Sun–Sat Israeli
+week. Insights come pre-baked from the API, so the Frontend never composes
+Hebrew strings and never directly fetches `/spending/by-member` or
+`/spending/by-weekday` (those stay reserved for DashboardB / Iteration 9).
+
+**What changed (Frontend):**
+- `app/insights/page.tsx` — new top-level route. Fetches
+  `api.weeklyInsights(householdId, week)` for the requested period, plus
+  `api.listMembers` to enrich the `top_member` card with the persisted
+  Iteration 6 colour. `limited_member` is short-circuited client-side
+  (no `/insights/weekly` fetch issued) and rendered a warm Hebrew message
+  instead — the server's 403 is a redundant second layer.
+- `components/InsightCard.tsx` — small presentational tile, reuses
+  existing `.panel` primitive. `top_member` renders the Iteration 6
+  `Avatar` with the DB-backed `colorKey`; all other kinds show a static
+  emoji icon. No new CSS tokens, no new colour variables.
+- `components/AppShell.tsx` — adds a "תובנות" nav link (✨ Sparkles icon)
+  scoped to `owner | admin | adult_member`. `limited_member` does not see it.
+- Period toggle "השבוע / השבוע שעבר" inside the page; switches the
+  `week=current|last` query param and re-fetches atomically.
+
+**No dashboard redesign:** `dashboard/page.tsx` is unchanged. The
+pre-existing `InsightsStrip` placeholder on the dashboard ("תובנות חכמות
+בקרוב") stays as-is in this iteration; the new dedicated /insights surface
+is the canonical home. A future iteration may replace that placeholder with
+a teaser strip pointing into /insights.
+
+**Shared packages:** `WeeklyInsight`, `WeeklyInsightsResponse`, `InsightKind`
+in shared-types. api-client: `weeklyInsights(householdId, week?)`. Synced
+from Backend via `pnpm sync:shared` — both packages byte-identical across
+repos.
+
+**Privacy (verified, no regression):**
+- `limited_member` is **403** at `/api/v1/households/:id/insights/weekly`
+  (HTTP router guard) and the Frontend never issues the fetch (AppShell
+  hides the link AND the page short-circuits on role).
+- Server insights composition consumes only Iteration 5 store reads that
+  already filter to `expense_type='household' AND project_budget_id IS
+  NULL AND status='confirmed'`. Personal AND project-attributed expenses
+  therefore cannot leak into any insight metric.
+
+**Hebrew source-string check:** all user-facing Hebrew on this page
+("תובנות השבוע", "השבוע", "השבוע שעבר", "התובנות זמינות לחברי הבית הבוגרים",
+"לא הצלחנו לטעון את התובנות. נסו לרענן.") is in correct logical order —
+no reversed Hebrew in source files. Server `headlineHe` strings come from
+`apps/api/src/messages.ts` (also logical order).
+
+**Gates (all green):**
+- `pnpm typecheck` ✅ clean
+- `pnpm build` ✅ clean — **21 routes** total (was 20).
+  `/insights` First Load JS: **1.72 kB** (well under the 5 kB budget).
+  `/dashboard` size: **6.47 kB** (unchanged vs. Iteration 6 baseline).
+- Backend gates: 166/166 tests pass (154 + 12 new insights tests),
+  typecheck clean.
+- `pnpm sync:shared` run; shared-types + api-client byte-identical between
+  repos at commit time.
+- CORS untouched ✅ — `cors-vercel-preview-wip` stash remains on
+  `feat/shopping-route-iteration-4`, NOT in any Iteration 7 commit.
+- No `/spending/by-member` or `/spending/by-weekday` Frontend consumer
+  added (Iteration 9 territory).
+
+**Deferred (NOT this iteration):**
+- DashboardB consumption of by-member / by-weekday → Iteration 9.
+- Per-category budget caps → later candidate.
+- `project_moment` insight kind — deferred until the project-private
+  visibility design lands.
+- Monthly / yearly Wrapped surfaces.
+- Mobile 375×812 real-viewport smoke — remains a **pre-deploy blocker**
+  for all post-Iteration 5 work, not an Iteration 7 gate. This iteration
+  changes no layout primitives.
+
+---
+
 ## Code Conventions
 
 **RTL Hebrew:** All pages are RTL by default. Phone inputs get `dir="ltr"`. Numbers render naturally LTR within RTL context.

@@ -373,6 +373,48 @@ export interface SpendingByWeekdayEntry {
   amount: number;
 }
 
+/** Iteration 7 — Insights / Weekly Wrapped.
+ *  Deterministic, server-composed weekly recap. Hebrew copy is always rendered
+ *  on the server (`headlineHe`); the Frontend never composes Hebrew strings.
+ *  See `apps/api/src/insights.ts` for the composition source. */
+export type InsightKind =
+  | "total_spend"
+  | "week_over_week"
+  | "top_category"
+  | "top_member"
+  | "busiest_weekday"
+  | "purchase_count"
+  | "streak_days"
+  | "empty_state";
+
+export interface WeeklyInsight {
+  kind: InsightKind;
+  /** Server-rendered Hebrew headline. Already preposition-correct. */
+  headlineHe: string;
+  /** Numeric value where applicable (₪ amount, count, day-count). */
+  value?: number;
+  /** Week-over-week comparison. `deltaPct` is intentionally optional and is
+   *  omitted when the previous week's total is 0, so consumers never see
+   *  Infinity, NaN, or a fabricated percentage. */
+  comparison?: { previous: number; deltaAbs: number; deltaPct?: number };
+  /** Set on `top_member` so the Frontend can render the Iteration 6 Avatar. */
+  memberId?: string;
+  /** Set on `top_category` (Purchase category id). */
+  categoryId?: string;
+  /** Set on `busiest_weekday` (0 = Sunday, Israeli week). */
+  weekday?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+}
+
+export interface WeeklyInsightsResponse {
+  /** Inclusive lower bound. ISO UTC instant of Sunday 00:00 Asia/Jerusalem. */
+  weekStartIso: string;
+  /** EXCLUSIVE upper bound. ISO UTC instant of the next Sunday 00:00
+   *  Asia/Jerusalem. Half-open interval `[weekStartIso, nextWeekStartIso)`
+   *  to avoid millisecond/timezone edge bugs around Saturday 23:59:59. */
+  nextWeekStartIso: string;
+  insights: WeeklyInsight[];
+}
+
 export interface AuthSessionPayload {
   accessToken?: string;
   user: User;
