@@ -415,6 +415,40 @@ export interface WeeklyInsightsResponse {
   insights: WeeklyInsight[];
 }
 
+/** Iteration 8 — Rich ChildView with Wishlist (deterministic).
+ *
+ *  A per-user private wishlist scoped to a single household. Privacy is
+ *  enforced at three layers (HTTP router, store query, NLP handler):
+ *    - limited_member sees ONLY their own items
+ *    - adult_member  sees ONLY their own items (they are NOT parents here)
+ *    - owner/admin   see all `limited_member`-owned items in their household
+ *      via /api/v1/households/:id/wishlist; their own items are visible only
+ *      through /wishlist/me, never on the children surface.
+ */
+export type WishlistItemStatus = "open" | "fulfilled" | "removed";
+export type WishlistItemPriority = "low" | "normal" | "high";
+
+export interface WishlistItem {
+  id: string;
+  householdId: string;
+  /** The user who owns the item (any role with a household). */
+  ownerUserId: string;
+  /** Plain Hebrew title, 1–120 chars. */
+  title: string;
+  /** Optional free-text note from the owner. */
+  note?: string;
+  /** Optional NIS price estimate. Always > 0 when present. */
+  priceEst?: number;
+  priority: WishlistItemPriority;
+  status: WishlistItemStatus;
+  /** Set when status transitions to `fulfilled` (owner/admin only). */
+  fulfilledByUserId?: string;
+  /** ISO timestamp the item became `fulfilled`. */
+  fulfilledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthSessionPayload {
   accessToken?: string;
   user: User;

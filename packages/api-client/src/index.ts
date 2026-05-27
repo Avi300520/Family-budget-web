@@ -21,7 +21,9 @@ import type {
   User,
   WebhookEvent,
   WeeklyInsightsResponse,
-  WhatsAppMessage
+  WhatsAppMessage,
+  WishlistItem,
+  WishlistItemPriority
 } from "@shopping-assistant/shared-types";
 
 export interface ApiClientOptions {
@@ -208,6 +210,25 @@ export function createApiClient(options: ApiClientOptions) {
     // ── Iteration 7 — Insights / Weekly Wrapped ───────────────────────────
     weeklyInsights: (householdId: string, week: "current" | "last" = "current") =>
       request<WeeklyInsightsResponse>(`/api/v1/households/${householdId}/insights/weekly?week=${week}`),
+    // ── Iteration 8 — Wishlist ─────────────────────────────────────────────
+    createWishlistItem: (body: { title: string; note?: string; priceEst?: number; priority?: WishlistItemPriority }) =>
+      request<{ item: WishlistItem }>("/api/v1/wishlist", {
+        method: "POST",
+        body: JSON.stringify(body)
+      }),
+    myWishlist: () => request<{ items: WishlistItem[] }>("/api/v1/wishlist/me"),
+    householdWishlist: (householdId: string) =>
+      request<{ items: WishlistItem[] }>(`/api/v1/households/${householdId}/wishlist`),
+    updateWishlistItem: (
+      itemId: string,
+      body: { title?: string; note?: string | null; priceEst?: number | null; priority?: WishlistItemPriority; status?: "open" | "fulfilled" | "removed" }
+    ) =>
+      request<{ item: WishlistItem }>(`/api/v1/wishlist/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body)
+      }),
+    deleteWishlistItem: (itemId: string) =>
+      request<{ item: WishlistItem }>(`/api/v1/wishlist/${itemId}`, { method: "DELETE" }),
     lookupInvite: (token: string) =>
       request<{ invite: HouseholdInvite; household: Household | undefined }>(`/api/v1/households/join?token=${encodeURIComponent(token)}`),
     joinHousehold: (inviteToken: string, displayName?: string) =>

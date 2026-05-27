@@ -15,6 +15,7 @@ import type {
 import { AppShell } from "../../components/AppShell";
 import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
+import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
 
@@ -824,6 +825,12 @@ function LimitedMemberView({
         >
           הבקשות שלי
         </Link>
+      </div>
+
+      {/* Iteration 8 — the child's own wishlist. Self-contained: loads
+          /wishlist/me, never household data. No mark-fulfilled here. */}
+      <div style={{ marginTop: "var(--sp-5)" }}>
+        <WishlistPanel />
       </div>
     </>
   );

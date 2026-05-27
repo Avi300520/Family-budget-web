@@ -377,12 +377,74 @@ no reversed Hebrew in source files. Server `headlineHe` strings come from
 
 ---
 
+## Iteration 8 Complete ✅ — Wishlist (rich ChildView)
+
+**Branches (both repos):** `feat/wishlist-iteration-8`
+
+A per-user private wishlist. Children keep a list of things they want on their
+own dashboard; owner/admin review children's lists on a dedicated parent route
+and mark items "נקנה". Deterministic — the Frontend renders API-backed data and
+server Hebrew copy; it composes no Hebrew strings of consequence beyond plain
+UI labels (all in logical order in source).
+
+**What changed (Frontend):**
+- `components/WishlistPanel.tsx` — the caller's OWN wishlist. Loads
+  `api.myWishlist()`, supports add (title + optional ⭐ "חשוב לי" → priority
+  high) and soft-delete of own items. **No mark-fulfilled** — that is
+  owner/admin-only and lives on the parent route. Reuses `.card`, `.input`,
+  `.button`, `.btn sm ghost`, `.status` primitives; no new tokens.
+- `app/dashboard/page.tsx` — `LimitedMemberView` now renders `<WishlistPanel />`
+  below the quick-actions. `FamilyView` is unchanged (owner/admin/adult do not
+  get a personal WishlistPanel this iteration).
+- `app/family/wishlists/page.tsx` — new route, **owner/admin only**. Fetches
+  `api.householdWishlist(householdId)` (server returns ONLY limited_member-owned
+  items) + `api.listMembers` for names/colours. Groups items by child, renders
+  each child with the persisted Iteration 6 `Avatar` `colorKey`. Owner/admin can
+  "סמן כנקנה" (fulfilled) or "הסר" (delete). Non-parents who navigate directly
+  are short-circuited client-side (no fetch) and shown a friendly Hebrew message;
+  the server returns 403 as the redundant second layer.
+- `components/AppShell.tsx` — adds a "משאלות" nav link (🎁 Gift icon) scoped to
+  `owner | admin` ONLY. adult_member and limited_member see no link and never
+  fetch the household wishlist.
+
+**Shared packages:** `WishlistItem`, `WishlistItemStatus`,
+`WishlistItemPriority` in shared-types; api-client gains `createWishlistItem`,
+`myWishlist`, `householdWishlist`, `updateWishlistItem`, `deleteWishlistItem`.
+Synced from Backend via `pnpm sync:shared` — both packages byte-identical
+across repos.
+
+**Privacy (verified by gates + backend tests):**
+- adult_member and limited_member → **403** on
+  `/api/v1/households/:id/wishlist`; the AppShell hides the link and neither
+  the dashboard nor any page issues that fetch for them.
+- A limited_member only ever sees their own items (`/wishlist/me` is
+  caller-scoped); they cannot see, mutate, or enumerate a sibling's item via
+  any route or via the `QUERY_WISHLIST` WhatsApp command (caller-only by
+  construction).
+- Marking fulfilled is a status change only — no purchase row, no budget,
+  insights, notifications, or expense conversion.
+
+**Gates:** Frontend typecheck ✅ · build ✅ (**22 routes**, was 21;
+`/family/wishlists` 2.49 kB First Load; dashboard 7.77 kB, up from 6.47 kB for
+the WishlistPanel) · no new deps ✅ · no new CSS tokens ✅ · no fake data ✅ ·
+CORS untouched ✅ · shared-types + api-client synced byte-identical ✅ ·
+Backend 178/178 tests ✅. **Real browser/mobile 375×812 smoke remains a
+pre-deploy blocker** (now extended to cover the WishlistPanel + /family/wishlists)
+— not an Iteration 8 gate; this iteration introduces no new layout primitives.
+
+**Deferred:** web surface for owner/admin's OWN wishlist (backend supports it,
+not surfaced this iteration); per-category budget caps; DashboardB
+(`/spending/by-member`, `/spending/by-weekday`) → Iteration 9; CORS preview
+matching.
+
+---
+
 ## Pre-deploy blockers / Release hardening ledger
 
 These items are NOT blockers for continuing product iterations, but they ARE blockers before merge to main, production deploy, or Vercel/Hetzner release.
 
 * [ ] Real mobile viewport smoke at 375x812, using actual browser/Playwright viewport, not CSS simulation.
-  Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel, /insights, and pending approval pill.
+  Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, and pending approval pill.
 
 * [ ] Weekly-summary fallback integration proof.
   Prove that POST /dev/weekly-summary/run still writes/sends the original base weekly summary to the outbox if computeWeeklyInsights fails. The current structural try/catch is acceptable for iteration progression, but release needs an integration-level proof.
@@ -403,7 +465,10 @@ These items are NOT blockers for continuing product iterations, but they ARE blo
   Verify dashboard, shopping list, insights, activity feed, and budget views render only API-backed data or intentional empty states.
 
 * [ ] limited_member privacy release smoke.
-  Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, and any Iteration 8 endpoints added later.
+  Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, /households/:id/wishlist, and any later household-only endpoints.
+
+* [ ] Wishlist sibling-visibility release smoke.
+  Verify that no limited_member can see, mutate, or enumerate a sibling's wishlist item through /wishlist/me, /households/:id/wishlist, /wishlist/:itemId PATCH/DELETE, or QUERY_WISHLIST via WhatsApp.
 
 Use this exact section as the single source of truth for pre-deploy reminders. Going forward, any new item marked "remember before deploy" must be added to this section in both repos.
 

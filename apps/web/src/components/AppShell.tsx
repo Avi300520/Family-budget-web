@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, LayoutDashboard, ListChecks, Settings, Sparkles } from "lucide-react";
+import { BarChart3, Gift, LayoutDashboard, ListChecks, Settings, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { api } from "../lib/api";
@@ -23,6 +23,10 @@ const ALL_LINKS: NavLink[] = [
   // Iteration 7 — Insights / Weekly Wrapped. Privacy: same role scope as
   // /budget (limited_member hidden client-side; server returns 403).
   { href: "/insights",         label: "תובנות",         icon: Sparkles,        roles: ["owner", "admin", "adult_member"] },
+  // Iteration 8 — children's wishlists (parent surface). Owner/admin ONLY:
+  // adult_member is NOT a parent for the wishlist, and the server returns 403
+  // for both adult_member and limited_member on /households/:id/wishlist.
+  { href: "/family/wishlists", label: "משאלות",         icon: Gift,            roles: ["owner", "admin"] },
   { href: "/settings",         label: "הגדרות",         icon: Settings,        roles: "all" }
 ];
 
