@@ -72,11 +72,14 @@ pnpm sync:shared  # or ./scripts/sync-shared.ps1
   - APIs used: api.me(), api.budgetCurrent(), api.listProjectBudgets() — no new endpoints
   - All gates: typecheck ✅  build (20/20) ✅  no hex ✅  no new deps ✅  no fake data ✅
 
-**CORS gap documented (no backend change made):**
-- Backend `apps/api/src/http.ts` uses exact-match whitelist: `[config.WEB_APP_URL, config.ADMIN_APP_URL]`
-- For Vercel production: set `WEB_APP_URL` env var to the production Vercel URL on Hetzner
-- Vercel preview deploys will be CORS-blocked (each PR gets a unique subdomain not in the list)
-- Fix: Iteration 5 add pattern-match support (e.g., allow `*.vercel.app` or per-deploy env inject)
+**CORS — resolved in Phase 2 (branch `release/cors-vercel-hetzner`):**
+- Backend `apps/api/src/http.ts` now supports `ALLOWED_ORIGIN_PATTERN` env var (compiled regex)
+- Exact-match list still: `[config.WEB_APP_URL, config.ADMIN_APP_URL]`
+- Set `ALLOWED_ORIGIN_PATTERN` on the Hetzner server to allow Vercel preview origins
+- Recommended pattern: `^https://family-budget-web-[a-z0-9-]+\.vercel\.app$`
+- **Never use `^.*\.vercel\.app$`** — too broad, grants any Vercel tenant CORS access
+- PUT added to Access-Control-Allow-Methods (required for category-budget saves)
+- See Backend CLAUDE.md "CORS Configuration" section for full details
 
 **Hardening patch (a9ff04d — Iteration 2):**
 - ActivityHeatmap: slice(-days) for most recent N days
@@ -547,8 +550,8 @@ These items are NOT blockers for continuing product iterations, but they ARE blo
 * [ ] Weekly-summary fallback integration proof.
   Prove that POST /dev/weekly-summary/run still writes/sends the original base weekly summary to the outbox if computeWeeklyInsights fails. The current structural try/catch is acceptable for iteration progression, but release needs an integration-level proof.
 
-* [ ] CORS release branch.
-  Handle Vercel production domain and Hetzner API origin in a separate branch only. Do not mix with product iterations. Keep cors-vercel-preview-wip isolated until that work starts.
+* [x] CORS release branch. (**Phase 2 complete — branch `release/cors-vercel-hetzner`**)
+  PUT in Access-Control-Allow-Methods; ALLOWED_ORIGIN_PATTERN for preview URLs. Backend CLAUDE.md documents full configuration.
 
 * [ ] Production migration sanity.
   Verify migrations apply cleanly from the current production-like DB state through 0020 (incl. `category_budgets`) and any later migrations. Confirm existing data survives and member colors are deterministic.
