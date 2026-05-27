@@ -71,9 +71,11 @@ function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCatego
         style={{
           position: "relative",
           display: "flex",
+          flexWrap: "wrap",
           justifyContent: "space-between",
           alignItems: "flex-start",
           gap: "var(--sp-1)",
+          rowGap: "var(--sp-3)",
           padding: "var(--sp-2) 0",
           overflowX: "auto",
         }}

@@ -116,7 +116,7 @@ export default function FamilyPulsePage() {
           </div>
         </header>
 
-        {isLimited === false ? (
+        {isLimited === true ? (
           <section className="panel" style={{ padding: "var(--sp-5)" }}>
             <div style={{ fontWeight: 600, marginBottom: "var(--sp-2)" }}>
               הדף הזה זמין רק לבעלים, מנהלים וחברים בוגרים
