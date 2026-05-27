@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CreditCard, Home, ShieldCheck, Users } from "lucide-react";
+import { CreditCard, Home, ShieldCheck, Users, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
@@ -28,6 +28,13 @@ const CARDS: SettingCard[] = [
     title: "חברי בית",
     description: "הזמנת בני משפחה, תפקידים ותקציבים אישיים.",
     icon: Users,
+    roles: ["owner", "admin"]
+  },
+  {
+    href: "/settings/category-budgets",
+    title: "תקציבי קטגוריות",
+    description: "קביעת תקרה חודשית להוצאות לפי קטגוריה.",
+    icon: Wallet,
     roles: ["owner", "admin"]
   },
   {

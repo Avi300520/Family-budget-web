@@ -89,6 +89,19 @@ export interface ProjectBudget {
   updatedAt: string;
 }
 
+/** Iteration 10 — per-category monthly spending cap.
+ *  owner/admin-managed; one row per (household, category). The cap applies to
+ *  the household's current budget-cycle window (no proration). */
+export interface CategoryBudget {
+  id: string;
+  householdId: string;
+  category: Purchase["category"];
+  /** Absolute monthly limit in ILS. Always > 0. */
+  monthlyLimit: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface HouseholdInvite {
   id: string;
   householdId: string;
@@ -354,7 +367,8 @@ export interface SpendingByCategoryEntry {
   category: Purchase["category"];
   /** Total ILS spent for the period (household-only, project-attributed excluded). */
   spent: number;
-  /** Optional per-category budget cap. Not used yet — reserved for Iteration 6+. */
+  /** Per-category monthly cap (Iteration 10). Populated from `category_budgets`
+   *  when a cap is set for this category; omitted when no cap exists. */
   budget?: number;
 }
 

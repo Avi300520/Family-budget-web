@@ -2,6 +2,7 @@ import type {
   ActivityEntry,
   AuthSessionPayload,
   BudgetCurrent,
+  CategoryBudget,
   Household,
   HouseholdExpenseApproval,
   HouseholdInvite,
@@ -211,6 +212,16 @@ export function createApiClient(options: ApiClientOptions) {
     // ── Iteration 7 — Insights / Weekly Wrapped ───────────────────────────
     weeklyInsights: (householdId: string, week: "current" | "last" = "current") =>
       request<WeeklyInsightsResponse>(`/api/v1/households/${householdId}/insights/weekly?week=${week}`),
+    // ── Iteration 10 — Per-category budget caps ───────────────────────────
+    categoryBudgets: (householdId: string) =>
+      request<{ budgets: CategoryBudget[] }>(`/api/v1/households/${householdId}/category-budgets`),
+    setCategoryBudget: (householdId: string, category: string, monthlyLimit: number) =>
+      request<{ budget: CategoryBudget }>(`/api/v1/households/${householdId}/category-budgets/${category}`, {
+        method: "PUT",
+        body: JSON.stringify({ monthlyLimit })
+      }),
+    removeCategoryBudget: (householdId: string, category: string) =>
+      request<{ ok: true }>(`/api/v1/households/${householdId}/category-budgets/${category}`, { method: "DELETE" }),
     // ── Iteration 9 — Member Activity Heatmap ─────────────────────────────
     memberActivityHeatmap: (householdId: string, days = 14) =>
       request<MemberActivityHeatmapResponse>(`/api/v1/households/${householdId}/activity/heatmap?days=${days}`),

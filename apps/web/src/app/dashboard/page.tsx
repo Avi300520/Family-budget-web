@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type {
   ActivityEntry,
   BudgetCurrent,
+  CategoryBudget,
   Household,
   HouseholdMember,
   ProjectBudget,
@@ -455,7 +456,13 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
 // category. Categories with zero spend are listed below the donut at low
 // opacity (taxonomy reference) but excluded from the donut to avoid a
 // misleading "equal-weight" visual.
-function CategoriesPanel({ spending }: { spending: SpendingByCategoryEntry[] | undefined }) {
+function CategoriesPanel({
+  spending,
+  categoryBudgets,
+}: {
+  spending: SpendingByCategoryEntry[] | undefined;
+  categoryBudgets: CategoryBudget[] | undefined;
+}) {
   // Total spend across all categories, used to decide empty-vs-data state.
   const totalSpent = spending?.reduce((sum, s) => sum + s.spent, 0) ?? 0;
   const hasData = spending && totalSpent > 0;
@@ -464,6 +471,12 @@ function CategoriesPanel({ spending }: { spending: SpendingByCategoryEntry[] | u
   // the canonical CATEGORIES order so colours are stable across renders.
   const spentByKey = new Map<string, number>(
     (spending ?? []).map((s) => [s.category, s.spent])
+  );
+  // Iteration 10 — per-category monthly caps. When a category has a cap we
+  // render a spent/cap progress bar in its legend row. Categories without a cap
+  // render exactly as before (the map is empty → zero visual change).
+  const capByKey = new Map<string, number>(
+    (categoryBudgets ?? []).map((b) => [b.category, b.monthlyLimit])
   );
   const segments = CATEGORIES
     .map((c) => ({ key: c.key, label: c.label, color: c.color, spent: spentByKey.get(c.key) ?? 0 }))
@@ -508,31 +521,53 @@ function CategoriesPanel({ spending }: { spending: SpendingByCategoryEntry[] | u
           <div style={{ flex: 1, minWidth: 140, display: "grid", gap: "var(--sp-3)" }}>
             {CATEGORIES.map((c) => {
               const spent = spentByKey.get(c.key) ?? 0;
-              const isActive = spent > 0;
+              const cap = capByKey.get(c.key);
+              const hasCap = cap !== undefined && cap > 0;
+              // A row is "active" (full opacity) if it has spend OR a cap set.
+              const isActive = spent > 0 || hasCap;
+              // Progress fills toward the cap; the bar visually caps at 100%
+              // even when overspent, but the numeric text shows the real spent.
+              const pct = hasCap ? (spent / cap!) * 100 : 0;
+              const fillClass = pct >= 90 ? " rose" : pct >= 70 ? " amber" : "";
               return (
                 <div
                   key={c.key}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--sp-2)",
+                    display: "grid",
+                    gap: 4,
                     opacity: isActive ? 1 : 0.4,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 999,
-                      background: c.color,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ flex: 1, fontSize: 13, color: "var(--text-1)" }}>{c.label}</span>
-                  {isActive && (
-                    <span className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
-                      {spent.toLocaleString()}
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+                    <div
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 999,
+                        background: c.color,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span style={{ flex: 1, fontSize: 13, color: "var(--text-1)" }}>{c.label}</span>
+                    {hasCap ? (
+                      <span className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
+                        {spent.toLocaleString()} / {cap!.toLocaleString()}
+                      </span>
+                    ) : (
+                      isActive && (
+                        <span className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
+                          {spent.toLocaleString()}
+                        </span>
+                      )
+                    )}
+                  </div>
+                  {hasCap && (
+                    <div className="progress" style={{ height: 6 }}>
+                      <div
+                        className={`progress-fill${fillClass}`}
+                        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                      />
+                    </div>
                   )}
                 </div>
               );
@@ -843,6 +878,7 @@ function FamilyView({
   role,
   activity,
   spendingByCategory,
+  categoryBudgets,
   memberColorMap,
 }: {
   budget: BudgetCurrent & { mySpentAmount: number };
@@ -850,6 +886,7 @@ function FamilyView({
   role: string | undefined;
   activity: ActivityEntry[] | undefined;
   spendingByCategory: SpendingByCategoryEntry[] | undefined;
+  categoryBudgets: CategoryBudget[] | undefined;
   memberColorMap: Map<string, string>;
 }) {
   return (
@@ -868,7 +905,7 @@ function FamilyView({
 
       {/* Categories donut (real data) + Activity feed (real data) */}
       <div className="grid two">
-        <CategoriesPanel spending={spendingByCategory} />
+        <CategoriesPanel spending={spendingByCategory} categoryBudgets={categoryBudgets} />
         <ActivityFeed entries={activity} memberColorMap={memberColorMap} />
       </div>
     </div>
@@ -889,6 +926,7 @@ export default function DashboardPage() {
   // empty state). Never invented data.
   const [activity, setActivity] = useState<ActivityEntry[]>();
   const [spendingByCategory, setSpendingByCategory] = useState<SpendingByCategoryEntry[]>();
+  const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudget[]>();
   const [memberColorMap, setMemberColorMap] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string>();
 
@@ -904,7 +942,7 @@ export default function DashboardPage() {
         // Family-view-only endpoints get .catch(()=>fallback) so a single 403
         // (e.g. role flip mid-session) or transient network error does not
         // blank the entire dashboard — the affected panel just shows empty.
-        const [budgetData, projectsData, activityData, spendingData, membersData] = await Promise.all([
+        const [budgetData, projectsData, activityData, spendingData, categoryBudgetsData, membersData] = await Promise.all([
           api.budgetCurrent(me.household.id),
           isLimited
             ? Promise.resolve({ budgets: [] as ProjectBudget[] })
@@ -923,6 +961,13 @@ export default function DashboardPage() {
                 periodStart: "",
                 periodEnd: "",
               })),
+          // Iteration 10 — per-category caps. Family-only; limited_member never
+          // fetches it (privacy). A 403/transient error degrades to "no caps".
+          isLimited
+            ? Promise.resolve({ budgets: [] as CategoryBudget[] })
+            : api.categoryBudgets(me.household.id).catch(() => ({
+                budgets: [] as CategoryBudget[],
+              })),
           isLimited
             ? Promise.resolve({ members: [] as Array<HouseholdMember & { displayName?: string; phoneE164?: string }> })
             : api.listMembers(me.household.id).catch(() => ({
@@ -938,6 +983,7 @@ export default function DashboardPage() {
         );
         setActivity(activityData.entries);
         setSpendingByCategory(spendingData.entries);
+        setCategoryBudgets(categoryBudgetsData.budgets);
         const colorMap = new Map<string, string>();
         for (const m of membersData.members) {
           if (m.color) colorMap.set(m.userId, m.color);
@@ -1009,6 +1055,7 @@ export default function DashboardPage() {
           role={role}
           activity={activity}
           spendingByCategory={spendingByCategory}
+          categoryBudgets={categoryBudgets}
           memberColorMap={memberColorMap}
         />
       )}

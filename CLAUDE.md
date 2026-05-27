@@ -484,12 +484,65 @@ visibility design.
 
 ---
 
+## Iteration 10 Complete ✅ — Per-category monthly budget caps (web-only)
+
+**Branches (both repos):** `feat/category-caps-iteration-10`
+
+Owner/admin set a monthly cap per purchase category; the cap drives a spent/cap
+progress bar in DashboardA's CategoriesPanel. Deterministic, **web-only — no
+WhatsApp/NLP, no alerts** (both explicitly out of scope). Finally consumes the
+long-reserved `SpendingByCategoryEntry.budget` field.
+
+**What changed (Frontend):**
+- `app/dashboard/page.tsx` — `CategoriesPanel` gains a `categoryBudgets` prop.
+  For a category with a cap it renders a spent/cap progress bar reusing the
+  existing `.progress` + `.progress-fill.amber|.rose` primitives (**no new CSS**):
+  amber at ≥ 70%, rose at ≥ 90%; the bar visually clamps to 100% even when
+  overspent, while the numeric text shows the REAL spent amount. **Categories
+  without a cap render exactly as before** — the cap map is empty → zero visual
+  change, so DashboardA layout is unchanged. Caps are fetched in the same
+  `Promise.all` (family-only; `limited_member` short-circuits and never fetches
+  `/category-budgets`).
+- `app/settings/category-budgets/page.tsx` (new) — owner/admin editor for the 7
+  categories (set / clear each cap). Non-parents who navigate directly are
+  short-circuited client-side (no fetch) and shown a Hebrew access message; the
+  server 403 is the redundant second layer.
+- `app/settings/page.tsx` — new "תקציבי קטגוריות" hub card (owner/admin only;
+  uses the Wallet icon).
+
+**Shared packages:** `CategoryBudget` in shared-types; `SpendingByCategoryEntry.budget`
+doc updated (reserved → populated). api-client gains `categoryBudgets`,
+`setCategoryBudget`, `removeCategoryBudget`. Synced from Backend (PowerShell was
+unavailable, so the `sync:shared` copy was performed manually and verified
+byte-identical with `diff -rq`).
+
+**Privacy (no regression):** `limited_member` → 403 on all three
+`/category-budgets` endpoints AND the dashboard + settings page never issue the
+fetch for them. adult_member may READ caps (shown the dashboard progress bars)
+but is 403 on PUT/DELETE (no edit). Personal + project expenses are excluded from
+cap progress by the preserved household-budget filter.
+
+**Gates:** Frontend typecheck ✅ · build ✅ (**24 routes**, was 23;
+`/settings/category-budgets` 2.13 kB First Load; dashboard 7.05 kB) · no new deps
+✅ · no new CSS tokens ✅ · no fake data ✅ · CORS untouched ✅ · shared-types +
+api-client synced byte-identical ✅ · Backend 201/201 tests ✅. **Real
+browser/mobile 375×812 smoke remains a pre-deploy blocker** (now extended to cover
+CategoriesPanel cap progress states + the /settings/category-budgets editor) — not
+an Iteration 10 gate; this iteration adds no new layout primitives.
+
+**Deferred:** per-category 70%/90% alerts (clean follow-on reusing
+`budget_alert_log`); WhatsApp/NLP category query; cap proration; owner/admin
+own-wishlist web surface; mobile 375×812 real-viewport smoke; CORS preview
+matching; private-project visibility design.
+
+---
+
 ## Pre-deploy blockers / Release hardening ledger
 
 These items are NOT blockers for continuing product iterations, but they ARE blockers before merge to main, production deploy, or Vercel/Hetzner release.
 
 * [ ] Real mobile viewport smoke at 375x812, using actual browser/Playwright viewport, not CSS simulation.
-  Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, the /family/pulse route (all 3 panels), and pending approval pill.
+  Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel (including category-budget progress states: no-cap rows unchanged, capped rows showing the spent/cap bar at <70% / amber ≥70% / rose ≥90% / overspent clamped to 100% with real numeric text), the /settings/category-budgets editor, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, the /family/pulse route (all 3 panels), and pending approval pill.
 
 * [ ] Weekly-summary fallback integration proof.
   Prove that POST /dev/weekly-summary/run still writes/sends the original base weekly summary to the outbox if computeWeeklyInsights fails. The current structural try/catch is acceptable for iteration progression, but release needs an integration-level proof.
@@ -510,7 +563,7 @@ These items are NOT blockers for continuing product iterations, but they ARE blo
   Verify dashboard, shopping list, insights, activity feed, and budget views render only API-backed data or intentional empty states.
 
 * [ ] limited_member privacy release smoke.
-  Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, /households/:id/wishlist, /activity/heatmap, and any later household-only endpoints.
+  Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, /households/:id/wishlist, /activity/heatmap, /households/:id/category-budgets (GET/PUT/DELETE), and any later household-only endpoints. Also verify adult_member can READ /category-budgets but is 403 on PUT/DELETE.
 
 * [ ] Wishlist sibling-visibility release smoke.
   Verify that no limited_member can see, mutate, or enumerate a sibling's wishlist item through /wishlist/me, /households/:id/wishlist, /wishlist/:itemId PATCH/DELETE, or QUERY_WISHLIST via WhatsApp.
