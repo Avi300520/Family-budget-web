@@ -377,6 +377,38 @@ no reversed Hebrew in source files. Server `headlineHe` strings come from
 
 ---
 
+## Pre-deploy blockers / Release hardening ledger
+
+These items are NOT blockers for continuing product iterations, but they ARE blockers before merge to main, production deploy, or Vercel/Hetzner release.
+
+* [ ] Real mobile viewport smoke at 375x812, using actual browser/Playwright viewport, not CSS simulation.
+  Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel, /insights, and pending approval pill.
+
+* [ ] Weekly-summary fallback integration proof.
+  Prove that POST /dev/weekly-summary/run still writes/sends the original base weekly summary to the outbox if computeWeeklyInsights fails. The current structural try/catch is acceptable for iteration progression, but release needs an integration-level proof.
+
+* [ ] CORS release branch.
+  Handle Vercel production domain and Hetzner API origin in a separate branch only. Do not mix with product iterations. Keep cors-vercel-preview-wip isolated until that work starts.
+
+* [ ] Production migration sanity.
+  Verify migrations apply cleanly from the current production-like DB state through 0018 and any later migrations. Confirm existing data survives and member colors are deterministic.
+
+* [ ] Final shared packages audit.
+  Run pnpm sync:shared and verify packages/shared-types/src/index.ts and packages/api-client/src/index.ts are byte-identical across Backend and Frontend repos.
+
+* [ ] Final Git/GitHub audit.
+  Verify all release branches are pushed, commit hashes documented, working trees have no tracked changes, and unrelated local artifacts are not included in commits.
+
+* [ ] No fake/demo data in production paths.
+  Verify dashboard, shopping list, insights, activity feed, and budget views render only API-backed data or intentional empty states.
+
+* [ ] limited_member privacy release smoke.
+  Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, and any Iteration 8 endpoints added later.
+
+Use this exact section as the single source of truth for pre-deploy reminders. Going forward, any new item marked "remember before deploy" must be added to this section in both repos.
+
+---
+
 ## Code Conventions
 
 **RTL Hebrew:** All pages are RTL by default. Phone inputs get `dir="ltr"`. Numbers render naturally LTR within RTL context.
