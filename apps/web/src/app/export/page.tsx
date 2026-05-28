@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "../../components/AppShell";
 import { api } from "../../lib/api";
+import { apiBaseUrl } from "../../lib/apiBase";
 
 function monthLabel(month: string): string {
   const [year, m] = month.split("-");
@@ -46,7 +47,7 @@ export default function ExportPage() {
     setDownloading(true);
     setError(undefined);
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+      const apiBase = apiBaseUrl();
       const url = `${apiBase}/api/v1/households/${householdId}/export?month=${encodeURIComponent(month)}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) { setError("לא הצלחנו לייצא. נסה שוב."); return; }

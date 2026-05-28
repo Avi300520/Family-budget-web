@@ -570,6 +570,12 @@ These items are NOT blockers for continuing product iterations, but they ARE blo
 * [ ] No fake/demo data in production paths.
   Verify dashboard, shopping list, insights, activity feed, and budget views render only API-backed data or intentional empty states.
 
+* [ ] `NEXT_PUBLIC_API_URL` fail-loud — fixed at the code level (Agent 4, branch `release/final-predeploy-remediation`).
+  New `apps/web/src/lib/apiBase.ts` and `apps/admin/src/lib/apiBase.ts` helpers throw at module-evaluation time when `NODE_ENV=production` AND the env var is unset. Dev fallback is now `http://localhost:3333` (was incorrectly `localhost:4000`). Consumers: `apps/web/src/lib/api.ts`, `apps/admin/src/lib/api.ts`, `apps/web/src/app/export/page.tsx`, `apps/web/src/app/receipts/[id]/review/page.tsx`. Operator MUST set `NEXT_PUBLIC_API_URL=https://api.pingtally.com` in Vercel (Settings → Environment Variables) for BOTH Production AND Preview before deploy. Browser/runtime smoke of dashboard/export/receipts review pages remains an open pre-deploy item (no browser environment available in Agent 4 run).
+
+* [ ] `apps/admin` deployment target — documented (Agent 4).
+  `vercel.json` builds only `apps/web`. `apps/admin` is therefore **local-only / not Vercel-exposed**. If admin is ever deployed in a future iteration, it requires its own `NEXT_PUBLIC_API_URL` env var, access protection, and an explicit deploy config.
+
 * [ ] limited_member privacy release smoke.
   Verify limited_member does not fetch or see household-only endpoints, including /activity, /spending/*, /members, /insights/weekly, /households/:id/wishlist, /activity/heatmap, /households/:id/category-budgets (GET/PUT/DELETE), and any later household-only endpoints. Also verify adult_member can READ /category-budgets but is 403 on PUT/DELETE.
 

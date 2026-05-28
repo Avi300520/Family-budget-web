@@ -7,6 +7,7 @@ import type { Receipt, ReceiptItem } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../../components/AppShell";
 import { LoadState } from "../../../../components/LoadState";
 import { api } from "../../../../lib/api";
+import { apiBaseUrl } from "../../../../lib/apiBase";
 
 export default function ReceiptReviewPage() {
   const params = useParams<{ id: string }>();
@@ -97,7 +98,7 @@ export default function ReceiptReviewPage() {
           </div>
         </div>
         <div className="panel">
-          {signedImageUrl && <img alt="receipt" src={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}${signedImageUrl}`} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />}
+          {signedImageUrl && <img alt="receipt" src={`${apiBaseUrl()}${signedImageUrl}`} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />}
         </div>
       </section>
       <section className="panel" style={{ marginTop: 16 }}>
