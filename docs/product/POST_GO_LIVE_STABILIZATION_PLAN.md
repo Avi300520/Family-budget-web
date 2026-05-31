@@ -429,6 +429,26 @@ At the end:
 
 ---
 
+## Approved Copy Decision (2026-05-31)
+
+**Brand:** Pingtally
+**Short Hebrew display name:** קופה משפחתית
+**Main slogan:** פחות ניהול. יותר משפחה.
+**Supporting sentence:** הוצאות, קניות, פרויקטים ובקשות מהילדים, הכל מתנהל בוואטסאפ.
+
+**Implementation status:**
+
+| Branch | Scope | Build | Pushed |
+|--------|-------|-------|--------|
+| `release/stabilization-1` (frontend) | PGS-001–005 | ✅ clean | ✅ |
+| `release/product-copy-1` (frontend) | PGS-007B | ✅ clean | ✅ |
+| `chore/pgs-008-010-whatsapp-copy` (backend) | PGS-008–010 | typecheck clean | ✅ |
+
+**Pre-existing test failures in backend (18/237) — confirmed not caused by copy changes.
+Same 18 failures present before and after messages.ts edits (verified via git stash).**
+
+---
+
 ## Appendix: Context Update Record
 
 **Checked:** 2026-05-31
