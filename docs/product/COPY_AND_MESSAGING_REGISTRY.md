@@ -2,8 +2,8 @@
 
 **Purpose:** Single inventory of all user-facing text. Each entry captures current text,
 location, the problem, proposed replacement, and owner approval status.
-**Last updated:** 2026-05-31
-**Status:** Initial audit complete — owner approval required before any implementation
+**Last updated:** 2026-05-31 (updated post-implementation)
+**Status:** PGS-003/007B implemented — PGS-008–010 backend implemented — PGS-009 WhatsApp copy live on chore/pgs-008-010-whatsapp-copy
 
 ---
 

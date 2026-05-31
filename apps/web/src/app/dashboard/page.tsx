@@ -345,9 +345,9 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
           }}
         >
           <span style={{ fontSize: 36 }} aria-hidden="true">🏗️</span>
-          <span style={{ fontWeight: 500, color: "var(--text-1)" }}>אין פרויקטים פעילים</span>
+          <span style={{ fontWeight: 500, color: "var(--text-1)" }}>אין פרויקטים פתוחים</span>
           <span className="muted" style={{ fontSize: 13 }}>
-            צור פרויקט כדי לחסוך לקניות גדולות
+            אפשר להתחיל: &quot;פתח פרויקט לחופשת קיץ&quot;
           </span>
           <Link
             className="button"
@@ -765,12 +765,10 @@ function InsightsStrip() {
       >
         <span style={{ fontSize: 36 }} aria-hidden="true">✨</span>
         <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
-          תובנות חכמות בקרוב
+          עוד מעט
         </span>
         <span className="muted" style={{ fontSize: 13 }}>
-          ניתוח הרגלי ההוצאה שלכם יופיע כאן
-          <br />
-          אחרי כמה שבועות של שימוש.
+          אחרי כמה פעולות נתחיל להראות לכם דברים מעניינים על הבית.
         </span>
       </div>
     </section>

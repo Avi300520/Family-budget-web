@@ -45,7 +45,7 @@ function LoginForm() {
     setLoading(true);
     try {
       await api.requestMagicLink(fullPhone, next);
-      setStatus("שלחנו לך קישור לוואטסאפ — לחץ עליו כדי להיכנס.");
+      setStatus("הקישור בדרך אליכם 📩 פתחו את וואטסאפ והיכנסו בלחיצה.");
     } catch (err) {
       setError(
         err instanceof Error
@@ -59,8 +59,20 @@ function LoginForm() {
 
   return (
     <div className="login-page">
+      <section className="login-hero">
+        <h1 className="login-hero-headline">פחות ניהול.<br />יותר משפחה.</h1>
+        <p className="login-hero-sub">הוצאות, קניות, פרויקטים ובקשות מהילדים, הכל מתנהל בוואטסאפ.</p>
+        <ul className="login-chips">
+          <li>הוצאות וקבלות</li>
+          <li>רשימות קניות</li>
+          <li>פרויקטים משפחתיים</li>
+          <li>בקשות מהילדים</li>
+          <li>כל המשפחה במקום אחד</li>
+        </ul>
+      </section>
       <section className="login-box">
-        <h1 className="page-title">כניסה דרך WhatsApp</h1>
+        <h2 className="page-title">נכנסים דרך וואטסאפ</h2>
+        <p className="login-subtitle muted">נשלח לכם קישור כניסה מאובטח לוואטסאפ. בלי סיסמאות, בלי להוריד אפליקציה חדשה.</p>
         <form className="form" onSubmit={submit}>
           <label>
             מספר טלפון
@@ -93,11 +105,14 @@ function LoginForm() {
           </label>
           <button className="button" type="submit" disabled={loading || !!status}>
             <Send size={18} aria-hidden />
-            {loading ? "שולח..." : "שליחת קישור"}
+            {loading ? "שולח..." : "שליחת קישור כניסה"}
           </button>
           {status && <div className="status">{status}</div>}
           {error && <div className="status error">{error}</div>}
         </form>
+        <p className="login-footer muted" style={{ fontSize: 12, marginTop: 16 }}>
+          בכניסה אתם מסכימים לתנאי השימוש ולמדיניות הפרטיות.
+        </p>
       </section>
     </div>
   );

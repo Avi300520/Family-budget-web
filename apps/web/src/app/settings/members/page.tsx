@@ -232,11 +232,11 @@ export default function MembersPage() {
       </section>
 
       <section className="panel">
-        <h2>הזמנת חבר חדש</h2>
-        <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>נשלח לו/לה הודעת WhatsApp עם קישור הצטרפות מותאם אישית.</p>
+        <h2>מוסיפים בן משפחה</h2>
+        <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>נשלח לו הזמנה בוואטסאפ. הוא מצטרף בלחיצה.</p>
         <form className="form" onSubmit={invite}>
           <label>
-            שם בן/בת המשפחה
+            שם
             <input
               className="input"
               value={inviteName}
@@ -302,19 +302,19 @@ export default function MembersPage() {
           </label>
           <button className="button" type="submit" disabled={working || !inviteLocalPhone.trim()}>
             <UserPlus size={18} aria-hidden />
-            שלח הזמנה
+            שליחת הזמנה
           </button>
         </form>
 
         {joinLink && (
           <div className="status" style={{ marginTop: 12 }}>
-            <div style={{ marginBottom: 8 }}>✅ ההזמנה נשלחה. תוכל גם להעביר את הקישור בעצמך:</div>
+            <div style={{ marginBottom: 8 }}>ההזמנה נשלחה בוואטסאפ 👍</div>
             <a className="button secondary" href={joinLink} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
               פתח את קישור ההצטרפות
             </a>
           </div>
         )}
-        {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
+        {error && <div className="status error" style={{ marginTop: 12 }}>לא הצלחנו לשלוח הזמנה. בדקו את המספר ונסו שוב.</div>}
       </section>
     </AppShell>
   );
