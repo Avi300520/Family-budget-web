@@ -527,10 +527,9 @@ function EmptyState() {
         }}
       >
         <span style={{ fontSize: 40 }} aria-hidden>🛒</span>
-        <div className="h3">הרשימה ריקה</div>
+        <div className="h3">הרשימה ריקה כרגע</div>
         <div className="muted" style={{ fontSize: 13, maxWidth: 360 }}>
-          הוסיפו פריטים מהשדה למעלה או שלחו <strong>"נגמר חלב"</strong> בוואטסאפ.
-          הרשימה תסדר את עצמה לפי מסלול הסופר.
+          שלחו בוואטסאפ: <strong>&quot;תוסיף חלב לרשימת הקניות&quot;</strong> — או הוסיפו מהשדה למעלה.
         </div>
       </div>
     </section>

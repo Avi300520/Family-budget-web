@@ -50,7 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <aside className="side-nav">
-        <div className="brand">עוזר הקניות המשפחתי</div>
+        <div className="brand">קופה משפחתית</div>
         <nav className="nav-links">
           {links.map((link) => {
             const Icon = link.icon;
