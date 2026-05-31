@@ -109,3 +109,59 @@ Mark each item: **APPROVED AS-IS** / **APPROVED WITH CHANGES** / **NEEDS REDESIG
 
 *Hebrew text in this document is written in normal logical order for visual review.*
 *Registry verified against live codebase on 2026-05-31.*
+
+---
+
+## Integration & QA Verification (2026-05-31 — Release Integration & QA Orchestrator)
+
+Final per-item implementation status after integrating `release/stabilization-1` +
+`release/product-copy-1` into the QA branch `qa/stabilization-product-copy-integration`
+(frontend) and verifying the backend `chore/pgs-008-010-whatsapp-copy` copy.
+
+**Approved copy (owner-confirmed working statement):**
+- Brand: **Pingtally** · Short Hebrew display name: **קופה משפחתית**
+- Slogan: **פחות ניהול. יותר משפחה.**
+- Supporting sentence: **הוצאות, קניות, פרויקטים ובקשות מהילדים, הכל מתנהל בוואטסאפ.**
+- Browser title: **Pingtally | פחות ניהול. יותר משפחה.**
+- Meta description: **Pingtally עוזר למשפחות לנהל הוצאות, קניות, פרויקטים ובקשות מהילדים דרך וואטסאפ, עם דשבורד משפחתי פשוט וברור.**
+
+**Frontend per-item status (verified in the integrated build — 24 routes, typecheck + build clean):**
+
+| ID | Final status | Verified location |
+|----|--------------|-------------------|
+| A1 | IMPLEMENTED — brand now `קופה משפחתית` | `apps/web/src/components/AppShell.tsx:53` |
+| A2 | IMPLEMENTED — title now approved copy | `apps/web/src/app/layout.tsx` (`metadata.title`) |
+| A3 | IMPLEMENTED — meta description approved copy + OG tags added | `apps/web/src/app/layout.tsx` (`metadata.description` / `openGraph`) |
+| A4 | IMPLEMENTED — Dev-inbox status removed; success = `הקישור בדרך אליכם 📩 פתחו את וואטסאפ והיכנסו בלחיצה.` | `apps/web/src/app/login/page.tsx` |
+| A5 | IMPLEMENTED — Dev-inbox link removed (no `/dev-inbox` href in UI; only non-rendered code comment remains in AppShell) | `apps/web/src/app/login/page.tsx` |
+| A6→login title | IMPLEMENTED — login title now `נכנסים דרך וואטסאפ` (+ hero `פחות ניהול. יותר משפחה.` + supporting sentence + chips) | `apps/web/src/app/login/page.tsx` |
+| A7 (phone input) | IMPLEMENTED via PGS-005 — country-code selector (+972 default) + local field + leading-0 strip + dir="ltr"; button lockout after success; `next` param preserved (Suspense) | `apps/web/src/app/login/page.tsx` |
+| B2 | IMPLEMENTED — OG title/description/locale present | `apps/web/src/app/layout.tsx` |
+| members copy | IMPLEMENTED — `מוסיפים בן משפחה`; sent-confirmation + non-leaking error | `apps/web/src/app/settings/members/page.tsx` |
+
+**Backend WhatsApp per-item status (`chore/pgs-008-010-whatsapp-copy`):**
+
+| ID | Final status | Location |
+|----|--------------|----------|
+| C1 (PGS-008) | IMPLEMENTED — `onboardingInvitationMessage` = Pingtally intro (≤6 lines incl. link) | `apps/api/src/messages.ts` (`onboardingInvitationMessage`) |
+| C2/C3 (PGS-009) | IMPLEMENTED — `onboardingCompletedMessage` (`הבית מוכן 🎉` + examples + `כתבו עזרה`) + `onboardingDashboardHintMessage` | `apps/api/src/messages.ts` |
+| C4/C5 (PGS-010) | IMPLEMENTED — role-split `welcomeMessage` (owner / adult / limited_member) with optional `inviterName` | `apps/api/src/messages.ts` |
+| C7 (help) | KEEP — `עזרה`/`help` wired to role-aware `helpMessage` | `apps/api/src/server.ts:1595` → `helpMessage()` |
+
+**Decision — "שלחו 1" tour promise → REMOVED (PGS-011 follow-up).** The approved copy
+promised `שלחו 1` for a product tour, but no tour message exists and no inbound handler
+routes a bare `1` to one. `1` is overloaded (approval, project nudge, expense-type
+choice), and the most prominent promise was in `onboardingInvitationMessage`, sent
+**pre-onboarding** — at that point an inbound `1` only re-sends the invitation
+(`apps/api/src/server.ts:1258-1291`), so it is structurally unwireable without redesigning
+the pre-onboarding flow. The promise was removed from the owner welcome,
+`onboardingCompletedMessage`, and `onboardingInvitationMessage`; legitimate wired
+`שלח 1` approval/project prompts are untouched. **PGS-011** (design + wire a real product
+tour) is logged in the stabilization plan.
+
+**Testing notes:** Frontend typecheck + build clean (24 routes + middleware 34 kB).
+Backend typecheck clean; full suite **18 failed / 219 passed (237)** — byte-identical to the
+pre-edit baseline (the 18 are pre-existing, environment/integration-dependent: admin-cookie,
+Postgres persistence, LLM-dispatcher conversation, weekly-summary). Copy edits introduced
+**zero** new failures. Real 375×812 browser smoke on the integrated state remains an
+owner/operator action (not runnable in this headless environment).

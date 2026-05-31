@@ -449,6 +449,61 @@ Same 18 failures present before and after messages.ts edits (verified via git st
 
 ---
 
+## Integration & Release-Gate QA (2026-05-31 — Release Integration & QA Orchestrator)
+
+**Integration branch (frontend):** `qa/stabilization-product-copy-integration`
+(based on `release/stabilization-1`, merged `release/product-copy-1`).
+
+**Merge result:** single conflict in `apps/web/src/app/login/page.tsx` (both release
+branches edited it). Resolved by keeping stabilization-1's phone-input model
+(country-code selector +972 default, `normalizePhone` leading-0 strip, `Suspense` +
+`next` param, button lockout after success) and adopting product-copy-1's approved copy
+(hero `פחות ניהול. יותר משפחה.`, login title `נכנסים דרך וואטסאפ`, success message
+`הקישור בדרך אליכם 📩 פתחו את וואטסאפ והיכנסו בלחיצה.`, button label `שליחת קישור כניסה`).
+All other product-copy files (layout, AppShell, dashboard, shopping-list, settings/members)
+merged cleanly. **Frontend typecheck + build clean: 24 routes + middleware (34 kB).**
+Forbidden-string scan clean (no user-facing `עוזר הקניות` / `Dev inbox` / `/dev-inbox` /
+`shopping assistant` / `Authentication required`). Nav links all map to existing routes
+(no phantom פרויקטים/משפחה entries).
+
+**Backend (`chore/pgs-008-010-whatsapp-copy`):** approved onboarding/welcome/help copy
+verified present and consistent. Typecheck clean; suite **18 failed / 219 passed (237)** =
+identical to pre-edit baseline (18 pre-existing, environment-dependent). Copy edits added
+zero failures.
+
+### PGS-011 (NEW — follow-up) — Wire a real "tour"/full-explanation flow
+
+The approved copy promised `שלחו 1` for a product tour, but it was **structurally
+unwireable** before deploy: no tour message exists; a bare `1` is overloaded (approval /
+project nudge / expense-type choice); and the most visible promise lived in the
+pre-onboarding `onboardingInvitationMessage`, where an inbound `1` only re-sends the
+invitation (`apps/api/src/server.ts:1258-1291`). **Resolution shipped on
+`chore/pgs-008-010-whatsapp-copy`:** the `שלחו 1` promise was removed from the owner
+welcome, `onboardingCompletedMessage`, and `onboardingInvitationMessage` (legitimate wired
+`שלח 1` approval/project prompts kept). All remaining copy points only to `כתבו עזרה`,
+which IS wired (`server.ts:1595`). **PGS-011** tracks designing + wiring a genuine product
+tour (incl. the pre-onboarding context), as a follow-up branch.
+
+### Release-gate status
+
+| Gate | Result |
+|------|--------|
+| Frontend integration (stabilization + product-copy) | ✅ clean merge (1 resolved conflict) |
+| Frontend typecheck | ✅ |
+| Frontend build (24 routes) | ✅ |
+| Approved copy present, no stale framing | ✅ |
+| Backend copy verified | ✅ |
+| Backend typecheck | ✅ |
+| Backend tests (no new failures) | ✅ 18 pre-existing only |
+| Real 375×812 / 1280 browser smoke | ⏳ OWNER ACTION (headless env — not runnable here) |
+| Owner approval to merge → main | ⏳ NOT GIVEN |
+
+**Recommendation:** APPROVED FOR OWNER REVIEW. NOT approved for merge/deploy until the
+owner runs the real-viewport smoke and explicitly approves. No deploy, migration,
+Cloudflare, nginx, WhatsApp-prod, or admin change was performed.
+
+---
+
 ## Appendix: Context Update Record
 
 **Checked:** 2026-05-31
