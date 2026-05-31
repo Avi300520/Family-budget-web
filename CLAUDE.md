@@ -544,6 +544,19 @@ matching; private-project visibility design.
 
 These items are NOT blockers for continuing product iterations, but they ARE blockers before merge to main, production deploy, or Vercel/Hetzner release.
 
+* [ ] **PGS-017 — edge middleware breaks auth (BLOCKS stabilization-1 → main).** `apps/web/src/middleware.ts`
+  (added in PGS-002, on the QA/preview branch only; **absent on `main`**) gates routes by reading the
+  `shopping_assistant_session` cookie on the **frontend** origin — but that cookie is `HttpOnly` +
+  host-only on **`api.pingtally.com`**, so it is never present on the frontend origin. Effects: (1) `/auth`
+  is not in `PUBLIC_PREFIXES`, so the magic-link click to `/auth/consume` is redirected to
+  `/login?next=%2Fauth%2Fconsume` before the token is consumed; (2) every protected route redirects to
+  `/login` even after a successful consume — **this would regress production login if merged as-is.**
+  Proposed smallest safe fix (NOT implemented, owner to approve): add `/auth` to `PUBLIC_PREFIXES` **and**
+  drop the cookie-based gate (rely on client-side `/me`, as prod does today). Preview auth is additionally
+  blocked by the cross-site `SameSite=Lax` cookie — for end-to-end Preview auth, prefer a `*.pingtally.com`
+  preview alias (same-site) over loosening the prod cookie. Full diagnosis + options:
+  `docs/product/POST_GO_LIVE_STABILIZATION_PLAN.md` (Preview Auth-Flow Hardening) + `docs/testing/PREVIEW_QA_RUNBOOK.md` (PGS-018).
+
 * [ ] Real mobile viewport smoke at 375x812, using actual browser/Playwright viewport, not CSS simulation.
   Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel (including category-budget progress states: no-cap rows unchanged, capped rows showing the spent/cap bar at <70% / amber ≥70% / rose ≥90% / overspent clamped to 100% with real numeric text), the /settings/category-budgets editor, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, the /family/pulse route (all 3 panels), and pending approval pill.
 

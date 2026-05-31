@@ -564,3 +564,75 @@ for the owner's real-browser smoke. No production deploy, no merge to main.
 **Remaining blocker:** the real **375×812 + 1280×800 browser smoke** on the Preview — owner
 action (not runnable headless). Recommendation: **GO for owner merge approval, conditional on
 that smoke.**
+
+---
+
+## Preview Auth-Flow Hardening (2026-06-01 — Preview QA Infrastructure & Auth Flow Agent)
+
+A reusable Preview QA process was created so future releases stop rediscovering CORS / magic-link
+/ session / redirect issues, and the Preview consume→login bug was diagnosed.
+
+### PGS-015 — Backend CORS blocked the Preview origin *(resolved — env-only)*
+Prod backend env had no `ALLOWED_ORIGIN_PATTERN`, so the exact Preview origin was CORS-blocked.
+Fixed env-only (exact narrow pattern, owner-approved). Verified by OPTIONS preflight (204 + exact
+ACAO). No code change.
+
+### PGS-016 — Magic link redirected Preview users to production *(resolved — backend code, deployed)*
+The magic link was always built with `WEB_APP_URL` (`pingtally.com`). Backend now uses the request
+`Origin` as the callback base **only when it passes the existing CORS allowlist/pattern**, else
+falls back to `WEB_APP_URL`; `next` is sanitized to a same-origin relative path. Deployed as a
+**code-only** artifact (`deploy/pgs-016-codeonly`, `b199066`) = the live release + only the PGS-016
+files (the un-merged PGS-008-010/011/012 copy was **excluded** per owner scope). Verified: preview
+OPTIONS 204, `/health` 200, dev inbox 403.
+
+### PGS-018 — Reusable Preview QA runbook and test checklist *(created — this cycle)*
+**Created before continuing PGS-017.** New file: `docs/testing/PREVIEW_QA_RUNBOOK.md` — the standard
+13-section process for testing Vercel Preview builds before merge/deploy: required URLs, env
+assumptions, CORS preflight, magic-link request/host checks, auth-consume + session-persistence
+checks, 375×812 + 1280×800 viewport smoke, page checklist, copy checklist, **Go/No-Go rules**, and
+**evidence rules** (no tokens/links/phones/cookies). It documents the **cross-site caveat**: a
+`*.vercel.app` Preview is cross-site to `api.pingtally.com`, so a `SameSite=Lax` session cookie may
+not complete an auth-gated flow there even when CORS + magic-link host pass.
+
+### PGS-017 — Preview magic-link consume redirects back to login *(diagnosed — fix proposed, NOT implemented)*
+**Symptom:** clicking the (now correct-host) Preview magic link returns to `/login`; manually
+opening `/dashboard` → `/login?next=%2Fdashboard`.
+
+**Root cause (layered):**
+1. **PRIMARY (frontend, PGS-002 middleware):** `apps/web/src/middleware.ts` `PUBLIC_PREFIXES`
+   does **not** include `/auth`, so `/auth/consume` is treated as a protected route. With no
+   session cookie on the frontend origin, the middleware redirects the magic-link click to
+   `/login?next=%2Fauth%2Fconsume` **before** `ConsumeClient` can call the consume endpoint — the
+   token is never consumed. (It also generates the bogus `next=/auth/consume`.)
+2. **SECONDARY (frontend, same middleware):** the middleware gates routes by reading the
+   `shopping_assistant_session` cookie **on the frontend origin** (`request.cookies.get(...)`).
+   That cookie is set by the backend as an **`HttpOnly`, host-only cookie on `api.pingtally.com`**
+   — it is **never present on the frontend origin** (not on `*.vercel.app`, and not even on
+   `pingtally.com`, which is a different host). So `hasSession` is structurally always false and
+   `/dashboard` redirects to `/login` even after a successful consume. **This would also break
+   production login once stabilization-1 (the middleware) merges to `main`** — independent of Preview.
+3. **UNDERLYING (Preview-specific, cross-site):** a `*.vercel.app` Preview is cross-site to
+   `api.pingtally.com`; the `SameSite=Lax` session cookie is not sent on the Preview's credentialed
+   API calls, so client-side `/me` auth also fails on the Preview even if the middleware were fixed.
+   Production works only because `pingtally.com` ↔ `api.pingtally.com` are same-site.
+
+**Proposed smallest safe fix (NOT implemented — owner to approve):**
+- **Step 1 (necessary, tiny, frontend-only):** add `/auth` to `PUBLIC_PREFIXES` so `/auth/consume`
+  is reachable and the consume can run. Fixes the immediate "click → login" and stops
+  `next=/auth/consume`.
+- **Step 2 (necessary BEFORE stabilization-1 merges, frontend-only):** the middleware must not
+  redirect based on the API's HttpOnly cross-domain cookie. Safest: **remove the cookie-based gate**
+  and rely on client-side `/me` auth (exactly what production does today, pre-middleware). Restores
+  prod behavior; prevents the prod-merge regression.
+- **Step 3 (to make Preview auth testable end-to-end — owner decision, cross-site):**
+  (i) **RECOMMENDED:** host the Preview under a `*.pingtally.com` subdomain (Vercel preview alias)
+  so it's same-site with the API → the existing Lax cookie works; **no security change**.
+  (ii) Alternative (frontend-only, more work): Next.js rewrite/proxy so the browser talks to the
+  Preview origin and it proxies to the API server-side (same-origin cookies).
+  (iii) **NOT recommended without security review:** change the backend session cookie to
+  `SameSite=None; Secure` — a global change that affects production CSRF posture.
+
+**Change surface:** Steps 1–2 are **frontend-only**; Step 3(i) is infra/DNS (owner), 3(ii)
+frontend, 3(iii) backend (security-sensitive). No migration. Tests after an approved fix: frontend
+typecheck + build; re-run the PGS-018 runbook (CORS preflight → request link → click stays on
+Preview → `/dashboard` works + persists).
