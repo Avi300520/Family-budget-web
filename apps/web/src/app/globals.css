@@ -404,5 +404,27 @@ button {
 
   .main {
     padding: 18px;
+    /* prevent inner content from forcing horizontal scroll on small screens */
+    overflow-x: hidden;
   }
+}
+
+/* ── Global overflow guard ────────────────────────────────────────────────── */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* ── Login page phone-code layout ──────────────────────────────────────────
+   Select + input live in a flex row; on very small screens allow each to
+   wrap independently. The select has a fixed intrinsic width; the input
+   fills the remaining space. */
+.login-box .form > label > div {
+  flex-wrap: wrap;
+}
+.login-box .form > label > div select {
+  min-width: 0;
+}
+.login-box .form > label > div input {
+  min-width: 0;
 }
