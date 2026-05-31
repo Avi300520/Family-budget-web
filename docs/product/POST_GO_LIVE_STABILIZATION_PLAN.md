@@ -529,3 +529,38 @@ Cloudflare, nginx, WhatsApp-prod, or admin change was performed.
 3. Confirm: Hebrew-only / Israel-only for the immediate roadmap?
 
 **Next step:** Launch Frontend Mobile/Auth Stabilization Agent with prompt in section 10.
+
+---
+
+## Preview QA & Final Owner Review (2026-05-31 — Preview QA & Final Owner Review Agent)
+
+Final verification of the integrated release candidate before owner merge approval.
+
+**Branches verified:** frontend `qa/stabilization-product-copy-integration`
+(= `release/stabilization-1` + `release/product-copy-1`, merge `99285d7`; 0 behind / 6 ahead
+of `origin/main`); backend `chore/pgs-008-010-whatsapp-copy`.
+
+**Gates (after the two remediations below):** frontend typecheck + build clean (24 routes;
+`/shopping-list` 4.72 kB); backend typecheck clean; backend suite **18 failed / 219 passed
+(237)** = documented baseline, **0 new failures** (all 18 abort at infrastructure points —
+admin-cookie default-token rejection, dispatcher HTTP `res.ok`, Postgres auth — never at a
+copy assertion).
+
+**Two copy conflicts found & remediated (both pre-existing on production main, NOT introduced
+by these branches; owner approved fixing both):**
+- **PGS-013 — shopping-list supermarket-order claim (frontend, commit `385d50d`).** The
+  `/shopping-list` route strip still claimed the list is ordered by supermarket walking order
+  (`מסלול בסופר` / `הקטגוריות לפי סדר ההליכה`) even though product-copy-1 removed the same
+  claim from the empty state. Reworded to neutral category grouping (`לפי קטגוריות` /
+  `הרשימה מקובצת לפי קטגוריות`); removed the store entrance/checkout endpoint dots; kept the
+  category chip strip.
+- **PGS-012 — trial/subscription WhatsApp copy (backend, commit `d03c521`).** `trialDay7`,
+  `trialEnded`, `subscriptionExpired` messages still used `עוזר הקניות` / `עוזר הקניות
+  המשפחתי`; reworded to Pingtally framing. (Backend commit is local-only; not pushed.)
+
+**Push:** the frontend QA branch was pushed to `origin` to trigger a Vercel **Preview** build
+for the owner's real-browser smoke. No production deploy, no merge to main.
+
+**Remaining blocker:** the real **375×812 + 1280×800 browser smoke** on the Preview — owner
+action (not runnable headless). Recommendation: **GO for owner merge approval, conditional on
+that smoke.**

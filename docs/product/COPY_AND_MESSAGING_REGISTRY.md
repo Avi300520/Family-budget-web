@@ -165,3 +165,21 @@ pre-edit baseline (the 18 are pre-existing, environment/integration-dependent: a
 Postgres persistence, LLM-dispatcher conversation, weekly-summary). Copy edits introduced
 **zero** new failures. Real 375×812 browser smoke on the integrated state remains an
 owner/operator action (not runnable in this headless environment).
+
+---
+
+## Preview QA Copy Remediation (2026-05-31 — Preview QA & Final Owner Review Agent)
+
+Final Preview QA surfaced two **pre-existing** copy conflicts (already on production main, not
+introduced by stabilization-1 / product-copy-1). Owner approved fixing both.
+
+| New ID | Surface | Current (before) | Now (after) | File | Commit |
+|--------|---------|------------------|-------------|------|--------|
+| PGS-013 | `/shopping-list` route strip | `מסלול בסופר` + `הקטגוריות לפי סדר ההליכה` (claims supermarket-walking-order sort) | `לפי קטגוריות` + `הרשימה מקובצת לפי קטגוריות`; entrance/checkout store dots removed; category chip strip kept | `apps/web/src/app/shopping-list/page.tsx` | `385d50d` (qa branch) |
+| PGS-012 | Trial/subscription WhatsApp | `עוזר הקניות` / `עוזר הקניות המשפחתי` in `trialDay7` / `trialEnded` / `subscriptionExpired` | Pingtally framing | `apps/api/src/messages.ts` | `d03c521` (backend chore branch, local-only) |
+
+**Note:** product-copy-1 had already removed the supermarket-order claim from the shopping-list
+*empty state*; PGS-013 closes the matching claim in the *populated-state* route strip that was
+missed. After both fixes: frontend typecheck + build clean (24 routes); backend typecheck
+clean, suite 18 failed / 219 passed (237) = baseline, 0 new. The real 375×812 + 1280×800
+browser smoke remains the one open owner-action gate.
