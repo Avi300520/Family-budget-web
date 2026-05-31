@@ -1,0 +1,111 @@
+# Pingtally — Copy and Messaging Registry
+
+**Purpose:** Single inventory of all user-facing text. Each entry captures current text,
+location, the problem, proposed replacement, and owner approval status.
+**Last updated:** 2026-05-31
+**Status:** Initial audit complete — owner approval required before any implementation
+
+---
+
+## How to Use This Registry
+
+- **APPROVED** — may be implemented in release/product-copy-1 (or release/stabilization-1 for P1 items)
+- **PENDING** — requires owner review before any code change
+- **KEEP** — acceptable as-is; no change needed
+- **DEV-ONLY** — not user-facing in production; listed for completeness
+
+PGS-003 items (A4, A5) are approved as obvious fixes and go in release/stabilization-1.
+All other PENDING items go in release/product-copy-1 after owner approval.
+
+---
+
+## Section A — Frontend UI Strings
+
+| ID | Current Text | File + Line | Screen / Context | Problem | Proposed Replacement | Owner Approval | Release | Testing Notes |
+|----|-------------|-------------|------------------|---------|---------------------|----------------|---------|---------------|
+| A1 | עוזר הקניות המשפחתי | apps/web/src/components/AppShell.tsx:53 | Sidebar/header brand label (every page) | Narrow — "shopping assistant" undersells the full household-management scope | PENDING OWNER DECISION — see stabilization plan section 2c | PENDING | PGS-007B | After change: no "עוזר הקניות" visible in any viewport; no layout regression |
+| A2 | קופה משפחתית | apps/web/src/app/layout.tsx:19 | Browser tab title, bookmark name | "קופה" = supermarket checkout; may feel narrow | Owner may keep or update | PENDING | PGS-007B | After change: `<title>` in page HTML matches approved copy |
+| A3 | ניהול תקציב משפחתי דרך וואטסאפ | apps/web/src/app/layout.tsx:20 | Meta description (search snippets, social share) | Narrow — mentions only budget; omits shopping, projects, allowances | Suggest: "ניהול כסף, קניות ופרויקטים משפחתיים דרך וואטסאפ" | PENDING | PGS-007B | |
+| A4 | קישור נשלח ל-Dev inbox | apps/web/src/app/login/page.tsx:19 | Status message after phone submit on login | P1 BLOCKER — "Dev inbox" is developer-only text; production users see this | שלחנו לך קישור לוואטסאפ — לחץ עליו כדי להיכנס | APPROVED | PGS-003 | After submit: new message visible; no "Dev inbox" in page HTML |
+| A5 | פתיחת Dev inbox | apps/web/src/app/login/page.tsx:41 | Link on login page href="/dev-inbox" | P1 BLOCKER — developer-only link visible in production | Remove entirely | APPROVED | PGS-003 | After fix: no "Dev inbox" link, no "/dev-inbox" href in login HTML |
+| A6 | כניסה דרך WhatsApp | apps/web/src/app/login/page.tsx:28 | Login page heading | Acceptable — clear and accurate | No change | KEEP | — | |
+| A7 | טלפון (placeholder) | apps/web/src/app/login/page.tsx:31 | Phone input placeholder | Tied to PGS-005 (broken input model) | Update after PGS-005 component is fixed | PENDING | PGS-005 | |
+| A8 | דשבורד, רשימת קניות, תקציב, תובנות, פעילות, משאלות, הגדרות | apps/web/src/components/AppShell.tsx | Navigation labels (sidebar) | All accurate and appropriate | No change | KEEP | — | |
+| A9 | שלום {greetingName} | apps/web/src/app/dashboard/page.tsx:1031 | Dashboard greeting | Warm and personal — no problem | No change | KEEP | — | |
+| A10 | לא הצלחנו לטעון את הדשבורד. נסה לרענן. | apps/web/src/app/dashboard/page.tsx:997 | Dashboard error state | Correct Hebrew error pattern | No change | KEEP | — | |
+| A11 | הרשימה ריקה + WhatsApp example | apps/web/src/app/shopping-list/page.tsx:530-533 | Shopping list empty state | Functional and instructive | No change | KEEP | — | |
+
+---
+
+## Section B — Browser Metadata
+
+| ID | Current | File + Line | Context | Problem | Proposed | Owner Approval | Release | Notes |
+|----|---------|-------------|---------|---------|----------|----------------|---------|-------|
+| B1 | lang="he" dir="rtl" | apps/web/src/app/layout.tsx:25 | HTML root element | Correct | No change | KEEP | — | |
+| B2 | (not found) | apps/web/src/app/layout.tsx | Open Graph / social share tags | Missing — no rich WhatsApp preview when link shared | Add og:title + og:description after copy approved | PENDING | PGS-007B | Optional; add after A2/A3 approved |
+| B3 | (not found) | apps/web/public/ | PWA manifest | No manifest.json | Not a blocker; add if PWA needed | PENDING | Future | |
+
+---
+
+## Section C — WhatsApp Messages (Backend — apps/api/src/messages.ts)
+
+| ID | Current Text (abbreviated) | Function + Line | Context | Problem | Proposed | Owner Approval | Release | Testing Notes |
+|----|---------------------------|-----------------|---------|---------|----------|----------------|---------|---------------|
+| C1 | ברוכים הבאים לעוזר הקניות המשפחתי! ... | onboardingInvitationMessage — messages.ts:173 | First WhatsApp message a new user receives | "עוזר הקניות" = narrow; product is broader | PENDING OWNER APPROVAL — draft to be agreed before implementation | PENDING | PGS-008 | After change: integration test still passes; message ≤ 5 lines |
+| C2 | הבית הוגדר! ברוכים הבאים. | onboardingCompletedMessage — messages.ts:150 | Sent after household is created | Terse — no next-step guidance | Should explain: what to send + link to dashboard | PENDING | PGS-009 | |
+| C3 | לדשבורד המשפחתי... (full text) | onboardingDashboardHintMessage — messages.ts:164 | Post-setup dashboard pointer | May be sufficient or may merge with C2 | Review full text; consider merging with C2 | PENDING | PGS-009 | |
+| C4 | ברוך הבא לבית {householdName}! | welcomeMessage (adult path) — messages.ts:121 | adult_member or admin joins | Very brief; no context about what to do next | Add role-contextual guidance | PENDING | PGS-010 | |
+| C5 | ברוך הבא לבית {householdName}! (variant) | welcomeMessage (limited_member path) — messages.ts:99 | limited_member (child/teen) joins | Very brief; no mention of personal budget or wishlist | Warm, age-appropriate, mentions personal budget + wishlist | PENDING | PGS-010 | |
+| C6 | {memberName} הצטרפ/ה לבית כ{roleLabel}. | joinNotificationMessage — messages.ts:147 | Admin notified when member joins | Functional and appropriate | No change | KEEP | — | |
+| C7 | Role-aware help examples | helpMessage — messages.ts:307 | User sends /עזרה | May need update after product framing changes | Review after C1-C5 are approved | PENDING | PGS-010 or follow-on | |
+
+---
+
+## Section D — Inline String Violations (Code Quality — Not Part of Current Releases)
+
+These Hebrew strings are hardcoded in server.ts or handlers.ts instead of being
+centralized in messages.ts. They violate the project's centralization rule but do NOT
+affect users today. Do NOT include these in PGS-001 through PGS-010 scope.
+Extract to messages.ts in a separate future chore branch.
+
+| Location | Abbreviated String | Context |
+|----------|--------------------|---------|
+| server.ts:743 | הרשימה ריקה — אין פריטים פעילים | Empty shopping list WhatsApp reply |
+| server.ts:1313 | לא הצלחנו להוריד את התמונה... | Media download failure |
+| server.ts:1393 | ההוצאה הועברה לפרויקט... | Project reassignment confirmation |
+| server.ts:1416 | אין בקשה ממתינה לאישור | No pending approval |
+| server.ts:1579 | לא הצלחתי לעבד את ההבהרה... | Clarification processing failure |
+| server.ts:1609 | הבנת שפה טבעית לא מוגדרת... | NLP config missing |
+| server.ts:1871 | כדי לא לרשום משהו לא נכון... | LLM quota exhausted |
+| server.ts:1881 | לא הצלחתי להבין את ההודעה... | Dispatcher fail-safe |
+| server.ts:1904 | כבר רשמתי את זה עכשיו | Duplicate expense reply |
+| server.ts:1911 | נשארו X ש"ח לתקציב החודשי | Expense reply with balance |
+| server.ts:1919 | מה תרצה להוסיף לרשימת הקניות? | Shopping list clarification |
+| server.ts:1953 | הגעתם למגבלת סריקות הקבלות... | Receipt scan limit |
+| handlers.ts | ~15 additional strings | See nlp/handlers.ts |
+
+---
+
+## Section E — Owner Approval Checklist
+
+Mark each item: **APPROVED AS-IS** / **APPROVED WITH CHANGES** / **NEEDS REDESIGN** / **KEEP**
+
+| ID | Description | Current Status |
+|----|-------------|----------------|
+| A1 | App brand name in header (AppShell) | PENDING |
+| A2 | Browser title | PENDING |
+| A3 | Browser meta description | PENDING |
+| A4 | Login dev inbox status message | APPROVED — obvious fix (PGS-003) |
+| A5 | Login dev inbox link | APPROVED — remove (PGS-003) |
+| B2 | Open Graph metadata | PENDING |
+| C1 | First WhatsApp welcome message | PENDING |
+| C2 | Post-household setup message | PENDING |
+| C3 | Dashboard hint message | PENDING |
+| C4 | Adult member join welcome | PENDING |
+| C5 | Limited member join welcome | PENDING |
+| C7 | Help message | PENDING — review after C1-C5 |
+
+---
+
+*Hebrew text in this document is written in normal logical order for visual review.*
+*Registry verified against live codebase on 2026-05-31.*
