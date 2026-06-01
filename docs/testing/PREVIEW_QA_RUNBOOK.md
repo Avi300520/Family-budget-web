@@ -274,25 +274,37 @@ under `pingtally.com`, e.g. **`qa.pingtally.com`** (or `staging.pingtally.com`).
 - ❌ **No client-supplied `callbackUrl`/`redirectUrl`** trusted by the backend.
 - ❌ **No manual token editing**, and never log magic tokens.
 
-### Proposed QA-domain setup (NOT YET IMPLEMENTED — requires explicit owner approval for DNS/Vercel)
+### QA-domain setup — stable `qa` branch model
 
-> No DNS, Cloudflare, Vercel-domain, nginx, or backend change has been made. This is the plan to
-> execute **only on owner approval**.
+**Branch model (DONE):** the permanent QA channel is the stable **`qa`** branch (origin `qa` →
+`0bac8ec`, carrying PGS-017A + PGS-018). The former temporary integration branch was renamed to
+**`release/stabilization-product-copy-integration`** (same commit `0bac8ec`) to free the `qa` name;
+the old `qa/stabilization-product-copy-integration` remote branch was removed. Release candidates are
+merged/fast-forwarded into `qa`, and `qa.pingtally.com` is assigned to the `qa` branch in Vercel.
 
-1. **Recommended QA domain:** `qa.pingtally.com` (alt: `staging.pingtally.com`).
-2. **Vercel:** map the QA domain to the frontend QA/Preview branch (or a dedicated QA deployment).
-   Ensure the QA scope has **`NEXT_PUBLIC_API_URL = https://api.pingtally.com`**.
-3. **DNS (owner / Cloudflare):** add the `qa` record per Vercel's instructions (CNAME → Vercel).
-   Keep `api.pingtally.com` and production records untouched.
-4. **Backend allowlist (exact, owner-approved):** add `https://qa.pingtally.com` as an **exact**
-   allowed origin (e.g. via the existing exact-match list or a tightly-anchored pattern). **No
-   wildcard.** This both passes CORS and makes magic links requested from `qa.pingtally.com` return
-   to `qa.pingtally.com/auth/consume` (PGS-016 uses the approved request Origin as the callback base).
-5. **Magic-link behavior (expected after the above):**
-   - login from `qa.pingtally.com` → link host = `qa.pingtally.com`
-   - login from `pingtally.com` → link host = `pingtally.com` (unchanged)
+**Remaining steps — owner dashboard actions (NOT performed by the agent; no connector tool exists):**
+
+1. **QA domain:** `qa.pingtally.com`.
+2. **Vercel (owner):** in the frontend project, add `qa.pingtally.com` and **assign it to the `qa`
+   Git branch** (Preview branch domain — NOT Production). Confirm the **Preview** env scope has
+   **`NEXT_PUBLIC_API_URL = https://api.pingtally.com`** (Settings → Environment Variables → Preview).
+3. **Cloudflare DNS (owner):** add **only** the new `qa` record using the **exact CNAME target Vercel
+   displays** (typically `cname.vercel-dns.com`, matching the existing `www`). **DNS-only (grey
+   cloud)** unless Vercel explicitly accepts the proxied setup. **Do NOT change** `pingtally.com`,
+   `www.pingtally.com`, or `api.pingtally.com`.
+
+**Backend allowlist — agent will run AFTER the domain is live (env-only, exact origin):**
+
+4. Set the prod backend `ALLOWED_ORIGIN_PATTERN` to the **exact** QA origin and reload:
+   `ALLOWED_ORIGIN_PATTERN=^https://qa\.pingtally\.com$` → `pm2 reload pingtally-api --update-env`.
+   (The previous exact vercel-preview origin is already defunct — its branch was deleted — so no
+   transition alternation is needed; go straight to QA-only.) This passes CORS **and** makes magic
+   links requested from `qa.pingtally.com` return to `qa.pingtally.com/auth/consume` automatically
+   (PGS-016 uses the approved request Origin as the callback base). **No wildcard, no `*.vercel.app`.**
+5. **Magic-link behavior (automatic):** login from `qa.pingtally.com` → link host `qa.pingtally.com`;
+   login from `pingtally.com` → link host `pingtally.com` (unchanged).
 6. **Then run the full §1–§13 runbook against `qa.pingtally.com`** — including the authenticated
-   checks (§7 consume, §8 persistence) which will now pass because the domain is same-site with the API.
+   checks (§7 consume, §8 persistence) which now pass because the domain is same-site with the API.
 
 ### Smoke tests to run on the QA domain (after setup)
 CORS preflight (Origin `https://qa.pingtally.com`) → request magic link from QA → WhatsApp link host

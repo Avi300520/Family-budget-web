@@ -554,12 +554,20 @@ These items are NOT blockers for continuing product iterations, but they ARE blo
   (loading + redirect, no raw "Authentication required"). web typecheck + build clean. **Unblocks the
   stabilization-1 → main merge from the auth-regression standpoint** (owner still owns the merge/deploy).
 
-* [ ] **PGS-017B — same-site QA domain for authenticated Preview testing (PROPOSED, owner approval).**
+* [ ] **PGS-017B — same-site QA domain for authenticated Preview testing (IN PROGRESS).**
   `*.vercel.app` is cross-site to `api.pingtally.com`, so the `SameSite=Lax` session cookie can't support
-  an authenticated session there — only public-page smoke. Proposed: a same-site `qa.pingtally.com` (no
-  `SameSite=None`, no broadened CORS, no cookie hack). **Not implemented — no DNS/Vercel/Cloudflare/backend
-  change made.** Full plan: `docs/testing/PREVIEW_QA_RUNBOOK.md` ("Authenticated Preview Testing Requires a
-  Same-Site QA Hostname") + `docs/deployment/VERCEL_DEPLOYMENT_PLAN.md` §0.9 + `docs/product/POST_GO_LIVE_STABILIZATION_PLAN.md`.
+  an authenticated session there — only public-page smoke. Solution: same-site **`qa.pingtally.com`** (no
+  `SameSite=None`, no broadened CORS, no cookie hack).
+  **DONE (git):** stable **`qa`** branch created at `0bac8ec` (the QA channel `qa.pingtally.com` will
+  track); the temporary integration branch was renamed to `release/stabilization-product-copy-integration`
+  (same commit) and the old `qa/stabilization-product-copy-integration` remote branch removed.
+  **PENDING — owner dashboard actions (no connector tool):** (a) Vercel: add `qa.pingtally.com`, assign to
+  the `qa` branch (Preview, not Production); confirm Preview `NEXT_PUBLIC_API_URL=https://api.pingtally.com`.
+  (b) Cloudflare: add only the `qa` CNAME (exact Vercel target, DNS-only); don't touch apex/www/api.
+  **PENDING — agent, after domain live:** set backend `ALLOWED_ORIGIN_PATTERN=^https://qa\.pingtally\.com$`
+  + `pm2 reload pingtally-api --update-env`, then run the QA smoke. Full plan:
+  `docs/testing/PREVIEW_QA_RUNBOOK.md` ("QA-domain setup — stable `qa` branch model") +
+  `docs/deployment/VERCEL_DEPLOYMENT_PLAN.md` §0.9 + `docs/product/POST_GO_LIVE_STABILIZATION_PLAN.md`.
 
 * [ ] Real mobile viewport smoke at 375x812, using actual browser/Playwright viewport, not CSS simulation.
   Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel (including category-budget progress states: no-cap rows unchanged, capped rows showing the spent/cap bar at <70% / amber ≥70% / rose ≥90% / overspent clamped to 100% with real numeric text), the /settings/category-budgets editor, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, the /family/pulse route (all 3 panels), and pending approval pill.
