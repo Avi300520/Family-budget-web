@@ -636,3 +636,37 @@ opening `/dashboard` → `/login?next=%2Fdashboard`.
 frontend, 3(iii) backend (security-sensitive). No migration. Tests after an approved fix: frontend
 typecheck + build; re-run the PGS-018 runbook (CORS preflight → request link → click stays on
 Preview → `/dashboard` works + persists).
+
+### PGS-017A — Fix invalid frontend middleware auth gate *(IMPLEMENTED — frontend, this cycle)*
+The release-blocking middleware issue is **fixed** (frontend-only; no deploy):
+- `apps/web/src/middleware.ts` — **removed the invalid cookie-based gate**. It no longer reads
+  `shopping_assistant_session` (that cookie is HttpOnly + host-only on `api.pingtally.com`, never
+  visible to the frontend). It is now a documented **pass-through** (returns `NextResponse.next()`),
+  so `/auth/consume` is **no longer redirected to `/login`** and no protected route redirect-loops.
+  PGS-002's middleware-redirect approach is **explicitly marked NOT valid** for the current
+  cross-subdomain HttpOnly cookie design.
+- `apps/web/src/lib/authGuard.ts` (new) — `redirectIfUnauthorized(err, router, pathname)` +
+  `safeNextPath()`. On a 401 it redirects to `/login?next=<sanitized internal path>` (no open
+  redirect — mirrors the backend `sanitizeNextPath`/PGS-016 policy). The reusable client-side guard
+  that replaces the middleware gate.
+- `apps/web/src/app/dashboard/page.tsx` — its existing `api.me()` `catch` now calls
+  `redirectIfUnauthorized` (no extra fetch): unauthenticated users get a **loading state + redirect
+  to `/login?next=/dashboard`** instead of the raw `"Authentication required"` message. This is the
+  canonical guard; remaining protected pages keep their existing `/me` error+login-link (non-leaking
+  production behavior) and should adopt `redirectIfUnauthorized` incrementally (follow-up).
+- **Gates:** web `typecheck` clean; web `build` clean (24 routes; middleware now a no-op 33.8 kB;
+  dashboard 7.3 kB). No backend change, no deploy, no merge.
+
+> This unblocks the stabilization-1 → `main` merge from the auth-regression standpoint (the
+> middleware can no longer break production login). The owner still owns the merge/deploy decision.
+
+### PGS-017B — Establish a same-site QA domain for authenticated Preview testing *(PROPOSED — owner approval required; NOT implemented)*
+A `*.vercel.app` Preview is **cross-site** to `api.pingtally.com`, so the existing `SameSite=Lax`
+session cookie cannot support an authenticated session there — only public-page smoke. **Recommended:
+a same-site QA hostname `qa.pingtally.com`** (alt `staging.pingtally.com`), which is same-site with
+`api.pingtally.com` and therefore works with the **existing** cookie — **no `SameSite=None`, no
+broadened CORS, no cookie hack**. Full proposal (Vercel mapping, exact backend allowlist, expected
+magic-link behavior, smoke list, security constraints) is in
+`docs/testing/PREVIEW_QA_RUNBOOK.md` → "Authenticated Preview Testing Requires a Same-Site QA
+Hostname (PGS-017B)" and `docs/deployment/VERCEL_DEPLOYMENT_PLAN.md` §0.9. **No DNS/Vercel/Cloudflare/
+backend change has been made** — awaiting explicit owner approval.

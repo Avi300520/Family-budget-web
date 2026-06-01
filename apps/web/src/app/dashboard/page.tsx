@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type {
   ActivityEntry,
@@ -19,6 +20,7 @@ import { LoadState } from "../../components/LoadState";
 import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
+import { redirectIfUnauthorized } from "../../lib/authGuard";
 
 // ── Category display definitions (no spend data — Iteration 5 will wire real data) ──
 const CATEGORIES: ReadonlyArray<{ key: string; label: string; color: string }> = [
@@ -927,6 +929,8 @@ export default function DashboardPage() {
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudget[]>();
   const [memberColorMap, setMemberColorMap] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string>();
+  const router = useRouter();
+  const pathname = usePathname();
 
   async function load() {
     setError(undefined);
@@ -989,6 +993,11 @@ export default function DashboardPage() {
         setMemberColorMap(colorMap);
       }
     } catch (err) {
+      // Unauthenticated (401): the session cookie lives on api.pingtally.com and is not
+      // visible to the frontend, so we detect auth here and redirect to login with a
+      // clean loading state instead of showing the raw "Authentication required" message.
+      // (Replaces the invalid PGS-002 middleware cookie gate — see lib/authGuard.ts.)
+      if (redirectIfUnauthorized(err, router, pathname)) return;
       setError(
         err instanceof Error
           ? err.message

@@ -242,3 +242,59 @@ Verify each renders (API-backed data or an intentional empty state — never fak
 CORS 204 + exact ACAO → magic-link host = Preview → click stays on Preview → `/auth/consume`
 consumes (Set-Cookie) → `/dashboard` loads and persists → 375 + 1280 clean → approved copy only.
 Any deviation → No-Go (and check the cross-site caveat before filing a code bug).
+
+---
+
+## Authenticated Preview Testing Requires a Same-Site QA Hostname (PGS-017B)
+
+**Bottom line:** a `*.vercel.app` Preview is only reliable for **public / unauthenticated page
+smoke** (layout, copy, empty states, CORS preflight, magic-link host). **Authenticated** app smoke
+(consume → session → `/dashboard` → persistence) must be run against a **same-site QA hostname**
+under `pingtally.com`, e.g. **`qa.pingtally.com`** (or `staging.pingtally.com`).
+
+### Why `*.vercel.app` cannot hold an authenticated session
+
+- The session cookie is set by the backend on **`api.pingtally.com`**, `HttpOnly`, **host-only**,
+  `SameSite=Lax`, `Secure`.
+- `SameSite=Lax` cookies are **only sent on same-site requests**. `*.vercel.app` and
+  `api.pingtally.com` are **different registrable domains → cross-site**, so the cookie is **not
+  sent** on the Preview's credentialed `/me`/API calls (and a cross-site response cookie isn't
+  reliably usable either). Result: even after a correct `/auth/consume`, the app reads no session.
+- `qa.pingtally.com` ↔ `api.pingtally.com` are **subdomains of the same registrable domain
+  (`pingtally.com`) → same-site**, so the **existing** `SameSite=Lax` cookie works there **with no
+  change to backend cookie security**. Production (`pingtally.com`) works for exactly this reason.
+
+### What NOT to do (security)
+- ❌ **No `SameSite=None`** for this release (would send the cookie on all cross-site requests;
+  CSRF-posture change — needs a dedicated security review).
+- ❌ **No wildcard / broad CORS** and **no broad `*.vercel.app`** in `ALLOWED_ORIGIN_PATTERN` — the
+  allowed Origin also mints the magic-link callback host (PGS-016), so it must stay exact.
+- ❌ **No `Domain=.pingtally.com` cookie hack** or any cross-unrelated-domain cookie sharing without
+  a deliberate design + security review.
+- ❌ **No client-supplied `callbackUrl`/`redirectUrl`** trusted by the backend.
+- ❌ **No manual token editing**, and never log magic tokens.
+
+### Proposed QA-domain setup (NOT YET IMPLEMENTED — requires explicit owner approval for DNS/Vercel)
+
+> No DNS, Cloudflare, Vercel-domain, nginx, or backend change has been made. This is the plan to
+> execute **only on owner approval**.
+
+1. **Recommended QA domain:** `qa.pingtally.com` (alt: `staging.pingtally.com`).
+2. **Vercel:** map the QA domain to the frontend QA/Preview branch (or a dedicated QA deployment).
+   Ensure the QA scope has **`NEXT_PUBLIC_API_URL = https://api.pingtally.com`**.
+3. **DNS (owner / Cloudflare):** add the `qa` record per Vercel's instructions (CNAME → Vercel).
+   Keep `api.pingtally.com` and production records untouched.
+4. **Backend allowlist (exact, owner-approved):** add `https://qa.pingtally.com` as an **exact**
+   allowed origin (e.g. via the existing exact-match list or a tightly-anchored pattern). **No
+   wildcard.** This both passes CORS and makes magic links requested from `qa.pingtally.com` return
+   to `qa.pingtally.com/auth/consume` (PGS-016 uses the approved request Origin as the callback base).
+5. **Magic-link behavior (expected after the above):**
+   - login from `qa.pingtally.com` → link host = `qa.pingtally.com`
+   - login from `pingtally.com` → link host = `pingtally.com` (unchanged)
+6. **Then run the full §1–§13 runbook against `qa.pingtally.com`** — including the authenticated
+   checks (§7 consume, §8 persistence) which will now pass because the domain is same-site with the API.
+
+### Smoke tests to run on the QA domain (after setup)
+CORS preflight (Origin `https://qa.pingtally.com`) → request magic link from QA → WhatsApp link host
+= QA domain → click → browser stays on QA domain → `/dashboard` loads → refresh `/dashboard` still
+authenticated → 375×812 + 1280×800 clean.
