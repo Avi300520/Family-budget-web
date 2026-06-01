@@ -45,6 +45,61 @@ export class ApiClientError extends Error {
   }
 }
 
+// ── Admin User-Management MVP DTOs (masked; no token hashes) ────────────────
+export type AdminUserSearchBy = "phone" | "name" | "email" | "id";
+
+export interface AdminUserSummary {
+  id: string;
+  displayName?: string;
+  phoneMasked: string;
+  emailMasked?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminMembership {
+  householdId: string;
+  householdName?: string;
+  role: string;
+  memberStatus: string;
+  isOwner: boolean;
+}
+
+export interface AdminWebSessionView {
+  id: string;
+  createdAt: string;
+  lastSeenAt?: string;
+  expiresAt: string;
+  revokedAt?: string;
+  active: boolean;
+  ipMasked?: string;
+  userAgent?: string;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  action: string;
+  createdAt: string;
+  adminSubject?: string;
+  reason?: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface AdminUserDetail {
+  user: AdminUserSummary;
+  memberships: AdminMembership[];
+  activeSessionCount: number;
+  activeMagicLinkCount: number;
+  isActive: boolean;
+}
+
+export interface AdminQaResetResult {
+  reset: boolean;
+  cleared: { sessions: number; magicLinks: number; membershipsRemoved: number };
+  preserved: { userId: string; ownedHouseholdIds: string[] };
+}
+
 export function createApiClient(options: ApiClientOptions) {
   const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
     const headers = new Headers(init.headers);
@@ -167,6 +222,40 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ note: unknown }>("/api/v1/admin/support-notes", {
         method: "POST",
         body: JSON.stringify({ householdId, body })
+      }),
+    // ── Admin User-Management MVP ──────────────────────────────────────────
+    adminSearchUsers: (by: AdminUserSearchBy, q: string, limit = 20) =>
+      request<{ users: AdminUserSummary[] }>(`/api/v1/admin/users/search?by=${by}&q=${encodeURIComponent(q)}&limit=${limit}`),
+    adminGetUser: (userId: string) =>
+      request<AdminUserDetail>(`/api/v1/admin/users/${encodeURIComponent(userId)}`),
+    adminUserSessions: (userId: string) =>
+      request<{ sessions: AdminWebSessionView[] }>(`/api/v1/admin/users/${encodeURIComponent(userId)}/sessions`),
+    adminUserAudit: (userId: string, limit = 50) =>
+      request<{ entries: AdminAuditEntry[] }>(`/api/v1/admin/users/${encodeURIComponent(userId)}/audit?limit=${limit}`),
+    adminRevokeSession: (userId: string, sessionId: string, reason: string) =>
+      request<{ revoked: boolean; session: AdminWebSessionView }>(
+        `/api/v1/admin/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(sessionId)}/revoke`,
+        { method: "POST", body: JSON.stringify({ reason }) }
+      ),
+    adminRevokeAllSessions: (userId: string, reason: string) =>
+      request<{ revoked: boolean; revokedCount: number }>(
+        `/api/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke-all`,
+        { method: "POST", body: JSON.stringify({ reason }) }
+      ),
+    adminQaResetUser: (userId: string, reason: string, confirmToken?: string) =>
+      request<AdminQaResetResult>(`/api/v1/admin/users/${encodeURIComponent(userId)}/qa-reset`, {
+        method: "POST",
+        body: JSON.stringify({ reason, ...(confirmToken ? { confirmToken } : {}) })
+      }),
+    adminDeactivateUser: (userId: string, reason: string) =>
+      request<{ user: AdminUserSummary; revokedSessions: number }>(`/api/v1/admin/users/${encodeURIComponent(userId)}/deactivate`, {
+        method: "POST",
+        body: JSON.stringify({ reason })
+      }),
+    adminReactivateUser: (userId: string, reason?: string) =>
+      request<{ user: AdminUserSummary }>(`/api/v1/admin/users/${encodeURIComponent(userId)}/reactivate`, {
+        method: "POST",
+        body: JSON.stringify(reason ? { reason } : {})
       }),
     listMembers: (householdId: string) =>
       request<{ members: Array<HouseholdMember & { displayName?: string; phoneE164?: string }> }>(`/api/v1/households/${householdId}/members`),

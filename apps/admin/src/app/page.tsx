@@ -54,7 +54,10 @@ export default function AdminPage() {
     <div className="shell">
       <aside className="nav">
         <div className="brand">Admin</div>
-        <div className="muted">עוזר הקניות המשפחתי</div>
+        <div className="list">
+          <a href="/" style={{ color: "white", fontWeight: 800 }}>Operations</a>
+          <a href="/users" style={{ color: "white" }}>User management</a>
+        </div>
       </aside>
       <main className="main">
         <div className="row between">
