@@ -145,29 +145,10 @@ export default function AdminUsersPage() {
     }
   }
 
-  async function deactivate() {
-    if (!detail) return;
-    if (!window.confirm("Deactivate (soft block) this user and revoke their sessions? This is reversible — NOT a delete. Note: full login enforcement of 'blocked' is a follow-up.")) return;
-    const reason = askReason("deactivate");
-    if (!reason) return;
-    try {
-      await api.adminDeactivateUser(detail.user.id, reason);
-      await refreshDetail(detail.user.id);
-    } catch (err) {
-      fail(err);
-    }
-  }
-
-  async function reactivate() {
-    if (!detail) return;
-    const reason = window.prompt("Reason for reactivation (optional):") ?? undefined;
-    try {
-      await api.adminReactivateUser(detail.user.id, reason || undefined);
-      await refreshDetail(detail.user.id);
-    } catch (err) {
-      fail(err);
-    }
-  }
+  // NOTE: deactivate / reactivate are intentionally NOT wired in this MVP. The backend
+  // sets status='blocked' + revokes sessions, but the auth/login path does not yet reject
+  // blocked users, so an active button would create false confidence. Re-enable once
+  // blocked-user login enforcement ships (a documented follow-up).
 
   const u = detail?.user;
 
@@ -257,12 +238,10 @@ export default function AdminUsersPage() {
               <h3 style={{ marginBottom: 6 }}>Actions</h3>
               <div className="row">
                 <button className="button" style={SUBTLE} onClick={qaReset}>QA reset</button>
-                {u.status === "blocked"
-                  ? <button className="button" onClick={reactivate}>Reactivate</button>
-                  : <button className="button" style={DANGER} onClick={deactivate}>Deactivate</button>}
                 <button className="button" style={DANGER} onClick={revokeAll}>Revoke all sessions</button>
               </div>
-              <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Destructive actions require confirmation + a reason. Hard delete is not available. Deactivate is a reversible soft block (full login enforcement is a follow-up).</div>
+              <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>Destructive actions require confirmation + a reason. Hard delete is not available.</div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>Soft deactivate is not enabled in this MVP because login enforcement is not implemented yet.</div>
             </section>
 
             <section className="panel">
