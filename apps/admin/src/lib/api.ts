@@ -1,13 +1,14 @@
 "use client";
 
 import { createApiClient } from "@shopping-assistant/api-client";
-import { apiBaseUrl } from "./apiBase";
 
-// Admin identity is established entirely by Cloudflare Access: the browser carries the signed
-// Access session on credentialed requests (`credentials: "include"` inside createApiClient) and
-// the backend verifies the `Cf-Access-Jwt-Assertion`. The browser stores NO admin token or
-// secret — there is no token login and nothing in localStorage/sessionStorage.
-export const api = createApiClient({ baseUrl: apiBaseUrl() });
+// SAME-ORIGIN by design. The admin UI calls admin.pingtally.com/api/v1/admin/* (baseUrl ""), which
+// a same-origin Next.js route handler (src/app/api/v1/admin/[...path]/route.ts) proxies server-side
+// to the backend, forwarding the Cloudflare-verified Access identity. This avoids a cross-origin XHR
+// to api.pingtally.com — that XHR is challenged by Cloudflare Access (302 → login) and then blocked
+// by the browser as a CORS error, even with credentials:"include" and a valid Access session.
+// The browser only ever talks to its own origin (first-party Access cookie) and stores NO token/secret.
+export const api = createApiClient({ baseUrl: "" });
 
 /** True for an auth/authorization failure (re-authenticate through Cloudflare Access). */
 export function isAuthError(err: unknown): boolean {
