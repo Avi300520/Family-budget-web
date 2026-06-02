@@ -8,7 +8,8 @@ import type {
   AdminUserSummary,
   AdminWebSessionView
 } from "@shopping-assistant/api-client";
-import { api, isAuthError, ACCESS_DENIED_MESSAGE } from "../../lib/api";
+import Link from "next/link";
+import { api, toErrorMessage } from "../../lib/api";
 
 const DANGER: React.CSSProperties = { background: "var(--rose)" };
 const SUBTLE: React.CSSProperties = { background: "var(--nav)" };
@@ -27,7 +28,7 @@ export default function AdminUsersPage() {
   const [audit, setAudit] = useState<AdminAuditEntry[]>([]);
 
   function fail(err: unknown) {
-    setError(isAuthError(err) ? ACCESS_DENIED_MESSAGE : err instanceof Error ? err.message : "Admin API error");
+    setError(toErrorMessage(err));
   }
 
   // Identify the verified Cloudflare Access admin on load (also surfaces an Access/session error early).
@@ -148,8 +149,8 @@ export default function AdminUsersPage() {
       <aside className="nav">
         <div className="brand">Admin</div>
         <div className="list">
-          <a href="/" style={{ color: "white" }}>Operations</a>
-          <a href="/users" style={{ color: "white", fontWeight: 800 }}>User management</a>
+          <Link href="/" style={{ color: "white" }}>Operations</Link>
+          <Link href="/users" style={{ color: "white", fontWeight: 800 }}>User management</Link>
         </div>
         {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
       </aside>

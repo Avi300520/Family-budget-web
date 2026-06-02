@@ -1,8 +1,9 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, isAuthError, ACCESS_DENIED_MESSAGE } from "../lib/api";
+import { api, toErrorMessage } from "../lib/api";
 
 type Overview = Awaited<ReturnType<typeof api.adminOverview>>;
 
@@ -21,7 +22,7 @@ export default function AdminPage() {
       setAdminEmail(me.adminEmail);
       setOverview(data);
     } catch (err) {
-      setError(isAuthError(err) ? ACCESS_DENIED_MESSAGE : err instanceof Error ? err.message : "Admin API error");
+      setError(toErrorMessage(err));
     }
   }
 
@@ -33,7 +34,7 @@ export default function AdminPage() {
       setSupportBody("");
       await load();
     } catch (err) {
-      setError(isAuthError(err) ? ACCESS_DENIED_MESSAGE : err instanceof Error ? err.message : "Admin API error");
+      setError(toErrorMessage(err));
     }
   }
 
@@ -46,8 +47,8 @@ export default function AdminPage() {
       <aside className="nav">
         <div className="brand">Admin</div>
         <div className="list">
-          <a href="/" style={{ color: "white", fontWeight: 800 }}>Operations</a>
-          <a href="/users" style={{ color: "white" }}>User management</a>
+          <Link href="/" style={{ color: "white", fontWeight: 800 }}>Operations</Link>
+          <Link href="/users" style={{ color: "white" }}>User management</Link>
         </div>
         {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
       </aside>
