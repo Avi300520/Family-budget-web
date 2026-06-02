@@ -2,48 +2,39 @@
 
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, isAuthError, ACCESS_DENIED_MESSAGE } from "../lib/api";
 
 type Overview = Awaited<ReturnType<typeof api.adminOverview>>;
 
 export default function AdminPage() {
   const [overview, setOverview] = useState<Overview>();
   const [error, setError] = useState<string>();
-  const [token, setToken] = useState("change-me-local-admin-token");
-  const [needsLogin, setNeedsLogin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState<string>();
   const [supportHouseholdId, setSupportHouseholdId] = useState("");
   const [supportBody, setSupportBody] = useState("");
 
   async function load() {
     try {
       setError(undefined);
-      setOverview(await api.adminOverview());
-      setNeedsLogin(false);
+      // Identify the verified Cloudflare Access admin first; then load the overview.
+      const [me, data] = await Promise.all([api.adminAuthMe(), api.adminOverview()]);
+      setAdminEmail(me.adminEmail);
+      setOverview(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Admin API error";
-      setError(message);
-      if (message.toLowerCase().includes("admin")) setNeedsLogin(true);
-    }
-  }
-
-  async function login(event: React.FormEvent) {
-    event.preventDefault();
-    try {
-      setError(undefined);
-      await api.adminLogin(token);
-      setNeedsLogin(false);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Admin login failed");
+      setError(isAuthError(err) ? ACCESS_DENIED_MESSAGE : err instanceof Error ? err.message : "Admin API error");
     }
   }
 
   async function addSupportNote(event: React.FormEvent) {
     event.preventDefault();
     if (!supportHouseholdId || !supportBody) return;
-    await api.addSupportNote(supportHouseholdId, supportBody);
-    setSupportBody("");
-    await load();
+    try {
+      await api.addSupportNote(supportHouseholdId, supportBody);
+      setSupportBody("");
+      await load();
+    } catch (err) {
+      setError(isAuthError(err) ? ACCESS_DENIED_MESSAGE : err instanceof Error ? err.message : "Admin API error");
+    }
   }
 
   useEffect(() => {
@@ -58,6 +49,7 @@ export default function AdminPage() {
           <a href="/" style={{ color: "white", fontWeight: 800 }}>Operations</a>
           <a href="/users" style={{ color: "white" }}>User management</a>
         </div>
+        {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
       </aside>
       <main className="main">
         <div className="row between">
@@ -67,14 +59,8 @@ export default function AdminPage() {
             Refresh
           </button>
         </div>
-        {needsLogin && (
-          <form className="panel row" onSubmit={login}>
-            <input className="input" style={{ maxWidth: 360 }} value={token} onChange={(event) => setToken(event.target.value)} />
-            <button className="button" type="submit">Admin login</button>
-          </form>
-        )}
         {error && <div className="panel status error">{error}</div>}
-        {!overview && !error && <div className="panel">Loading...</div>}
+        {!overview && !error && <div className="panel">Loading…</div>}
         {overview && (
           <div className="grid two">
             <section className="panel">

@@ -205,6 +205,8 @@ export function createApiClient(options: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ token })
       }),
+    /** Verified admin identity from Cloudflare Access (or the dev-session subject in local dev). */
+    adminAuthMe: () => request<{ adminEmail: string; via: string }>("/api/v1/admin/auth/me"),
     adminOverview: () =>
       request<{
         households: unknown[];

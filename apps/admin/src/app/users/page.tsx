@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   AdminAuditEntry,
   AdminUserDetail,
@@ -8,16 +8,15 @@ import type {
   AdminUserSummary,
   AdminWebSessionView
 } from "@shopping-assistant/api-client";
-import { api } from "../../lib/api";
+import { api, isAuthError, ACCESS_DENIED_MESSAGE } from "../../lib/api";
 
 const DANGER: React.CSSProperties = { background: "var(--rose)" };
 const SUBTLE: React.CSSProperties = { background: "var(--nav)" };
 
 export default function AdminUsersPage() {
-  const [token, setToken] = useState("change-me-local-admin-token");
-  const [needsLogin, setNeedsLogin] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [adminEmail, setAdminEmail] = useState<string>();
 
   const [by, setBy] = useState<AdminUserSearchBy>("phone");
   const [q, setQ] = useState("");
@@ -28,21 +27,13 @@ export default function AdminUsersPage() {
   const [audit, setAudit] = useState<AdminAuditEntry[]>([]);
 
   function fail(err: unknown) {
-    const message = err instanceof Error ? err.message : "Admin API error";
-    setError(message);
-    if (message.toLowerCase().includes("admin")) setNeedsLogin(true);
+    setError(isAuthError(err) ? ACCESS_DENIED_MESSAGE : err instanceof Error ? err.message : "Admin API error");
   }
 
-  async function login(event: React.FormEvent) {
-    event.preventDefault();
-    try {
-      setError(undefined);
-      await api.adminLogin(token);
-      setNeedsLogin(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Admin login failed");
-    }
-  }
+  // Identify the verified Cloudflare Access admin on load (also surfaces an Access/session error early).
+  useEffect(() => {
+    api.adminAuthMe().then((me) => setAdminEmail(me.adminEmail)).catch(fail);
+  }, []);
 
   async function search(event: React.FormEvent) {
     event.preventDefault();
@@ -52,7 +43,6 @@ export default function AdminUsersPage() {
     try {
       const res = await api.adminSearchUsers(by, q.trim());
       setResults(res.users);
-      setNeedsLogin(false);
     } catch (err) {
       fail(err);
     } finally {
@@ -134,9 +124,10 @@ export default function AdminUsersPage() {
     if (!window.confirm("QA reset: clears sessions + magic links + non-owned memberships and sets status→onboarding. Owned household, purchases, receipts, budgets and subscriptions are KEPT. Proceed?")) return;
     const reason = askReason("QA reset");
     if (!reason) return;
-    const confirmToken = window.prompt("Production confirmation token (leave blank in dev/test):") ?? undefined;
+    // No confirmToken: the production gate is the verified Cloudflare Access admin identity plus
+    // the server-side QA-reset allowlist. The browser never sends a secret token.
     try {
-      const res = await api.adminQaResetUser(detail.user.id, reason, confirmToken || undefined);
+      const res = await api.adminQaResetUser(detail.user.id, reason);
       setError(undefined);
       window.alert(`QA reset done. Cleared — sessions: ${res.cleared.sessions}, magic links: ${res.cleared.magicLinks}, memberships removed: ${res.cleared.membershipsRemoved}. Preserved owned households: ${res.preserved.ownedHouseholdIds.length}.`);
       await refreshDetail(detail.user.id);
@@ -160,18 +151,12 @@ export default function AdminUsersPage() {
           <a href="/" style={{ color: "white" }}>Operations</a>
           <a href="/users" style={{ color: "white", fontWeight: 800 }}>User management</a>
         </div>
+        {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
       </aside>
       <main className="main">
         <div className="row between">
           <h1 className="page-title">User management</h1>
         </div>
-
-        {needsLogin && (
-          <form className="panel row" onSubmit={login}>
-            <input className="input" style={{ maxWidth: 360 }} value={token} onChange={(e) => setToken(e.target.value)} />
-            <button className="button" type="submit">Admin login</button>
-          </form>
-        )}
 
         {error && <div className="panel status error" style={{ display: "block" }}>{error}</div>}
 
@@ -186,7 +171,7 @@ export default function AdminUsersPage() {
             <input className="input" style={{ maxWidth: 360 }} placeholder="search term" value={q} onChange={(e) => setQ(e.target.value)} />
             <button className="button" type="submit" disabled={busy}>{busy ? "…" : "Search"}</button>
           </form>
-          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>Phone & email are masked. Hard delete is not available.</div>
+          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>Phone &amp; email are masked. Hard delete is not available.</div>
         </section>
 
         {results && (
