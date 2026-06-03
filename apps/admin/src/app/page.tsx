@@ -88,13 +88,40 @@ export default function AdminPage() {
                 <div className="muted">{receipt.status} · {receipt.confidenceScore}</div>
               </>
             )} />
-            <Section title="Outbox" items={overview.outbox} render={(message) => (
-              <>
-                <strong>{message.channel} · {message.destination}</strong>
-                <div className={`status ${message.status === "failed" ? "error" : message.status === "pending" ? "warn" : ""}`}>{message.status}</div>
-                <div className="muted">{String(message.payload.text ?? message.payload.type ?? "")}</div>
-              </>
-            )} />
+            <Section title="Outbox" items={overview.outbox} render={(message) => {
+              // Queue/send state (status) is distinct from the PROVIDER delivery
+              // state (deliveryStatus). "Accepted by WhatsApp" (Meta took the send)
+              // must NOT look like "Delivered"/"Read"; a failed delivery shows the
+              // provider error (e.g. 131047). The body is never shown (it can carry
+              // a magic-link token) — only safe metadata.
+              const delivery = message.deliveryStatus;
+              let label: string;
+              let cls = "";
+              if (message.status === "failed") {
+                label = "Send failed";
+                cls = "error";
+              } else if (message.status === "pending") {
+                label = "Queued";
+                cls = "warn";
+              } else if (delivery === "failed") {
+                label = `Failed: ${[message.deliveryErrorCode, message.deliveryErrorTitle].filter(Boolean).join(" ")}`.trim();
+                cls = "error";
+              } else if (delivery === "read") {
+                label = "Read";
+              } else if (delivery === "delivered") {
+                label = "Delivered";
+              } else {
+                label = "Accepted by WhatsApp";
+                cls = "warn";
+              }
+              return (
+                <>
+                  <strong>{message.channel} · {message.destinationMasked}</strong>
+                  <div className={`status ${cls}`}>{label}</div>
+                  <div className="muted">{[message.kind, message.providerMessageIdMasked].filter(Boolean).join(" · ")}</div>
+                </>
+              );
+            }} />
             <Section title="Webhooks" items={overview.webhookEvents} render={(event) => (
               <>
                 <strong>{event.provider}</strong>

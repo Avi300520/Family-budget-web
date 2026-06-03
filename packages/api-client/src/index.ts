@@ -9,7 +9,7 @@ import type {
   HouseholdMember,
   HouseholdRole,
   MemberActivityHeatmapResponse,
-  OutboxMessage,
+  AdminOutboxView,
   ProjectBudget,
   Purchase,
   Receipt,
@@ -212,7 +212,7 @@ export function createApiClient(options: ApiClientOptions) {
         households: unknown[];
         receipts: Receipt[];
         messages: WhatsAppMessage[];
-        outbox: OutboxMessage[];
+        outbox: AdminOutboxView[];
         webhookEvents: WebhookEvent[];
         entitlements: unknown[];
         analyticsEvents: unknown[];
