@@ -236,11 +236,20 @@ export function isoToFlag(iso2: string): string {
     .replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
 }
 
-const PINNED = new Set(["IL", "US", "GB", "CA", "FR", "DE", "AU"]);
+/** Pinned to the top, in this exact order, ahead of the dial-code sort. */
+const PINNED_ORDER = ["IL", "US"];
+const PINNED = new Set(PINNED_ORDER);
+
+/** Numeric calling code (digits only) for sort comparisons. */
+function dialNumber(c: Country): number {
+  return Number(c.dial.slice(1));
+}
 
 /**
- * Full country list for display: common countries pinned to the top (Israel
- * first), the remainder sorted alphabetically by Hebrew name.
+ * Full country list for display: Israel first, United States second, then all
+ * remaining countries sorted by numeric calling code ascending. Ties (shared
+ * dial codes, e.g. the many +1 countries) break by Hebrew name, then ISO code,
+ * so the order is fully deterministic.
  */
 export const COUNTRIES: Country[] = (() => {
   const all: Country[] = RAW.map(([iso2, dialDigits, nameEn, nameHe]) => ({
@@ -249,13 +258,17 @@ export const COUNTRIES: Country[] = (() => {
     nameEn,
     nameHe,
   }));
-  const pinnedOrder = ["IL", "US", "GB", "CA", "FR", "DE", "AU"];
-  const pinned = pinnedOrder
+  const pinned = PINNED_ORDER
     .map((iso) => all.find((c) => c.iso2 === iso))
     .filter((c): c is Country => Boolean(c));
   const rest = all
     .filter((c) => !PINNED.has(c.iso2))
-    .sort((a, b) => a.nameHe.localeCompare(b.nameHe, "he"));
+    .sort(
+      (a, b) =>
+        dialNumber(a) - dialNumber(b) ||
+        a.nameHe.localeCompare(b.nameHe, "he") ||
+        a.iso2.localeCompare(b.iso2),
+    );
   return [...pinned, ...rest];
 })();
 
