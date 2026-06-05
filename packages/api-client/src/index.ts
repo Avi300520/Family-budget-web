@@ -116,9 +116,18 @@ export function createApiClient(options: ApiClientOptions) {
       credentials: "include"
     });
     const text = await response.text();
-    const data = text ? JSON.parse(text) : undefined;
+    // Parse defensively: a non-JSON body (an HTML edge/error page, a proxy 5xx, a Cloudflare
+    // interstitial) must NOT throw a status-less SyntaxError here — that was surfacing via
+    // toErrorMessage as a misleading "network/CORS" failure that HID the real HTTP status
+    // (e.g. a 401/403 re-auth, or a 5xx). On a non-ok response we always carry response.status.
+    let data: any;
+    try {
+      data = text ? JSON.parse(text) : undefined;
+    } catch {
+      data = undefined;
+    }
     if (!response.ok) {
-      throw new ApiClientError(data?.error?.code ?? "api.error", data?.error?.message ?? "API request failed", response.status, data?.error?.details);
+      throw new ApiClientError(data?.error?.code ?? "api.error", data?.error?.message ?? `Request failed with status ${response.status}`, response.status, data?.error?.details);
     }
     if (data?.csrfToken && typeof data.csrfToken === "string") {
       options.setCsrfToken?.(data.csrfToken);
