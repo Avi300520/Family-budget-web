@@ -122,7 +122,7 @@ export default function AdminUsersPage() {
 
   async function qaReset() {
     if (!detail) return;
-    if (!window.confirm("QA reset: clears sessions + magic links + non-owned memberships and sets status→onboarding. Owned household, purchases, receipts, budgets and subscriptions are KEPT. Proceed?")) return;
+    if (!window.confirm("QA reset (allow-listed test users only — does NOT affect regular users): clears sessions + magic links + non-owned memberships + pending invites to this phone, and sets status→onboarding so onboarding can be re-tested. Owned household, purchases, receipts, budgets and subscriptions are KEPT. Proceed?")) return;
     const reason = askReason("QA reset");
     if (!reason) return;
     // No confirmToken: the production gate is the verified Cloudflare Access admin identity plus
@@ -130,7 +130,7 @@ export default function AdminUsersPage() {
     try {
       const res = await api.adminQaResetUser(detail.user.id, reason);
       setError(undefined);
-      window.alert(`QA reset done. Cleared — sessions: ${res.cleared.sessions}, magic links: ${res.cleared.magicLinks}, memberships removed: ${res.cleared.membershipsRemoved}. Preserved owned households: ${res.preserved.ownedHouseholdIds.length}.`);
+      window.alert(`QA reset done. Cleared — sessions: ${res.cleared.sessions}, magic links: ${res.cleared.magicLinks}, memberships removed: ${res.cleared.membershipsRemoved}, pending invites: ${res.cleared.pendingInvitesCancelled}. Preserved owned households: ${res.preserved.ownedHouseholdIds.length}.`);
       await refreshDetail(detail.user.id);
     } catch (err) {
       fail(err);

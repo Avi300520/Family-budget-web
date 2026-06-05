@@ -96,7 +96,7 @@ export interface AdminUserDetail {
 
 export interface AdminQaResetResult {
   reset: boolean;
-  cleared: { sessions: number; magicLinks: number; membershipsRemoved: number };
+  cleared: { sessions: number; magicLinks: number; membershipsRemoved: number; pendingInvitesCancelled: number };
   preserved: { userId: string; ownedHouseholdIds: string[] };
 }
 
