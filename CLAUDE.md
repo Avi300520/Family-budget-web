@@ -48,7 +48,23 @@ pnpm sync:shared  # or ./scripts/sync-shared.ps1
 
 ## Git Branches & Deployment
 
-### Current Status (as of May 26, 2026)
+### ⚡ Mainline integration (2026-06-08) — READ THIS FIRST
+
+- **`main` = the production mainline** (pingtally.com; Vercel project `family-budget-web`,
+  production branch = main). It now contains: the full `qa` content (stabilization PGS-001–006 +
+  PGS-017A client auth guard, approved product copy PGS-007B incl. removing the forbidden
+  «עוזר הקניות המשפחתי» AppShell brand, login redesign + 199-country `PhoneInput`) **plus** the
+  admin lineage `fix/admin-access-auth-ui` (`e987b84` — byte-identical to the promoted
+  admin.pingtally.com production, Vercel project `pingtally-admin`).
+- **`qa`** tracks qa.pingtally.com (same-site QA). After this integration `main` ⊇ `qa`.
+- ⚠️ **`pingtally-admin`'s production target is the `main` branch** — pushes to main trigger an
+  admin production build; main's apps/admin must always stay content-aligned with the promoted
+  admin production (it is, as of this integration).
+- ⚠️ **Never ship `feat/login-redesign-country-codes`** — it stacks the login work on the full
+  admin lineage. The approved login work is already in main (via qa's cherry-picks).
+- New work targets `main` via short-lived branches; use `qa` only for same-site QA previews.
+
+### Current Status (as of May 26, 2026 — HISTORICAL, superseded by the section above)
 
 | Repo | Branch | Latest Commit | GitHub URL | Notes |
 |------|--------|---------------|-----------|-------|
