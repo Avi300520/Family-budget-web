@@ -16,8 +16,13 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata = {
-  title: "קופה משפחתית",
-  description: "ניהול תקציב משפחתי דרך וואטסאפ"
+  title: "Pingtally | פחות ניהול. יותר משפחה.",
+  description: "Pingtally עוזר למשפחות לנהל הוצאות, קניות, פרויקטים ובקשות מהילדים דרך וואטסאפ, עם דשבורד משפחתי פשוט וברור.",
+  openGraph: {
+    title: "Pingtally | פחות ניהול. יותר משפחה.",
+    description: "Pingtally עוזר למשפחות לנהל הוצאות, קניות, פרויקטים ובקשות מהילדים דרך וואטסאפ, עם דשבורד משפחתי פשוט וברור.",
+    locale: "he_IL"
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

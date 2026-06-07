@@ -61,9 +61,9 @@ function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCatego
     <section className="card" style={{ padding: "var(--sp-5)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", marginBottom: "var(--sp-3)" }}>
         <MapPin size={16} aria-hidden style={{ color: "var(--teal)" }} />
-        <span className="h4">מסלול בסופר</span>
+        <span className="h4">לפי קטגוריות</span>
         <span className="muted" style={{ fontSize: 12 }}>
-          הקטגוריות לפי סדר ההליכה
+          הרשימה מקובצת לפי קטגוריות
         </span>
       </div>
 
@@ -79,7 +79,7 @@ function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCatego
           padding: "var(--sp-2) 0",
           overflowX: "auto",
         }}
-        aria-label="מסלול הקניות"
+        aria-label="קטגוריות הקניות"
       >
         {/* the connecting line behind the dots */}
         <div
@@ -95,9 +95,6 @@ function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCatego
           }}
         />
 
-        {/* entrance dot */}
-        <RouteDot icon="🚪" label="כניסה" color="var(--teal)" active />
-
         {stations.map((cat) => (
           <RouteDot
             key={cat.id}
@@ -107,9 +104,6 @@ function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCatego
             active={activeCategoryIds.has(cat.id)}
           />
         ))}
-
-        {/* checkout dot */}
-        <RouteDot icon="💳" label="קופה" color="var(--coral)" active />
       </div>
     </section>
   );
@@ -527,10 +521,9 @@ function EmptyState() {
         }}
       >
         <span style={{ fontSize: 40 }} aria-hidden>🛒</span>
-        <div className="h3">הרשימה ריקה</div>
+        <div className="h3">הרשימה ריקה כרגע</div>
         <div className="muted" style={{ fontSize: 13, maxWidth: 360 }}>
-          הוסיפו פריטים מהשדה למעלה או שלחו <strong>"נגמר חלב"</strong> בוואטסאפ.
-          הרשימה תסדר את עצמה לפי מסלול הסופר.
+          שלחו בוואטסאפ: <strong>&quot;תוסיף חלב לרשימת הקניות&quot;</strong> — או הוסיפו מהשדה למעלה.
         </div>
       </div>
     </section>

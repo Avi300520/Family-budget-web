@@ -6,7 +6,9 @@ import type { Household, HouseholdMember, HouseholdRole } from "@shopping-assist
 import { AppShell } from "../../../components/AppShell";
 import { Avatar } from "../../../components/Avatar";
 import { LoadState } from "../../../components/LoadState";
+import { PhoneInput } from "../../../components/PhoneInput";
 import { api } from "../../../lib/api";
+import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../../lib/countryCodes";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "בעלים",
@@ -15,36 +17,13 @@ const ROLE_LABELS: Record<string, string> = {
   limited_member: "חבר מוגבל"
 };
 
-const COUNTRY_CODES = [
-  { label: "🇮🇱 ישראל (+972)", value: "+972" },
-  { label: "🇺🇸 ארה\"ב / קנדה (+1)", value: "+1" },
-  { label: "🇬🇧 בריטניה (+44)", value: "+44" },
-  { label: "🇩🇪 גרמניה (+49)", value: "+49" },
-  { label: "🇫🇷 צרפת (+33)", value: "+33" },
-  { label: "🇦🇺 אוסטרליה (+61)", value: "+61" }
-];
-
-/**
- * Normalize country code + local number to E.164.
- * Strips leading zeros and non-digits from the local part.
- * Returns null if the result looks invalid (too short / too long).
- */
-function toE164(countryCode: string, localNumber: string): string | null {
-  // Strip everything except digits from the local part
-  const digits = localNumber.replace(/\D/g, "");
-  // Remove leading zeros
-  const stripped = digits.replace(/^0+/, "");
-  if (stripped.length < 7 || stripped.length > 13) return null;
-  return `${countryCode}${stripped}`;
-}
-
 type MemberRow = HouseholdMember & { displayName?: string; phoneE164?: string };
 
 export default function MembersPage() {
   const [household, setHousehold] = useState<Household>();
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [inviteName, setInviteName] = useState("");
-  const [inviteCountryCode, setInviteCountryCode] = useState("+972");
+  const [inviteCountryIso, setInviteCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [inviteLocalPhone, setInviteLocalPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string>();
   const [inviteRole, setInviteRole] = useState("adult_member");
@@ -75,7 +54,7 @@ export default function MembersPage() {
     event.preventDefault();
     if (!household) return;
     setPhoneError(undefined);
-    const e164 = toE164(inviteCountryCode, inviteLocalPhone);
+    const e164 = toE164(dialForIso(inviteCountryIso), inviteLocalPhone);
     if (!e164) {
       setPhoneError("מספר הטלפון לא נראה תקין.");
       return;
@@ -232,11 +211,11 @@ export default function MembersPage() {
       </section>
 
       <section className="panel">
-        <h2>הזמנת חבר חדש</h2>
-        <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>נשלח לו/לה הודעת WhatsApp עם קישור הצטרפות מותאם אישית.</p>
+        <h2>מוסיפים בן משפחה</h2>
+        <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>נשלח לו הזמנה בוואטסאפ. הוא מצטרף בלחיצה.</p>
         <form className="form" onSubmit={invite}>
           <label>
-            שם בן/בת המשפחה
+            שם
             <input
               className="input"
               value={inviteName}
@@ -246,39 +225,22 @@ export default function MembersPage() {
             />
           </label>
           <div>
-            <span style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>מספר טלפון</span>
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <select
-                className="input"
-                dir="ltr"
-                value={inviteCountryCode}
-                onChange={(e) => { setInviteCountryCode(e.target.value); setPhoneError(undefined); }}
-                style={{ flex: "0 0 auto", minWidth: 160 }}
-                aria-label="קידומת מדינה"
-              >
-                {COUNTRY_CODES.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-              <div style={{ flex: 1 }}>
-                <input
-                  className="input"
-                  dir="ltr"
-                  type="tel"
-                  value={inviteLocalPhone}
-                  placeholder="052-660-6680"
-                  autoComplete="tel-national"
-                  onChange={(e) => { setInviteLocalPhone(e.target.value); setPhoneError(undefined); }}
-                  aria-label="מספר טלפון מקומי"
-                  style={{ width: "100%" }}
-                />
-                {phoneError && (
-                  <div style={{ color: "var(--neg)", fontSize: "0.82rem", marginTop: 4 }}>
-                    {phoneError}
-                  </div>
-                )}
+            <label htmlFor="invite-phone" style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>מספר טלפון</label>
+            <PhoneInput
+              id="invite-phone"
+              countryIso={inviteCountryIso}
+              onCountryChange={(iso) => { setInviteCountryIso(iso); setPhoneError(undefined); }}
+              phone={inviteLocalPhone}
+              onPhoneChange={(v) => { setInviteLocalPhone(v); setPhoneError(undefined); }}
+              placeholder="052-660-6680"
+              phoneAriaLabel="מספר טלפון מקומי"
+              invalid={Boolean(phoneError)}
+            />
+            {phoneError && (
+              <div style={{ color: "var(--neg)", fontSize: "0.82rem", marginTop: 4 }}>
+                {phoneError}
               </div>
-            </div>
+            )}
           </div>
           <label>
             תפקיד
@@ -302,19 +264,19 @@ export default function MembersPage() {
           </label>
           <button className="button" type="submit" disabled={working || !inviteLocalPhone.trim()}>
             <UserPlus size={18} aria-hidden />
-            שלח הזמנה
+            שליחת הזמנה
           </button>
         </form>
 
         {joinLink && (
           <div className="status" style={{ marginTop: 12 }}>
-            <div style={{ marginBottom: 8 }}>✅ ההזמנה נשלחה. תוכל גם להעביר את הקישור בעצמך:</div>
+            <div style={{ marginBottom: 8 }}>ההזמנה נשלחה בוואטסאפ 👍</div>
             <a className="button secondary" href={joinLink} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
               פתח את קישור ההצטרפות
             </a>
           </div>
         )}
-        {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
+        {error && <div className="status error" style={{ marginTop: 12 }}>לא הצלחנו לשלוח הזמנה. בדקו את המספר ונסו שוב.</div>}
       </section>
     </AppShell>
   );

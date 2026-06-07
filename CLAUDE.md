@@ -544,6 +544,31 @@ matching; private-project visibility design.
 
 These items are NOT blockers for continuing product iterations, but they ARE blockers before merge to main, production deploy, or Vercel/Hetzner release.
 
+* [x] **PGS-017A — invalid frontend middleware auth gate (FIXED, frontend, not deployed).**
+  `apps/web/src/middleware.ts` previously gated routes by reading the `shopping_assistant_session`
+  cookie on the **frontend** origin — but that cookie is `HttpOnly` + host-only on `api.pingtally.com`,
+  never visible to the frontend. It blocked `/auth/consume` (redirected to `/login` before consume) and
+  would have **regressed production login on merge**. **Fix (this cycle):** middleware now reads no cookie
+  and gates nothing (documented pass-through; PGS-002 marked invalid); new `apps/web/src/lib/authGuard.ts`
+  `redirectIfUnauthorized` redirects a 401 to `/login?next=<sanitized path>`; the dashboard adopts it
+  (loading + redirect, no raw "Authentication required"). web typecheck + build clean. **Unblocks the
+  stabilization-1 → main merge from the auth-regression standpoint** (owner still owns the merge/deploy).
+
+* [ ] **PGS-017B — same-site QA domain for authenticated Preview testing (IN PROGRESS).**
+  `*.vercel.app` is cross-site to `api.pingtally.com`, so the `SameSite=Lax` session cookie can't support
+  an authenticated session there — only public-page smoke. Solution: same-site **`qa.pingtally.com`** (no
+  `SameSite=None`, no broadened CORS, no cookie hack).
+  **DONE (git):** stable **`qa`** branch created at `0bac8ec` (the QA channel `qa.pingtally.com` will
+  track); the temporary integration branch was renamed to `release/stabilization-product-copy-integration`
+  (same commit) and the old `qa/stabilization-product-copy-integration` remote branch removed.
+  **PENDING — owner dashboard actions (no connector tool):** (a) Vercel: add `qa.pingtally.com`, assign to
+  the `qa` branch (Preview, not Production); confirm Preview `NEXT_PUBLIC_API_URL=https://api.pingtally.com`.
+  (b) Cloudflare: add only the `qa` CNAME (exact Vercel target, DNS-only); don't touch apex/www/api.
+  **PENDING — agent, after domain live:** set backend `ALLOWED_ORIGIN_PATTERN=^https://qa\.pingtally\.com$`
+  + `pm2 reload pingtally-api --update-env`, then run the QA smoke. Full plan:
+  `docs/testing/PREVIEW_QA_RUNBOOK.md` ("QA-domain setup — stable `qa` branch model") +
+  `docs/deployment/VERCEL_DEPLOYMENT_PLAN.md` §0.9 + `docs/product/POST_GO_LIVE_STABILIZATION_PLAN.md`.
+
 * [ ] Real mobile viewport smoke at 375x812, using actual browser/Playwright viewport, not CSS simulation.
   Must cover owner/admin, limited_member, household with data, empty household, ActivityFeed, CategoriesPanel (including category-budget progress states: no-cap rows unchanged, capped rows showing the spent/cap bar at <70% / amber ≥70% / rose ≥90% / overspent clamped to 100% with real numeric text), the /settings/category-budgets editor, /insights, the limited_member dashboard with WishlistPanel, the /family/wishlists parent route, the /family/pulse route (all 3 panels), and pending approval pill.
 

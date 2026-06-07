@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type {
   ActivityEntry,
@@ -19,6 +20,7 @@ import { LoadState } from "../../components/LoadState";
 import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
+import { redirectIfUnauthorized } from "../../lib/authGuard";
 
 // ── Category display definitions (no spend data — Iteration 5 will wire real data) ──
 const CATEGORIES: ReadonlyArray<{ key: string; label: string; color: string }> = [
@@ -345,9 +347,9 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
           }}
         >
           <span style={{ fontSize: 36 }} aria-hidden="true">🏗️</span>
-          <span style={{ fontWeight: 500, color: "var(--text-1)" }}>אין פרויקטים פעילים</span>
+          <span style={{ fontWeight: 500, color: "var(--text-1)" }}>אין פרויקטים פתוחים</span>
           <span className="muted" style={{ fontSize: 13 }}>
-            צור פרויקט כדי לחסוך לקניות גדולות
+            אפשר להתחיל: &quot;פתח פרויקט לחופשת קיץ&quot;
           </span>
           <Link
             className="button"
@@ -765,12 +767,10 @@ function InsightsStrip() {
       >
         <span style={{ fontSize: 36 }} aria-hidden="true">✨</span>
         <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
-          תובנות חכמות בקרוב
+          עוד מעט
         </span>
         <span className="muted" style={{ fontSize: 13 }}>
-          ניתוח הרגלי ההוצאה שלכם יופיע כאן
-          <br />
-          אחרי כמה שבועות של שימוש.
+          אחרי כמה פעולות נתחיל להראות לכם דברים מעניינים על הבית.
         </span>
       </div>
     </section>
@@ -929,6 +929,8 @@ export default function DashboardPage() {
   const [categoryBudgets, setCategoryBudgets] = useState<CategoryBudget[]>();
   const [memberColorMap, setMemberColorMap] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string>();
+  const router = useRouter();
+  const pathname = usePathname();
 
   async function load() {
     setError(undefined);
@@ -991,6 +993,11 @@ export default function DashboardPage() {
         setMemberColorMap(colorMap);
       }
     } catch (err) {
+      // Unauthenticated (401): the session cookie lives on api.pingtally.com and is not
+      // visible to the frontend, so we detect auth here and redirect to login with a
+      // clean loading state instead of showing the raw "Authentication required" message.
+      // (Replaces the invalid PGS-002 middleware cookie gate — see lib/authGuard.ts.)
+      if (redirectIfUnauthorized(err, router, pathname)) return;
       setError(
         err instanceof Error
           ? err.message
