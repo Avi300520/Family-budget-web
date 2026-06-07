@@ -1,49 +1,41 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, toErrorMessage } from "../lib/api";
 
 type Overview = Awaited<ReturnType<typeof api.adminOverview>>;
 
 export default function AdminPage() {
   const [overview, setOverview] = useState<Overview>();
   const [error, setError] = useState<string>();
-  const [token, setToken] = useState("change-me-local-admin-token");
-  const [needsLogin, setNeedsLogin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState<string>();
   const [supportHouseholdId, setSupportHouseholdId] = useState("");
   const [supportBody, setSupportBody] = useState("");
 
   async function load() {
     try {
       setError(undefined);
-      setOverview(await api.adminOverview());
-      setNeedsLogin(false);
+      // Identify the verified Cloudflare Access admin first; then load the overview.
+      const [me, data] = await Promise.all([api.adminAuthMe(), api.adminOverview()]);
+      setAdminEmail(me.adminEmail);
+      setOverview(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Admin API error";
-      setError(message);
-      if (message.toLowerCase().includes("admin")) setNeedsLogin(true);
-    }
-  }
-
-  async function login(event: React.FormEvent) {
-    event.preventDefault();
-    try {
-      setError(undefined);
-      await api.adminLogin(token);
-      setNeedsLogin(false);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Admin login failed");
+      setError(toErrorMessage(err));
     }
   }
 
   async function addSupportNote(event: React.FormEvent) {
     event.preventDefault();
     if (!supportHouseholdId || !supportBody) return;
-    await api.addSupportNote(supportHouseholdId, supportBody);
-    setSupportBody("");
-    await load();
+    try {
+      await api.addSupportNote(supportHouseholdId, supportBody);
+      setSupportBody("");
+      await load();
+    } catch (err) {
+      setError(toErrorMessage(err));
+    }
   }
 
   useEffect(() => {
@@ -54,7 +46,11 @@ export default function AdminPage() {
     <div className="shell">
       <aside className="nav">
         <div className="brand">Admin</div>
-        <div className="muted">עוזר הקניות המשפחתי</div>
+        <div className="list">
+          <Link href="/" style={{ color: "white", fontWeight: 800 }}>Operations</Link>
+          <Link href="/users" style={{ color: "white" }}>User management</Link>
+        </div>
+        {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
       </aside>
       <main className="main">
         <div className="row between">
@@ -64,14 +60,8 @@ export default function AdminPage() {
             Refresh
           </button>
         </div>
-        {needsLogin && (
-          <form className="panel row" onSubmit={login}>
-            <input className="input" style={{ maxWidth: 360 }} value={token} onChange={(event) => setToken(event.target.value)} />
-            <button className="button" type="submit">Admin login</button>
-          </form>
-        )}
         {error && <div className="panel status error">{error}</div>}
-        {!overview && !error && <div className="panel">Loading...</div>}
+        {!overview && !error && <div className="panel">Loading…</div>}
         {overview && (
           <div className="grid two">
             <section className="panel">
@@ -98,13 +88,40 @@ export default function AdminPage() {
                 <div className="muted">{receipt.status} · {receipt.confidenceScore}</div>
               </>
             )} />
-            <Section title="Outbox" items={overview.outbox} render={(message) => (
-              <>
-                <strong>{message.channel} · {message.destination}</strong>
-                <div className={`status ${message.status === "failed" ? "error" : message.status === "pending" ? "warn" : ""}`}>{message.status}</div>
-                <div className="muted">{String(message.payload.text ?? message.payload.type ?? "")}</div>
-              </>
-            )} />
+            <Section title="Outbox" items={overview.outbox} render={(message) => {
+              // Queue/send state (status) is distinct from the PROVIDER delivery
+              // state (deliveryStatus). "Accepted by WhatsApp" (Meta took the send)
+              // must NOT look like "Delivered"/"Read"; a failed delivery shows the
+              // provider error (e.g. 131047). The body is never shown (it can carry
+              // a magic-link token) — only safe metadata.
+              const delivery = message.deliveryStatus;
+              let label: string;
+              let cls = "";
+              if (message.status === "failed") {
+                label = "Send failed";
+                cls = "error";
+              } else if (message.status === "pending") {
+                label = "Queued";
+                cls = "warn";
+              } else if (delivery === "failed") {
+                label = `Failed: ${[message.deliveryErrorCode, message.deliveryErrorTitle].filter(Boolean).join(" ")}`.trim();
+                cls = "error";
+              } else if (delivery === "read") {
+                label = "Read";
+              } else if (delivery === "delivered") {
+                label = "Delivered";
+              } else {
+                label = "Accepted by WhatsApp";
+                cls = "warn";
+              }
+              return (
+                <>
+                  <strong>{message.channel} · {message.destinationMasked}</strong>
+                  <div className={`status ${cls}`}>{label}</div>
+                  <div className="muted">{[message.kind, message.providerMessageIdMasked].filter(Boolean).join(" · ")}</div>
+                </>
+              );
+            }} />
             <Section title="Webhooks" items={overview.webhookEvents} render={(event) => (
               <>
                 <strong>{event.provider}</strong>

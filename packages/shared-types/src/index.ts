@@ -281,6 +281,46 @@ export interface OutboxMessage {
   nextAttemptAt: string;
   sentAt?: string;
   failureReason?: string;
+  // Provider delivery lifecycle (Meta `statuses[]` webhooks), distinct from the
+  // queue `status` above. `status` flips to "sent" when Meta ACCEPTS the send;
+  // these fields record what Meta later reports about actual delivery. All
+  // optional — populated only after a status webhook is reconciled by wamid.
+  deliveryStatus?: "sent" | "delivered" | "read" | "failed";
+  deliveryErrorCode?: string;
+  deliveryErrorTitle?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  failedAt?: string;
+  deliveryUpdatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Admin-safe projection of an outbox row, returned by GET /api/v1/admin/overview
+ * (see the backend `toAdminOutbox`). It deliberately EXCLUDES the message
+ * body/payload — an auth message body is a magic link containing a single-use
+ * bearer token — and masks the recipient and provider id. Use this, never the
+ * raw OutboxMessage, for admin surfaces.
+ */
+export interface AdminOutboxView {
+  id: string;
+  channel: OutboxMessage["channel"];
+  destinationMasked: string;
+  status: OutboxStatus;
+  deliveryStatus?: "sent" | "delivered" | "read" | "failed";
+  deliveryErrorCode?: string;
+  deliveryErrorTitle?: string;
+  kind?: string;
+  providerMessageIdMasked?: string;
+  idempotencyKey: string;
+  retryCount: number;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  failedAt?: string;
+  deliveryUpdatedAt?: string;
+  nextAttemptAt: string;
   createdAt: string;
   updatedAt: string;
 }
