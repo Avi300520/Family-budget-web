@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "../../../lib/api";
+import { safeNextPath } from "../../../lib/authGuard";
 
 export default function ConsumeClient() {
   const params = useSearchParams();
@@ -19,7 +20,7 @@ export default function ConsumeClient() {
     api
       .consumeMagicLink(token)
       .then((result) => {
-        if (next) { router.replace(next); return; }
+        if (next) { router.replace(safeNextPath(next)); return; }
         router.replace(result.hasHousehold ? "/dashboard" : "/onboarding");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "שגיאה בכניסה"));
