@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import type { Household, HouseholdInvite, User } from "@shopping-assistant/shared-types";
+import { ApiClientError } from "@shopping-assistant/api-client";
 import { api } from "../../lib/api";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -26,6 +27,10 @@ function JoinPageInner() {
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phase, setPhase] = useState<Phase>("loading");
+  // Cold recipient (no session): the invite token itself authenticates the join
+  // (2026-06-12, limited-member friction fix) — show the same approve screen and
+  // call the direct-join API on tap. No re-entering the phone number.
+  const [directJoin, setDirectJoin] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -35,8 +40,8 @@ function JoinPageInner() {
         setInvite(result.invite);
         setHousehold(result.household);
         return api.me()
-          .then((me) => { setCurrentUser(me.user); setPhase("preview"); })
-          .catch(() => setPhase("auth"));
+          .then((me) => { setCurrentUser(me.user); setDirectJoin(false); setPhase("preview"); })
+          .catch(() => { setDirectJoin(true); setPhase("preview"); });
       })
       .catch(() => { setPhase("error"); setError("ההזמנה לא נמצאה או שפגה תוקפה"); });
   }, [token]);
@@ -60,13 +65,33 @@ function JoinPageInner() {
     setError(undefined);
     try {
       const nameToSend = displayName.trim() || undefined;
-      await api.joinHousehold(token, nameToSend);
+      if (directJoin) {
+        // The single-use invite token authenticates the invited phone's user; the
+        // response sets the session cookie and the api-client stores the csrfToken.
+        await api.joinHouseholdDirect(token, nameToSend);
+      } else {
+        await api.joinHousehold(token, nameToSend);
+      }
       setPhase("done");
       setTimeout(() => router.replace("/dashboard"), 1800);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "שגיאה בהצטרפות");
+      // Old backend without the direct-join route → fall back to the legacy
+      // enter-phone → magic-link loop instead of a dead end.
+      if (directJoin && err instanceof ApiClientError && err.status === 404 && err.code === "http.not_found") {
+        setPhase("auth");
+        return;
+      }
+      setError(describeJoinError(err));
       setPhase("preview");
     }
+  }
+
+  function describeJoinError(err: unknown): string {
+    if (err instanceof ApiClientError) {
+      if (err.code === "invite.already_consumed") return "ההזמנה הזו כבר נוצלה. בקשו הזמנה חדשה מבעל הבית.";
+      if (err.code === "invite.expired" || err.code === "invite.not_found") return "ההזמנה לא נמצאה או שפג תוקפה. בקשו הזמנה חדשה מבעל הבית.";
+    }
+    return "שגיאה בהצטרפות. נסו שוב.";
   }
 
   // ── Static states ──────────────────────────────────────────────────────────
