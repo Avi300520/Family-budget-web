@@ -3,6 +3,7 @@
 import { Check, Pencil, Trash2, UserPlus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Household, HouseholdMember, HouseholdRole } from "@shopping-assistant/shared-types";
+import { ApiClientError } from "@shopping-assistant/api-client";
 import { AppShell } from "../../../components/AppShell";
 import { Avatar } from "../../../components/Avatar";
 import { LoadState } from "../../../components/LoadState";
@@ -18,6 +19,24 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 type MemberRow = HouseholdMember & { displayName?: string; phoneE164?: string };
+
+/**
+ * Honest Hebrew error copy (2026-06-12 invite-403 incident): an auth/session
+ * failure must never be reported as "check the phone number". The api-client
+ * already self-heals a stale CSRF once via /me — if the failure still reaches
+ * here, the session itself needs a fresh login.
+ */
+function describeMemberActionError(err: unknown, fallback: string): string {
+  if (err instanceof ApiClientError) {
+    if (err.code === "auth.csrf_invalid" || err.code === "auth.unauthorized" || err.status === 401) {
+      return "החיבור לחשבון פג. רעננו את הדף ונסו שוב — ואם זה חוזר, התחברו מחדש.";
+    }
+    if (err.code === "auth.forbidden") {
+      return "רק בעלים או מנהל יכולים לבצע את הפעולה הזו.";
+    }
+  }
+  return fallback;
+}
 
 export default function MembersPage() {
   const [household, setHousehold] = useState<Household>();
@@ -76,7 +95,7 @@ export default function MembersPage() {
       setInviteLimit("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "לא הצלחנו לשלוח את ההזמנה. נסה שוב.");
+      setError(describeMemberActionError(err, "לא הצלחנו לשלוח את ההזמנה. בדקו את המספר ונסו שוב."));
     } finally {
       setWorking(false);
     }
@@ -90,7 +109,7 @@ export default function MembersPage() {
       await api.removeMember(household.id, memberId);
       setMembers((prev) => prev.filter((m) => m.id !== memberId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "לא הצלחנו להסיר את החבר.");
+      setError(describeMemberActionError(err, "לא הצלחנו להסיר את החבר."));
     }
   }
 
@@ -115,7 +134,7 @@ export default function MembersPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "לא הצלחנו לעדכן את החבר.");
+      setError(describeMemberActionError(err, "לא הצלחנו לעדכן את החבר."));
     }
   }
 
@@ -276,7 +295,7 @@ export default function MembersPage() {
             </a>
           </div>
         )}
-        {error && <div className="status error" style={{ marginTop: 12 }}>לא הצלחנו לשלוח הזמנה. בדקו את המספר ונסו שוב.</div>}
+        {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
       </section>
     </AppShell>
   );
