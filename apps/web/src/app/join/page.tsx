@@ -5,6 +5,8 @@ import { Suspense, useEffect, useState } from "react";
 import type { Household, HouseholdInvite, User } from "@shopping-assistant/shared-types";
 import { ApiClientError } from "@shopping-assistant/api-client";
 import { api } from "../../lib/api";
+import { PhoneInput } from "../../components/PhoneInput";
+import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../lib/countryCodes";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "בעלים",
@@ -24,6 +26,7 @@ function JoinPageInner() {
   const [invite, setInvite] = useState<HouseholdInvite>();
   const [household, setHousehold] = useState<Household>();
   const [currentUser, setCurrentUser] = useState<User>();
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [phone, setPhone] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phase, setPhase] = useState<Phase>("loading");
@@ -50,10 +53,18 @@ function JoinPageInner() {
     event.preventDefault();
     if (!phone.trim()) return;
     setError(undefined);
+    // 2026-06-12 incident: this form used to submit the raw typed string — a
+    // local-format phone ("05x…") fails the backend's E.164 schema. Normalize
+    // exactly like the login screen so the API only ever sees E.164.
+    const e164 = toE164(dialForIso(countryIso), phone);
+    if (!e164) {
+      setError("מספר הטלפון לא נראה תקין.");
+      return;
+    }
     try {
       // Pass the join URL as `next` so the magic link redirects back here after auth
       const nextUrl = `/join?token=${encodeURIComponent(token)}`;
-      await api.requestMagicLink(phone.trim(), nextUrl);
+      await api.requestMagicLink(e164, nextUrl);
       setPhase("link_sent");
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בשליחת הקישור");
@@ -143,19 +154,16 @@ function JoinPageInner() {
           <h1 className="page-title">הצטרפות לבית</h1>
           {householdCard}
           <p className="muted" style={{ marginBottom: 14 }}>הזן את מספר הטלפון שלך כדי לקבל קישור כניסה:</p>
-          <form className="form" onSubmit={sendMagicLink}>
-            <label>
-              מספר טלפון
-              <input
-                className="input"
-                dir="ltr"
-                type="tel"
-                value={phone}
-                placeholder="+972501234567"
-                autoComplete="tel"
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </label>
+          <form className="form" onSubmit={sendMagicLink} noValidate>
+            <label className="auth-field-label" htmlFor="join-phone">מספר טלפון</label>
+            <PhoneInput
+              id="join-phone"
+              countryIso={countryIso}
+              onCountryChange={(iso) => { setCountryIso(iso); setError(undefined); }}
+              phone={phone}
+              onPhoneChange={(v) => { setPhone(v); setError(undefined); }}
+              invalid={Boolean(error)}
+            />
             <button className="button" type="submit" disabled={!phone.trim()}>
               שלח קישור כניסה
             </button>

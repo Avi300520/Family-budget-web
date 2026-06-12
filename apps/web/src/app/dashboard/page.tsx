@@ -17,6 +17,7 @@ import type {
 import { AppShell } from "../../components/AppShell";
 import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
+import { WhatsAppCtaBanner } from "../../components/WhatsAppCta";
 import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
@@ -1052,6 +1053,13 @@ export default function DashboardPage() {
           רענון
         </button>
       </div>
+
+      {/* 2026-06-12 cold-start fix: while the household has no activity, the bot has
+          almost certainly never been messaged — and it CANNOT speak first (Meta 131047
+          outside the 24h window). Actionable bridge, dismissible, hidden once activity
+          exists or when the bot number env is not configured. Family view only —
+          limited members arrive via a WhatsApp invite, so their chat already exists. */}
+      {!isLimited && activity !== undefined && activity.length === 0 && <WhatsAppCtaBanner />}
 
       {isLimited ? (
         <LimitedMemberView budget={budget} membership={membership} />

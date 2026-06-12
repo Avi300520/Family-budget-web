@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "../../lib/api";
+import { WhatsAppCtaButton, botWhatsAppLink } from "../../components/WhatsAppCta";
 
 type HouseholdType = "single" | "couple" | "family";
 
@@ -43,7 +44,12 @@ export default function OnboardingPage() {
         acceptTerms: true,
         acceptPrivacy: true
       });
-      if (householdType === "family") {
+      // 2026-06-12 cold-start fix: a web-first signup has never messaged the bot, so
+      // the bot CANNOT message them first (Meta 131047 outside the 24h window). The
+      // completion screen's WhatsApp CTA has the user open the window — show it for
+      // EVERY household type when the bot number is configured. Without a configured
+      // number the pre-fix behavior is preserved (family screen / straight to dashboard).
+      if (householdType === "family" || botWhatsAppLink()) {
         setDone(true);
       } else {
         router.replace("/dashboard");
@@ -54,17 +60,27 @@ export default function OnboardingPage() {
   }
 
   if (done) {
+    const hasWhatsAppCta = Boolean(botWhatsAppLink());
     return (
       <div className="login-page">
         <section className="login-box" style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>🏠</div>
-          <h1 className="page-title" style={{ marginBottom: 8 }}>הבית נוצר!</h1>
-          <p className="muted" style={{ marginBottom: 22 }}>הצעד הבא — הוסף בני משפחה כדי להתחיל לעקוב יחד אחרי התקציב.</p>
+          <h1 className="page-title" style={{ marginBottom: 8 }}>הבית מוכן!</h1>
+          {hasWhatsAppCta ? (
+            <p className="muted" style={{ marginBottom: 22 }}>
+              פינגטלי עובד בוואטסאפ — שלחו לבוט הודעה ראשונה, וכל ההוצאות והקניות יתנהלו משם.
+            </p>
+          ) : (
+            <p className="muted" style={{ marginBottom: 22 }}>הצעד הבא — הוסף בני משפחה כדי להתחיל לעקוב יחד אחרי התקציב.</p>
+          )}
           <div className="form" style={{ marginInline: "auto" }}>
-            <Link className="button" href="/settings/members" style={{ textDecoration: "none" }}>
-              <UserPlus size={18} aria-hidden />
-              הוסף בני משפחה
-            </Link>
+            <WhatsAppCtaButton />
+            {householdType === "family" && (
+              <Link className={`button${hasWhatsAppCta ? " secondary" : ""}`} href="/settings/members" style={{ textDecoration: "none" }}>
+                <UserPlus size={18} aria-hidden />
+                הוסף בני משפחה
+              </Link>
+            )}
             <Link className="button secondary" href="/dashboard" style={{ textDecoration: "none" }}>
               <Home size={18} aria-hidden />
               לדשבורד בינתיים
