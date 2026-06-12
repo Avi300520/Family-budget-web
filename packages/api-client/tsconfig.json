@@ -1,4 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  // *.test.ts files are synced verbatim from the Backend repo (the source of
+  // truth, where they actually run under vitest). This repo has no vitest, so
+  // typechecking them here would fail on the missing 'vitest' module.
+  "exclude": ["src/**/*.test.ts"]
 }

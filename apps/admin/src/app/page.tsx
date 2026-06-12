@@ -84,7 +84,7 @@ export default function AdminPage() {
             }} />
             <Section title="Receipts" items={overview.receipts} render={(receipt) => (
               <>
-                <strong>{receipt.parsedJson?.merchantName ?? receipt.id}</strong>
+                <strong>{receipt.merchantName ?? receipt.id}</strong>
                 <div className="muted">{receipt.status} · {receipt.confidenceScore}</div>
               </>
             )} />

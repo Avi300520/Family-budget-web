@@ -9,7 +9,16 @@ import type {
   HouseholdMember,
   HouseholdRole,
   MemberActivityHeatmapResponse,
+  AdminAnalyticsEventView,
+  AdminAuditView,
+  AdminEntitlementView,
+  AdminHouseholdView,
+  AdminMessageView,
   AdminOutboxView,
+  AdminProviderLogView,
+  AdminReceiptView,
+  AdminSupportNoteView,
+  AdminWebhookEventView,
   ProjectBudget,
   Purchase,
   Receipt,
@@ -21,9 +30,7 @@ import type {
   SpendingByWeekdayEntry,
   Subscription,
   User,
-  WebhookEvent,
   WeeklyInsightsResponse,
-  WhatsAppMessage,
   WishlistItem,
   WishlistItemPriority
 } from "@shopping-assistant/shared-types";
@@ -101,7 +108,7 @@ export interface AdminQaResetResult {
 }
 
 export function createApiClient(options: ApiClientOptions) {
-  const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+  const rawRequest = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
     const headers = new Headers(init.headers);
     if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
     const method = (init.method ?? "GET").toUpperCase();
@@ -135,6 +142,30 @@ export function createApiClient(options: ApiClientOptions) {
     return data as T;
   };
 
+  // CSRF self-heal (2026-06-12 invite-403 incident): the session cookie outlives
+  // localStorage.csrfToken, so a mutation can fail `auth.csrf_invalid` while the user
+  // is still logged in. On that exact failure, refresh the session once via GET /me
+  // (the server rotates and returns a fresh csrfToken, stored by setCsrfToken above)
+  // and retry the original request exactly ONCE — rawRequest re-reads getCsrfToken()
+  // at send time, so the retry carries the fresh token. If the refresh or the retry
+  // fails, the error propagates: no loops, and real authorization failures are never
+  // masked.
+  const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+    try {
+      return await rawRequest<T>(path, init);
+    } catch (error) {
+      const method = (init.method ?? "GET").toUpperCase();
+      const isMutation = !["GET", "HEAD", "OPTIONS"].includes(method);
+      if (!(error instanceof ApiClientError) || error.code !== "auth.csrf_invalid" || !isMutation) throw error;
+      try {
+        await rawRequest("/api/v1/me");
+      } catch {
+        throw error;
+      }
+      return rawRequest<T>(path, init);
+    }
+  };
+
   return {
     request,
     health: () => request<{ ok: true }>("/health"),
@@ -143,7 +174,14 @@ export function createApiClient(options: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ phone, channel: "whatsapp", purpose: "login", ...(next ? { next } : {}) })
       }),
-    consumeMagicLink: (token: string) => request<AuthSessionPayload>(`/api/v1/auth/magic-link/consume?token=${encodeURIComponent(token)}`),
+    // POST (not GET): consuming a one-time login token is a state change and must only
+    // happen on an explicit user action — link-preview crawlers that render the consume
+    // page (2026-06-12: facebookexternalhit) must never trigger it.
+    consumeMagicLink: (token: string) =>
+      request<AuthSessionPayload>("/api/v1/auth/magic-link/consume", {
+        method: "POST",
+        body: JSON.stringify({ token })
+      }),
     me: () => request<{ user: User; household?: Household; membership?: HouseholdMember; csrfToken: string }>("/api/v1/me"),
     completeOnboarding: (body: {
       displayName: string;
@@ -218,16 +256,16 @@ export function createApiClient(options: ApiClientOptions) {
     adminAuthMe: () => request<{ adminEmail: string; via: string }>("/api/v1/admin/auth/me"),
     adminOverview: () =>
       request<{
-        households: unknown[];
-        receipts: Receipt[];
-        messages: WhatsAppMessage[];
+        households: AdminHouseholdView[];
+        receipts: AdminReceiptView[];
+        messages: AdminMessageView[];
         outbox: AdminOutboxView[];
-        webhookEvents: WebhookEvent[];
-        entitlements: unknown[];
-        analyticsEvents: unknown[];
-        providerLogs: unknown[];
-        supportNotes: unknown[];
-        auditLogs: unknown[];
+        webhookEvents: AdminWebhookEventView[];
+        entitlements: AdminEntitlementView[];
+        analyticsEvents: AdminAnalyticsEventView[];
+        providerLogs: AdminProviderLogView[];
+        supportNotes: AdminSupportNoteView[];
+        auditLogs: AdminAuditView[];
       }>("/api/v1/admin/overview"),
     addSupportNote: (householdId: string, body: string) =>
       request<{ note: unknown }>("/api/v1/admin/support-notes", {

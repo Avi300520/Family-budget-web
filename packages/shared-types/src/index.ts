@@ -325,6 +325,172 @@ export interface AdminOutboxView {
   updatedAt: string;
 }
 
+/**
+ * Admin-safe projection of a webhook event, returned by GET /api/v1/admin/overview
+ * (see the backend `toAdminWebhookEvent`). It deliberately EXCLUDES `rawPayload`
+ * — the raw inbound provider payload can contain the sender's full phone number,
+ * profile name, raw message text, and (for auth/invite events) single-use bearer
+ * tokens — and omits the raw `eventId` (a provider message id). The admin UI only
+ * renders provider/eventType/status. Use this, never the raw WebhookEvent, for
+ * admin surfaces.
+ */
+export interface AdminWebhookEventView {
+  id: string;
+  provider: string;
+  eventType: string;
+  status: WebhookEvent["status"];
+  failureReason?: string;
+  processedAt?: string;
+  createdAt: string;
+}
+
+/**
+ * Admin-safe projection of a WhatsApp message mirror row, returned by
+ * GET /api/v1/admin/overview (see the backend `toAdminMessage`). It deliberately
+ * EXCLUDES `rawPayload` — the raw inbound provider payload carries the sender's
+ * full phone number and profile name — and masks the provider message id.
+ * `normalizedText` is retained for support visibility but link-token scrubbed
+ * (an outbound auth message's text IS a magic link). Use this, never the raw
+ * WhatsAppMessage, for admin surfaces.
+ */
+export interface AdminMessageView {
+  id: string;
+  userId?: string;
+  householdId?: string;
+  whatsappMessageIdMasked?: string;
+  direction: WhatsAppMessage["direction"];
+  messageType: WhatsAppMessage["messageType"];
+  normalizedText?: string;
+  intent?: string;
+  processingStatus: WhatsAppMessage["processingStatus"];
+  createdAt: string;
+}
+
+/**
+ * Admin-safe household summary for GET /api/v1/admin/overview (see the backend
+ * `toAdminHousehold`). It deliberately EXCLUDES the raw owner `User` — full
+ * phone (`phoneE164`), `email`, and `whatsappWaId` must never reach the
+ * overview; the owner appears only as a masked identity. The subscription is
+ * reduced to plan/billing state. Use this, never the raw store record, for
+ * admin surfaces.
+ */
+export interface AdminHouseholdView {
+  household: {
+    id: string;
+    ownerUserId: string;
+    name: string;
+    status: HouseholdStatus;
+    createdAt: string;
+  };
+  owner?: {
+    id: string;
+    displayName?: string;
+    phoneMasked: string;
+  };
+  subscription?: {
+    planCode: PlanCode;
+    status: SubscriptionStatus;
+    trialEndsAt?: string;
+    currentPeriodEnd?: string;
+    cancelAtPeriodEnd: boolean;
+  };
+  budget: BudgetCurrent;
+}
+
+/**
+ * Admin-safe receipt summary for GET /api/v1/admin/overview (see the backend
+ * `toAdminReceipt`). It deliberately EXCLUDES `ocrText` and the full
+ * `parsedJson` body (raw receipt contents are household financial data) and the
+ * image URL fields. Only the merchant name + total survive as a support-facing
+ * summary; full receipt detail stays behind the reason-gated
+ * /admin/receipts/:id/access flow.
+ */
+export interface AdminReceiptView {
+  id: string;
+  householdId: string;
+  uploadedByUserId: string;
+  purchaseId?: string;
+  status: ReceiptStatus;
+  merchantName?: string;
+  totalAmount?: number;
+  confidenceScore?: number;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Admin-safe audit entry for GET /api/v1/admin/overview (see the backend
+ * `toAdminAuditOverview`). It deliberately EXCLUDES `ipAddress`, `userAgent`,
+ * and the free-form `metadata` blob (which can embed phones, emails, links).
+ * Only the typed accountability fields survive.
+ */
+export interface AdminAuditView {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  actorUserId?: string;
+  householdId?: string;
+  adminSubject?: string;
+  reason?: string;
+  createdAt: string;
+}
+
+/**
+ * Admin-safe provider-log entry for GET /api/v1/admin/overview (see the backend
+ * `toAdminProviderLog`). The raw `metadata` blob is NOT exposed (it can carry
+ * raw provider responses, media descriptors, and webhook fragments); only the
+ * allowlisted delivery-reconciliation keys survive, and the correlation id
+ * (often a provider message id / wamid) is masked.
+ */
+export interface AdminProviderLogView {
+  id: string;
+  provider: ProviderLog["provider"];
+  direction: ProviderLog["direction"];
+  eventType: string;
+  status: ProviderLog["status"];
+  correlationIdMasked?: string;
+  failureReason?: string;
+  /** Allowlisted operational keys only: deliveryStatus / errorCode / errorTitle. */
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+/**
+ * Admin-safe analytics entry for GET /api/v1/admin/overview (see the backend
+ * `toAdminAnalyticsEvent`). It deliberately EXCLUDES `properties` — event
+ * properties carry user content (e.g. a shopping item's rawText).
+ */
+export interface AdminAnalyticsEventView {
+  id: string;
+  name: AnalyticsEventName;
+  householdId?: string;
+  userId?: string;
+  createdAt: string;
+}
+
+/** Admin-safe entitlement row for GET /api/v1/admin/overview — explicit pick of the (non-PII) usage counters. */
+export interface AdminEntitlementView {
+  id: string;
+  householdId: string;
+  featureCode: string;
+  limitType: Entitlement["limitType"];
+  limitValue?: number;
+  usedValue: number;
+  periodStart?: string;
+  periodEnd?: string;
+}
+
+/** Admin-safe support-note row for GET /api/v1/admin/overview — admin-authored content, explicit pick. */
+export interface AdminSupportNoteView {
+  id: string;
+  householdId: string;
+  adminSubject: string;
+  body: string;
+  createdAt: string;
+}
+
 export type AnalyticsEventName =
   | "onboarding_started"
   | "onboarding_completed"
