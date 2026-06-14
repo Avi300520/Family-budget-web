@@ -145,7 +145,10 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
   const h = size === "lg" ? 58 : 48;
   const fs = size === "lg" ? 24 : 18;
   return (
-    <div style={{ position: "relative", width: "100%" }}>
+    // direction:ltr keeps the ₪ prefix (insetInlineStart) and the input's
+    // paddingInlineStart on the SAME (left) side, so the glyph never overlaps the
+    // right-aligned digits in the RTL page.
+    <div style={{ position: "relative", width: "100%", direction: "ltr" }}>
       <span className="mono" aria-hidden style={{
         position: "absolute", insetInlineStart: 14, top: "50%", transform: "translateY(-50%)",
         color: "var(--text-2)", fontSize: fs, pointerEvents: "none"
