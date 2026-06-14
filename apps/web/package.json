@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start --port 3000",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --experimental-strip-types --test \"src/lib/authRouting.test.ts\""
+    "test": "node --experimental-strip-types --test \"src/lib/authRouting.test.ts\" \"src/lib/onboarding/model.test.ts\""
   },
   "dependencies": {
     "@shopping-assistant/api-client": "workspace:*",

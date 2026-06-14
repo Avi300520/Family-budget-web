@@ -1,65 +1,50 @@
 "use client";
 
-import { CheckCircle2, Home, UserPlus } from "lucide-react";
+import type { ReactElement } from "react";
+import { Home, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { api } from "../../lib/api";
+import { computeTotals, type StepKey } from "../../lib/onboarding/model";
 import { WhatsAppCtaButton, botWhatsAppLink } from "../../components/WhatsAppCta";
+import { useOnboardingWizard } from "./useOnboardingWizard";
+import {
+  WelcomeStep, ProfileStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
+} from "./steps";
+import styles from "./onboarding.module.css";
 
-type HouseholdType = "single" | "couple" | "family";
+const STEP_META: Record<StepKey, { title: string; sub: string }> = {
+  welcome: { title: "ברוכים הבאים לפינגטלי", sub: "כמה שאלות קצרות ונכין תקציב שמתנהל בוואטסאפ." },
+  profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
+  cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
+  income: { title: "כמה כסף נכנס — וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
+  fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות — שכירות, חשבונות, מנויים ועוד." },
+  budget: { title: "התקציב לניהול וחלוקה לקטגוריות", sub: "מאשרים את הסכום החודשי, ואפשר לחלק אותו." },
+  alerts: { title: "מתי שנעדכן אתכם", sub: "בוחרים אילו התראות תרצו לקבל." },
+  done: { title: "התקציב מוכן 🎉", sub: "" }
+};
 
-const HOUSEHOLD_LABELS: Record<HouseholdType, string> = {
-  single: "יחיד",
-  couple: "זוג",
-  family: "משפחה"
+const STEP_COMPONENTS: Record<Exclude<StepKey, "done">, (props: StepProps) => ReactElement> = {
+  welcome: WelcomeStep,
+  profile: ProfileStep,
+  cycle: CycleStep,
+  income: IncomeStep,
+  fixed: FixedStep,
+  budget: BudgetStep,
+  alerts: AlertsStep
 };
 
 export default function OnboardingPage() {
-  const router = useRouter();
-  const [householdType, setHouseholdType] = useState<HouseholdType>("single");
-  const [displayName, setDisplayName] = useState("");
-  const [householdName, setHouseholdName] = useState("");
-  const [monthlyBudgetAmount, setMonthlyBudgetAmount] = useState<number | "">(5000);
-  const [budgetCycleDay, setBudgetCycleDay] = useState<number>(1);
-  const [defaultCity, setDefaultCity] = useState("");
-  const [acceptTerms, setAcceptTerms] = useState(false);
-  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [done, setDone] = useState(false);
+  const wizard = useOnboardingWizard();
 
-  const canSubmit = displayName.trim() && householdName.trim() && monthlyBudgetAmount && defaultCity.trim() && acceptTerms && acceptPrivacy;
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!canSubmit) return;
-    setError(undefined);
-    try {
-      await api.completeOnboarding({
-        displayName: displayName.trim(),
-        householdName: householdName.trim(),
-        monthlyBudgetAmount: Number(monthlyBudgetAmount),
-        defaultCity: defaultCity.trim(),
-        budgetCycleDay,
-        acceptTerms: true,
-        acceptPrivacy: true
-      });
-      // 2026-06-12 cold-start fix: a web-first signup has never messaged the bot, so
-      // the bot CANNOT message them first (Meta 131047 outside the 24h window). The
-      // completion screen's WhatsApp CTA has the user open the window — show it for
-      // EVERY household type when the bot number is configured. Without a configured
-      // number the pre-fix behavior is preserved (family screen / straight to dashboard).
-      if (householdType === "family" || botWhatsAppLink()) {
-        setDone(true);
-      } else {
-        router.replace("/dashboard");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "לא הצלחנו לסיים את ההגדרה. נסה שוב.");
-    }
+  if (!wizard.ready) {
+    return (
+      <div className="login-page">
+        <p className="muted">טוען…</p>
+      </div>
+    );
   }
 
-  if (done) {
+  // ── Completion screen (preserves the existing wa.me cold-start CTA behavior) ──
+  if (wizard.done) {
     const hasWhatsAppCta = Boolean(botWhatsAppLink());
     return (
       <div className="login-page">
@@ -71,19 +56,19 @@ export default function OnboardingPage() {
               פינגטלי עובד בוואטסאפ — שלחו לבוט הודעה ראשונה, וכל ההוצאות והקניות יתנהלו משם.
             </p>
           ) : (
-            <p className="muted" style={{ marginBottom: 22 }}>הצעד הבא — הוסף בני משפחה כדי להתחיל לעקוב יחד אחרי התקציב.</p>
+            <p className="muted" style={{ marginBottom: 22 }}>הצעד הבא — הוסיפו בני משפחה כדי להתחיל לעקוב יחד אחרי התקציב.</p>
           )}
           <div className="form" style={{ marginInline: "auto" }}>
             <WhatsAppCtaButton />
-            {householdType === "family" && (
+            {wizard.householdType === "family" && (
               <Link className={`button${hasWhatsAppCta ? " secondary" : ""}`} href="/settings/members" style={{ textDecoration: "none" }}>
                 <UserPlus size={18} aria-hidden />
-                הוסף בני משפחה
+                הוסיפו בני משפחה
               </Link>
             )}
             <Link className="button secondary" href="/dashboard" style={{ textDecoration: "none" }}>
               <Home size={18} aria-hidden />
-              לדשבורד בינתיים
+              לדשבורד
             </Link>
           </div>
         </section>
@@ -91,102 +76,53 @@ export default function OnboardingPage() {
     );
   }
 
+  const meta = STEP_META[wizard.stepKey];
+  const StepComponent = STEP_COMPONENTS[wizard.stepKey as Exclude<StepKey, "done">];
+  const totals = computeTotals(wizard.state);
+
   return (
-    <div className="login-page">
-      <section className="login-box">
-        <h1 className="page-title">הגדרת בית חדש</h1>
-        <p className="muted" style={{ marginTop: -16, marginBottom: 18 }}>נגדיר את התקציב והעדפות הקנייה, וזהו — אפשר להתחיל לחסוך.</p>
-        <form className="form" onSubmit={submit}>
-          <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
-            <legend style={{ fontWeight: 600, marginBottom: 8 }}>סוג בית</legend>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              {(Object.keys(HOUSEHOLD_LABELS) as HouseholdType[]).map((type) => (
-                <label key={type} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontWeight: "normal" }}>
-                  <input
-                    type="radio"
-                    name="householdType"
-                    value={type}
-                    checked={householdType === type}
-                    onChange={() => setHouseholdType(type)}
-                  />
-                  {HOUSEHOLD_LABELS[type]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <label>
-            השם שלך
-            <input
-              className="input"
-              value={displayName}
-              placeholder="השם שלך"
-              autoComplete="given-name"
-              onChange={(event) => setDisplayName(event.target.value)}
-            />
-          </label>
-          <label>
-            שם הבית
-            <input
-              className="input"
-              value={householdName}
-              placeholder="למשל: משפחת לוי"
-              onChange={(event) => setHouseholdName(event.target.value)}
-            />
-          </label>
-          <label>
-            תקציב חודשי (₪)
-            <input
-              className="input"
-              type="number"
-              min={100}
-              max={100000}
-              value={monthlyBudgetAmount}
-              placeholder="למשל: 5000"
-              onChange={(event) => setMonthlyBudgetAmount(event.target.value === "" ? "" : Number(event.target.value))}
-            />
-          </label>
-          <label>
-            יום תחילת חודש תקציבי
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={28}
-              value={budgetCycleDay}
-              placeholder="1"
-              onChange={(event) => setBudgetCycleDay(Math.min(28, Math.max(1, Number(event.target.value) || 1)))}
-            />
-            <span className="muted" style={{ fontSize: 13 }}>היום בחודש שבו מתחדש התקציב (1–28). ברירת מחדל: 1.</span>
-          </label>
-          <label>
-            אזור קניות
-            <input
-              className="input"
-              value={defaultCity}
-              placeholder="העיר / שכונה שלך"
-              onChange={(event) => setDefaultCity(event.target.value)}
-            />
-          </label>
-
-          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", fontWeight: "normal" }}>
-              <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} style={{ marginTop: 3, flexShrink: 0 }} />
-              <span>קראתי ואני מסכים/ה ל<a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal)" }}>תנאי השימוש</a></span>
-            </label>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", fontWeight: "normal" }}>
-              <input type="checkbox" checked={acceptPrivacy} onChange={(e) => setAcceptPrivacy(e.target.checked)} style={{ marginTop: 3, flexShrink: 0 }} />
-              <span>קראתי ואני מסכים/ה ל<a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal)" }}>מדיניות הפרטיות</a></span>
-            </label>
+    <div className={styles.shell}>
+      <header className={styles.header}>
+        <div className={styles.headerInner}>
+          <div className={styles.stepMeta}>
+            <span className={styles.stepTitle}>{meta.title}</span>
+            <span className={styles.stepCount}>{wizard.stepIndex}/{wizard.stepCount}</span>
           </div>
+          <div className={styles.segs} aria-hidden>
+            {Array.from({ length: wizard.stepCount }).map((_, i) => {
+              const pos = i + 1;
+              const cls = pos < wizard.stepIndex ? `${styles.seg} ${styles.done}` : pos === wizard.stepIndex ? `${styles.seg} ${styles.active}` : styles.seg;
+              return <span key={i} className={cls} />;
+            })}
+          </div>
+        </div>
+      </header>
 
-          <button className="button" type="submit" disabled={!canSubmit} style={{ opacity: canSubmit ? 1 : 0.5 }}>
-            <CheckCircle2 size={18} aria-hidden />
-            שמירה והמשך
-          </button>
-          {error && <div className="status error">{error}</div>}
-        </form>
-      </section>
+      <main className={styles.scroll}>
+        <div className={`${styles.content} ${styles.contentInner}`}>
+          <h1 className={styles.stepHeading}>{meta.title}</h1>
+          {meta.sub && <p className={styles.stepSub}>{meta.sub}</p>}
+          <StepComponent state={wizard.state} set={wizard.set} totals={totals} />
+        </div>
+      </main>
+
+      <footer className={styles.footer}>
+        <div className={styles.footerInner}>
+          {wizard.error && <div className="status error" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.error}</div>}
+          <div className={styles.footerRow}>
+            {wizard.stepIndex > 1 ? (
+              <button type="button" className="button secondary" onClick={wizard.back} disabled={wizard.working}>חזרה</button>
+            ) : <span />}
+            <span className={styles.grow} />
+            {wizard.canSkip && (
+              <button type="button" className={styles.skip} onClick={wizard.skip} disabled={wizard.working}>דלגו</button>
+            )}
+            <button type="button" className="button" onClick={wizard.next} disabled={wizard.working}>
+              {wizard.working ? "שומר…" : wizard.primaryLabel}
+            </button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

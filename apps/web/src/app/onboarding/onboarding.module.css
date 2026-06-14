@@ -1,0 +1,138 @@
+/* Onboarding wizard layout — mobile-first, RTL, sticky footer + safe-area.
+   Controls themselves use inline token-referencing styles (see controls.tsx);
+   this module owns only the shell/scroll/header/footer chrome. */
+
+.shell {
+  min-height: 100vh;
+  min-height: 100dvh; /* avoids iOS URL-bar jump */
+  display: flex;
+  flex-direction: column;
+  background: var(--cream-0);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--cream-0);
+  border-bottom: 1px solid var(--cream-3);
+  padding: 14px 18px 10px;
+  padding-top: calc(14px + env(safe-area-inset-top));
+}
+
+.headerInner,
+.contentInner,
+.footerInner {
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.stepMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stepTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-0);
+}
+
+.stepCount {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+}
+
+.segs {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cream-3);
+  transition: background 200ms var(--ease);
+}
+.seg.done { background: var(--teal-soft); }
+.seg.active { background: var(--teal); }
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content {
+  padding: 20px 18px 28px;
+}
+
+.stepHeading {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text-0);
+  margin: 0 0 6px;
+}
+
+.stepSub {
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+
+.footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--cream-0);
+  border-top: 1px solid var(--cream-3);
+  padding: 12px 18px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+.footerRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.grow { flex: 1; }
+
+.skip {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px;
+}
+
+/* a soft section card used across steps */
+.block {
+  background: var(--cream-2);
+  border: 1px solid var(--cream-3);
+  border-radius: var(--r-4);
+  padding: 16px;
+  box-shadow: var(--elev-1);
+}
+
+.block + .block { margin-top: 12px; }
+
+@media (max-width: 820px) {
+  .content { padding: 18px 16px 24px; }
+  .stepHeading { font-size: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg { transition: none; }
+}
