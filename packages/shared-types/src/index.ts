@@ -1,6 +1,8 @@
 export * from "./shoppingCategories";
+export * from "./financialBaseline";
 
 import type { ShoppingCategoryId } from "./shoppingCategories";
+import type { FinancialBaseline } from "./financialBaseline";
 
 export type Currency = "ILS";
 export type UserStatus = "onboarding" | "active" | "blocked" | "deleted";
@@ -36,6 +38,12 @@ export interface Household {
   currency: Currency;
   budgetCycleDay: number;
   status: HouseholdStatus;
+  /** Rich onboarding model (Household Financial Baseline Builder). Persisted in
+   *  the `households.financial_baseline` jsonb column. `undefined` when no
+   *  baseline has been captured (DB NULL round-trips to `undefined`). The MANAGED
+   *  budget lives in `monthlyBudgetAmount`; raw income (if any) is only in
+   *  `financialBaseline.budget.income`. */
+  financialBaseline?: FinancialBaseline;
   createdAt: string;
   updatedAt: string;
 }

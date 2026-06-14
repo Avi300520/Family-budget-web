@@ -32,7 +32,8 @@ import type {
   User,
   WeeklyInsightsResponse,
   WishlistItem,
-  WishlistItemPriority
+  WishlistItemPriority,
+  OnboardingBaselineRequest
 } from "@shopping-assistant/shared-types";
 
 export interface ApiClientOptions {
@@ -191,6 +192,9 @@ export function createApiClient(options: ApiClientOptions) {
       budgetCycleDay?: number;
       acceptTerms: true;
       acceptPrivacy: true;
+      // Optional rich onboarding baseline. `monthlyBudgetAmount` is the MANAGED
+      // budget; if a baseline is sent its budget.managedMonthlyBudget MUST equal it.
+      baseline?: OnboardingBaselineRequest;
     }) =>
       request<{ user: User; household: Household }>("/api/v1/onboarding/complete", {
         method: "POST",
