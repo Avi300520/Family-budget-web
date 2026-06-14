@@ -1,6 +1,12 @@
 "use client";
 
 import { ApiClientError } from "@shopping-assistant/api-client";
+import { safeNextPath } from "./authRouting";
+
+// Re-exported so existing imports (`import { safeNextPath } from ".../authGuard"`)
+// keep working; the implementation now lives in the dependency-free authRouting.ts
+// (alongside routeAfterConsume / requiresOnboarding) so it can be unit-tested.
+export { safeNextPath };
 
 /**
  * Minimal router shape we need — avoids importing Next's internal router type.
@@ -8,26 +14,6 @@ import { ApiClientError } from "@shopping-assistant/api-client";
  */
 interface ReplaceRouter {
   replace: (href: string) => void;
-}
-
-/**
- * Sanitize a post-login `next` redirect target to a same-origin RELATIVE path.
- * Returns "/dashboard" for anything unsafe (absent, absolute URL, protocol-relative
- * `//host`, backslash `/\host`, or control characters) so we never introduce an open
- * redirect. Mirrors the backend `sanitizeNextPath` policy (PGS-016).
- */
-export function safeNextPath(path: string | null | undefined): string {
-  if (!path) return "/dashboard";
-  const trimmed = path.trim();
-  if (
-    !trimmed.startsWith("/") ||
-    trimmed.startsWith("//") ||
-    trimmed.startsWith("/\\") ||
-    Array.from(trimmed).some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f)
-  ) {
-    return "/dashboard";
-  }
-  return trimmed;
 }
 
 /**

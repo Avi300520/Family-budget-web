@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ApiClientError } from "@shopping-assistant/api-client";
 import { api } from "../../../lib/api";
-import { safeNextPath } from "../../../lib/authGuard";
+import { routeAfterConsume } from "../../../lib/authRouting";
 
 /**
  * Magic-link landing page — interstitial by design (2026-06-12 incident).
@@ -39,12 +39,11 @@ export default function ConsumeClient() {
     setError(undefined);
     try {
       const result = await api.consumeMagicLink(token);
-      const next = params.get("next");
-      if (next) {
-        router.replace(safeNextPath(next));
-        return;
-      }
-      router.replace(result.hasHousehold ? "/dashboard" : "/onboarding");
+      // A user with no household must onboard FIRST — even if the link carried a
+      // `next` (e.g. `next=/dashboard` baked in by the root redirect). Only a user
+      // who already has a household honors `next` (else falls back to /dashboard).
+      // (2026-06-14 incident — see lib/authRouting.ts.)
+      router.replace(routeAfterConsume(result.hasHousehold, params.get("next")));
     } catch (err) {
       setError(describeConsumeError(err));
       setWorking(false);

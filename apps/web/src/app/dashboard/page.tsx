@@ -22,6 +22,7 @@ import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
+import { requiresOnboarding } from "../../lib/authRouting";
 
 // ── Category display definitions (no spend data — Iteration 5 will wire real data) ──
 const CATEGORIES: ReadonlyArray<{ key: string; label: string; color: string }> = [
@@ -937,6 +938,14 @@ export default function DashboardPage() {
     setError(undefined);
     try {
       const me = await api.me();
+      // No household yet — an authenticated user who never finished onboarding
+      // (or whose login `next` pointed straight here). The dashboard has nothing
+      // to render, so send them to onboarding instead of hanging on LoadState
+      // forever. (2026-06-14 incident — see lib/authRouting.ts.)
+      if (requiresOnboarding(me.household)) {
+        router.replace("/onboarding");
+        return;
+      }
       setUser(me.user);
       setHousehold(me.household);
       setMembership(me.membership);
