@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import {
   createDefaultState, computeTotals, validateStep, buildOnboardingPayload,
-  suggestedManagedBudget, loadDraft, saveDraft, clearDraft,
+  suggestedManagedBudget, loadDraft, saveDraft, clearDraft, humanizeOnboardingError,
   STEP_ORDER, type StepKey, type WizardState
 } from "../../lib/onboarding/model";
 
@@ -119,7 +119,8 @@ export function useOnboardingWizard(): WizardController {
       if (userIdRef.current) clearDraft(userIdRef.current);
       goTo(STEP_ORDER.indexOf("done"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "לא הצלחנו לסיים את ההגדרה. נסו שוב.");
+      // Translate the API error to Hebrew by code; never surface a raw English / JSON message.
+      setError(humanizeOnboardingError(err));
     } finally {
       setWorking(false);
     }

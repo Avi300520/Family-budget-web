@@ -17,9 +17,23 @@ import {
   saveDraft,
   loadDraft,
   clearDraft,
+  coerceDraftState,
+  humanizeOnboardingError,
   type WizardState,
   type WizardFixedExpense
 } from "./model.ts";
+
+function withWindow(run: () => void): void {
+  const store: Record<string, string> = {};
+  (globalThis as unknown as { window: unknown }).window = {
+    localStorage: {
+      getItem: (k: string) => (k in store ? store[k] : null),
+      setItem: (k: string, v: string) => { store[k] = v; },
+      removeItem: (k: string) => { delete store[k]; }
+    }
+  };
+  try { run(); } finally { delete (globalThis as unknown as { window?: unknown }).window; }
+}
 
 function fixed(partial: Partial<WizardFixedExpense>): WizardFixedExpense {
   return {
@@ -164,4 +178,83 @@ test("draft: user-scoped save/load round-trips; expired + wrong-user are ignored
   clearDraft("user-1");
   assert.equal(loadDraft("user-1", now), null);
   delete (globalThis as unknown as { window?: unknown }).window;
+});
+
+test("coerceDraftState repairs a corrupt/stale draft onto defaults; the result never crashes computeTotals", () => {
+  const safe = coerceDraftState({
+    displayName: "אבי",
+    fixed: "not-an-array",        // wrong type → []
+    subBudgets: null,             // wrong type → {}
+    alerts: undefined,            // missing → defaults
+    budgetMode: "nonsense",       // invalid enum → default
+    income: "oops",               // invalid number → ""
+    kidAges: ["7-12", "bad"]      // invalid bracket dropped
+  });
+  assert.ok(safe);
+  assert.equal(safe!.displayName, "אבי");
+  assert.deepEqual(safe!.fixed, []);
+  assert.deepEqual(safe!.subBudgets, {});
+  assert.equal(safe!.alerts.cat80, true);
+  assert.equal(safe!.budgetMode, "income");
+  assert.equal(safe!.income, "");
+  assert.deepEqual(safe!.kidAges, ["7-12"]);
+  assert.doesNotThrow(() => computeTotals(safe!)); // the pre-fix crash site
+});
+
+test("coerceDraftState keeps a fixed array but drops malformed entries", () => {
+  const safe = coerceDraftState({
+    fixed: [
+      { label: "שכירות", reportCat: "home", amount: 6500, frequency: "monthly" },
+      "garbage",
+      { label: "bad freq", reportCat: "home", amount: 100, frequency: "fortnightly" } // freq → "monthly"
+    ]
+  });
+  assert.ok(safe);
+  assert.equal(safe!.fixed.length, 2);
+  assert.equal(safe!.fixed[0]!.frequency, "monthly");
+  assert.equal(safe!.fixed[1]!.frequency, "monthly"); // invalid coerced to default
+  assert.doesNotThrow(() => totalMonthlyFixed(safe!));
+});
+
+test("coerceDraftState rejects a non-object payload (caller then clears the key)", () => {
+  assert.equal(coerceDraftState("a-string"), null);
+  assert.equal(coerceDraftState(42), null);
+  assert.equal(coerceDraftState(null), null);
+  assert.equal(coerceDraftState([1, 2]), null);
+});
+
+test("loadDraft purges + returns null when the stored state is not an object", () => {
+  withWindow(() => {
+    const key = "pingtally_onb_draft_v1:user-x";
+    (globalThis as unknown as { window: { localStorage: { setItem: (k: string, v: string) => void; getItem: (k: string) => string | null } } })
+      .window.localStorage.setItem(key, JSON.stringify({ savedAt: 1000, userId: "user-x", state: "corrupt" }));
+    assert.equal(loadDraft("user-x", 1000), null);
+    assert.equal(
+      (globalThis as unknown as { window: { localStorage: { getItem: (k: string) => string | null } } }).window.localStorage.getItem(key),
+      null
+    ); // purged
+  });
+});
+
+test("loadDraft repairs a partial draft instead of throwing", () => {
+  withWindow(() => {
+    const partial = createDefaultState();
+    // Simulate a stale-schema payload: drop the fields the wizard reduces/iterates over.
+    const broken = { ...partial, fixed: null, subBudgets: 5, alerts: "x" } as unknown as WizardState;
+    saveDraft("user-y", broken, 1000);
+    const loaded = loadDraft("user-y", 1000);
+    assert.ok(loaded);
+    assert.deepEqual(loaded!.fixed, []);
+    assert.deepEqual(loaded!.subBudgets, {});
+    assert.equal(loaded!.alerts.cat80, true);
+    assert.doesNotThrow(() => computeTotals(loaded!));
+  });
+});
+
+test("humanizeOnboardingError maps codes to Hebrew and never echoes raw server text", () => {
+  assert.match(humanizeOnboardingError({ code: "validation.invalid", message: "Invalid request body" }), /לא תקינים/);
+  assert.match(humanizeOnboardingError({ code: "auth.csrf_invalid" }), /התחברו שוב/);
+  const generic = humanizeOnboardingError(new Error("boom: secret-internal-detail"));
+  assert.match(generic, /נסו שוב/);
+  assert.equal(generic.includes("secret-internal-detail"), false);
 });

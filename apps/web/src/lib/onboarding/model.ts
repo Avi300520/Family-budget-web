@@ -376,6 +376,99 @@ export function saveDraft(userId: string, state: WizardState, now: number): void
   }
 }
 
+// ── Defensive draft coercion ─────────────────────────────────────────────────────
+// A corrupt, hand-edited (devtools), or stale-schema draft must NEVER crash the wizard
+// — computeTotals/steps do state.fixed.reduce(…), Object.values(state.subBudgets), and
+// state.alerts[…]. We START from a valid default and overlay ONLY fields that pass a
+// type/enum guard, so missing fields get defaults and wrong-typed fields are dropped.
+// Returns null only when the payload is not an object at all (the caller then clears the key).
+const PROFILE_TYPES: ReadonlyArray<HouseholdProfileType> = ["single", "couple", "family", "roomies"];
+const BUDGET_BASES: ReadonlyArray<BudgetBasis> = ["calendar", "salary"];
+const BUDGET_MODES: ReadonlyArray<BudgetMode> = ["income", "budget"];
+const BASELINE_MODES: ReadonlyArray<FinancialBaselineMode> = ["quick", "precise"];
+const REPORT_CAT_IDS: ReadonlyArray<ReportCatId> = REPORT_CATEGORIES.map((c) => c.id);
+const SUB_BUDGET_CAT_IDS: ReadonlyArray<SubBudgetCatId> = SUB_BUDGET_CATS.map((c) => c.id);
+const FREQUENCY_IDS: ReadonlyArray<FrequencyId> = FREQUENCIES.map((f) => f.id);
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function inEnum<T extends string>(v: unknown, allowed: ReadonlyArray<T>): v is T {
+  return typeof v === "string" && (allowed as ReadonlyArray<string>).includes(v);
+}
+function numberOrEmpty(v: unknown): number | "" {
+  return typeof v === "number" && Number.isFinite(v) ? v : "";
+}
+function finiteNumber(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+function coerceFixedExpense(raw: unknown): WizardFixedExpense | null {
+  if (!isPlainObject(raw)) return null;
+  return {
+    key: typeof raw.key === "string" ? raw.key
+      : typeof raw.sourcePresetId === "string" ? raw.sourcePresetId
+      : `f_${Math.random().toString(36).slice(2)}`,
+    sourcePresetId: typeof raw.sourcePresetId === "string" ? raw.sourcePresetId : null,
+    isCustom: raw.isCustom === true,
+    on: raw.on !== false,
+    label: typeof raw.label === "string" ? raw.label : "",
+    reportCat: inEnum(raw.reportCat, REPORT_CAT_IDS) ? raw.reportCat : "misc",
+    emoji: typeof raw.emoji === "string" ? raw.emoji : "💸",
+    amount: numberOrEmpty(raw.amount),
+    frequency: inEnum(raw.frequency, FREQUENCY_IDS) ? raw.frequency : "monthly",
+    isEstimate: raw.isEstimate === true,
+    alertOnChange: raw.alertOnChange === true,
+    billingDay: typeof raw.billingDay === "number" && Number.isFinite(raw.billingDay) ? raw.billingDay : null
+  };
+}
+
+/** Coerce an untrusted, possibly-corrupt loaded draft into a guaranteed-safe WizardState
+ *  by overlaying validated fields onto a fresh default. Returns null only for a non-object. */
+export function coerceDraftState(raw: unknown): WizardState | null {
+  if (!isPlainObject(raw)) return null;
+  const s = createDefaultState();
+  if (inEnum(raw.mode, BASELINE_MODES)) s.mode = raw.mode;
+  if (inEnum(raw.householdType, PROFILE_TYPES)) s.householdType = raw.householdType;
+  s.adults = finiteNumber(raw.adults, s.adults);
+  s.kids = finiteNumber(raw.kids, s.kids);
+  if (Array.isArray(raw.kidAges)) s.kidAges = raw.kidAges.filter((a): a is KidAgeBracket => inEnum(a, KID_AGE_BRACKETS));
+  if (typeof raw.displayName === "string") s.displayName = raw.displayName;
+  if (typeof raw.householdName === "string") s.householdName = raw.householdName;
+  if (typeof raw.city === "string") s.city = raw.city;
+  s.cars = finiteNumber(raw.cars, s.cars);
+  if (typeof raw.acceptTerms === "boolean") s.acceptTerms = raw.acceptTerms;
+  if (typeof raw.acceptPrivacy === "boolean") s.acceptPrivacy = raw.acceptPrivacy;
+  if (inEnum(raw.basis, BUDGET_BASES)) s.basis = raw.basis;
+  s.startDay = finiteNumber(raw.startDay, s.startDay);
+  s.salaryDay = finiteNumber(raw.salaryDay, s.salaryDay);
+  s.creditDay = finiteNumber(raw.creditDay, s.creditDay);
+  s.incomeCount = finiteNumber(raw.incomeCount, s.incomeCount);
+  if (inEnum(raw.budgetMode, BUDGET_MODES)) s.budgetMode = raw.budgetMode;
+  s.income = numberOrEmpty(raw.income);
+  s.managedBudget = numberOrEmpty(raw.managedBudget);
+  if (typeof raw.managedTouched === "boolean") s.managedTouched = raw.managedTouched;
+  if (Array.isArray(raw.fixed)) {
+    s.fixed = raw.fixed.map(coerceFixedExpense).filter((f): f is WizardFixedExpense => f !== null);
+  }
+  if (isPlainObject(raw.subBudgets)) {
+    const sb: Partial<Record<SubBudgetCatId, number>> = {};
+    for (const id of SUB_BUDGET_CAT_IDS) {
+      const v = raw.subBudgets[id];
+      if (typeof v === "number" && Number.isFinite(v)) sb[id] = v;
+    }
+    s.subBudgets = sb;
+  }
+  if (isPlainObject(raw.alerts)) {
+    const a: BaselineAlerts = { ...DEFAULT_ALERTS };
+    for (const k of Object.keys(DEFAULT_ALERTS) as Array<keyof BaselineAlerts>) {
+      const v = raw.alerts[k];
+      if (typeof v === "boolean") a[k] = v;
+    }
+    s.alerts = a;
+  }
+  return s;
+}
+
 export function loadDraft(userId: string, now: number): WizardState | null {
   if (typeof window === "undefined") return null;
   try {
@@ -390,7 +483,14 @@ export function loadDraft(userId: string, now: number): WizardState | null {
       window.localStorage.removeItem(draftKey(userId));
       return null;
     }
-    return env.state ?? null;
+    // Structurally validate the stored state (not just the envelope): a corrupt or
+    // stale-schema payload is repaired onto defaults; a non-object is rejected + purged.
+    const safe = coerceDraftState(env.state);
+    if (!safe) {
+      window.localStorage.removeItem(draftKey(userId));
+      return null;
+    }
+    return safe;
   } catch {
     return null;
   }
@@ -402,5 +502,25 @@ export function clearDraft(userId: string): void {
     window.localStorage.removeItem(draftKey(userId));
   } catch {
     /* ignore */
+  }
+}
+
+// ── Human-facing error copy for the onboarding submit (Hebrew-only) ──────────────
+// Maps a known API error code to a short Hebrew message. A raw server message (English,
+// or a Zod/JSON blob) must NEVER reach the UI — anything unrecognized falls back to a
+// generic Hebrew sentence. Reads `code` defensively so any thrown value is safe input.
+export function humanizeOnboardingError(err: unknown): string {
+  const code = isPlainObject(err) && typeof err.code === "string" ? err.code : undefined;
+  switch (code) {
+    case "validation.invalid":
+      return "חלק מהפרטים לא תקינים. בדקו את הסכומים והפרטים, ונסו שוב.";
+    case "auth.csrf_invalid":
+    case "auth.unauthorized":
+    case "auth.forbidden":
+      return "פג תוקף החיבור. רעננו את העמוד והתחברו שוב.";
+    case "http.body_too_large":
+      return "יש יותר מדי פרטים. נסו להסיר כמה הוצאות קבועות ולסיים שוב.";
+    default:
+      return "לא הצלחנו לסיים את ההגדרה. נסו שוב.";
   }
 }
