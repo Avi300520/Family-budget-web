@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { RefreshCw, SlidersHorizontal } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type {
@@ -23,7 +23,6 @@ import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
 import { requiresOnboarding } from "../../lib/authRouting";
-import { canEditBaseline } from "../../lib/settingsView";
 
 // ── Category display definitions (no spend data — Iteration 5 will wire real data) ──
 const CATEGORIES: ReadonlyArray<{ key: string; label: string; color: string }> = [
@@ -1071,22 +1070,9 @@ export default function DashboardPage() {
           limited members arrive via a WhatsApp invite, so their chat already exists. */}
       {!isLimited && activity !== undefined && activity.length === 0 && <WhatsAppCtaBanner />}
 
-      {/* Late onboarding / edit baseline — owner/admin can re-open the wizard to
-          complete or correct the household financial baseline (income, fixed
-          expenses, sub-budgets, alerts). Gated to owner/admin to match the backend
-          SEC-01b guard; limited_member never sees it. */}
-      {canEditBaseline({ role, permissions: membership?.permissions }) && (
-        <div style={{ marginBottom: "var(--sp-5)" }}>
-          <Link
-            className="button secondary"
-            href="/onboarding?mode=edit"
-            style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}
-          >
-            <SlidersHorizontal size={16} aria-hidden />
-            עדכון פרטי משק הבית
-          </Link>
-        </div>
-      )}
+      {/* Baseline edit has a single primary entry point — the "עדכון בסיס התקציב"
+          card in /settings (2026-06-17 de-duplication; the dashboard button + the
+          /settings/household section were removed to avoid 3 entries / 2 labels). */}
 
       {isLimited ? (
         <LimitedMemberView budget={budget} membership={membership} />

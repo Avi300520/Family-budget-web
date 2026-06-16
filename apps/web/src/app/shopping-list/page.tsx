@@ -54,9 +54,10 @@ function groupByCategory(
     .map((meta) => ({ ...meta, items: buckets.get(meta.id) ?? [] }));
 }
 
-// ── RouteMap (horizontal walking path) ────────────────────────────────────────
+// ── CategoryStrip — overview of the list's categories (grouped by category, NOT a
+//    store walking-route; brand rule forbids any in-store walking-order framing) ──
 function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCategoryId> }) {
-  const stations = SHOPPING_CATEGORIES;
+  const categories = SHOPPING_CATEGORIES;
   return (
     <section className="card" style={{ padding: "var(--sp-5)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", marginBottom: "var(--sp-3)" }}>
@@ -95,7 +96,7 @@ function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCatego
           }}
         />
 
-        {stations.map((cat) => (
+        {categories.map((cat) => (
           <RouteDot
             key={cat.id}
             icon={cat.icon}
@@ -374,7 +375,7 @@ function CardsView({
         gap: "var(--sp-4)",
       }}
     >
-      {groups.map((group, idx) => {
+      {groups.map((group) => {
         const color = CATEGORY_COLORS[group.id];
         const total = group.items.length;
         const purchased = group.items.filter((i) => i.status === "purchased").length;
@@ -412,7 +413,7 @@ function CardsView({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{group.nameHe}</div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  תחנה <span className="mono">{idx + 1}</span> • <span className="mono">{purchased}/{total}</span> בעגלה
+                  <span className="mono">{purchased}/{total}</span> בעגלה
                 </div>
               </div>
             </header>
@@ -481,10 +482,6 @@ function ListView({
               />
               <span className="muted" style={{ fontSize: 12 }}>
                 <span className="mono">{group.items.length}</span> פריטים
-              </span>
-              <span style={{ flex: 1 }} />
-              <span className="label" style={{ color, fontSize: 10 }}>
-                תחנה <span className="mono">{idx + 1}</span>
               </span>
             </div>
             {group.items.map((item) => {

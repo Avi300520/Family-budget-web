@@ -13,9 +13,9 @@ interface NavLink {
   roles: HouseholdRole[] | "all";
 }
 
-// Receipts and the dev-inbox have been intentionally moved out of the primary
-// nav: receipts live as a card on the dashboard; the dev-inbox is internal
-// tooling, reached directly by URL during local development.
+// Receipts, export, and the dev-inbox are intentionally NOT primary nav items.
+// Receipts ("קבלות") and export ("ייצוא נתונים") are discoverable as cards in
+// /settings (2026-06-17); the dev-inbox is internal tooling, reached by URL in dev.
 const ALL_LINKS: NavLink[] = [
   { href: "/dashboard",        label: "דשבורד",        icon: LayoutDashboard, roles: "all" },
   { href: "/shopping-list",    label: "רשימת קניות",   icon: ListChecks,      roles: "all" },
@@ -26,11 +26,14 @@ const ALL_LINKS: NavLink[] = [
   // Iteration 9 — DashboardB / Family Pulse. Owner/admin/adult_member:
   // same role scope as /budget and /insights (limited_member hidden client-side;
   // server returns 403 on all three /family/pulse endpoints).
-  { href: "/family/pulse",    label: "פעילות",           icon: Activity,        roles: ["owner", "admin", "adult_member"] },
+  // Renamed פעילות→ניתוח (2026-06-17): this destination is the analytics/breakdown page
+  // (member & weekday spend + activity heatmap), distinct from the dashboard's
+  // "הפעילות שלנו" event feed — the shared "פעילות" label was a confusing collision.
+  { href: "/family/pulse",    label: "ניתוח",            icon: Activity,        roles: ["owner", "admin", "adult_member"] },
   // Iteration 8 — children's wishlists (parent surface). Owner/admin ONLY:
   // adult_member is NOT a parent for the wishlist, and the server returns 403
   // for both adult_member and limited_member on /households/:id/wishlist.
-  { href: "/family/wishlists", label: "משאלות",         icon: Gift,            roles: ["owner", "admin"] },
+  { href: "/family/wishlists", label: "משאלות הילדים",   icon: Gift,            roles: ["owner", "admin"] },
   { href: "/settings",         label: "הגדרות",         icon: Settings,        roles: "all" }
 ];
 

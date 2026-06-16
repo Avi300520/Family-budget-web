@@ -110,7 +110,7 @@ export default function FamilyPulsePage() {
     <AppShell>
       <div style={{ display: "grid", gap: "var(--sp-5)", maxWidth: 780 }}>
         <header style={{ display: "grid", gap: "var(--sp-2)" }}>
-          <h1 className="h1">פעילות המשפחה 📊</h1>
+          <h1 className="h1">ניתוח המשפחה 📊</h1>
           <div className="muted" style={{ fontSize: 13 }}>
             הוצאות לפי חבר, יום בשבוע, ופעילות יומית.
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CreditCard, Home, RefreshCw, Rocket, ShieldCheck, SlidersHorizontal, Users, Wallet } from "lucide-react";
+import { CreditCard, Download, Home, Receipt, RefreshCw, Rocket, ShieldCheck, SlidersHorizontal, Users, Wallet } from "lucide-react";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
 import { useViewer } from "../../lib/useViewer";
@@ -59,6 +59,23 @@ const CARDS: SettingCard[] = [
     description: "ניהול מסלול, פרטי תשלום והיסטוריית חשבוניות.",
     icon: CreditCard,
     can: canViewBilling
+  },
+  {
+    // Receipts: any member (incl. limited_member) may upload a receipt — owner decision.
+    href: "/receipts",
+    title: "קבלות",
+    description: "צילום קבלה והשלמת הפרטים אוטומטית.",
+    icon: Receipt,
+    can: () => true
+  },
+  {
+    // Export: household expense data. Backend 403s limited_member (server.ts), so gate to
+    // owner/admin/adult_member — the same set as canViewHouseholdMembers.
+    href: "/export",
+    title: "ייצוא נתונים",
+    description: "הורדת ההוצאות החודשיות כקובץ CSV.",
+    icon: Download,
+    can: canViewHouseholdMembers
   },
   {
     href: "/privacy",

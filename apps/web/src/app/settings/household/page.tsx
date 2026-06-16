@@ -1,17 +1,15 @@
 "use client";
 
-import { CheckCircle2, SlidersHorizontal } from "lucide-react";
-import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../../components/AppShell";
 import { api } from "../../../lib/api";
 import { useViewer } from "../../../lib/useViewer";
-import { canEditBaseline, canEditHouseholdSettings } from "../../../lib/settingsView";
+import { canEditHouseholdSettings } from "../../../lib/settingsView";
 
 export default function HouseholdSettingsPage() {
   const viewer = useViewer();
   const canEdit = canEditHouseholdSettings(viewer.caps);
-  const canBaseline = canEditBaseline(viewer.caps);
   const [householdId, setHouseholdId] = useState<string>();
   const [monthlyBudgetAmount, setMonthlyBudgetAmount] = useState<number | "">("");
   const [budgetCycleDay, setBudgetCycleDay] = useState<number>(1);
@@ -111,21 +109,6 @@ export default function HouseholdSettingsPage() {
           {error && <div className="status error">{error}</div>}
         </form>
       </section>
-
-      {canBaseline && (
-        <section className="panel" style={{ maxWidth: 480, marginTop: 16 }}>
-          <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <SlidersHorizontal size={18} aria-hidden />
-            עריכה מתקדמת
-          </h2>
-          <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>
-            בנו מחדש את בסיס התקציב — הכנסות, הוצאות קבועות, תקציבי קטגוריות והתראות.
-          </p>
-          <Link className="button secondary" href="/onboarding?mode=edit" style={{ textDecoration: "none" }}>
-            עדכון בסיס התקציב
-          </Link>
-        </section>
-      )}
     </AppShell>
   );
 }
