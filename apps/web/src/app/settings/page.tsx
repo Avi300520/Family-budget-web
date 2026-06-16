@@ -2,18 +2,25 @@
 
 import Link from "next/link";
 import { CreditCard, Home, RefreshCw, Rocket, ShieldCheck, SlidersHorizontal, Users, Wallet } from "lucide-react";
-import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
 import { useViewer } from "../../lib/useViewer";
-import { filterByRole } from "../../lib/settingsView";
+import {
+  canEditBaseline,
+  canViewBilling,
+  canViewCategoryBudgets,
+  canViewHouseholdMembers,
+  canViewHouseholdSettings,
+  type ViewerCaps
+} from "../../lib/settingsView";
 
 interface SettingCard {
   href: string;
   title: string;
   description: string;
   icon: typeof Users;
-  roles: HouseholdRole[] | "all";
+  /** Capability predicate — gates on role + permissions, aligned with backend authz. */
+  can: (caps: ViewerCaps) => boolean;
 }
 
 const CARDS: SettingCard[] = [
@@ -22,46 +29,47 @@ const CARDS: SettingCard[] = [
     title: "הגדרות בית",
     description: "תקציב חודשי, יום תחילת חודש ואזור קניות.",
     icon: Home,
-    roles: ["owner", "admin"]
+    can: canViewHouseholdSettings
   },
   {
     href: "/settings/members",
     title: "חברי בית",
     description: "הזמנת בני משפחה, תפקידים ותקציבים אישיים.",
     icon: Users,
-    roles: ["owner", "admin"]
+    can: canViewHouseholdMembers
   },
   {
     href: "/settings/category-budgets",
     title: "תקציבי קטגוריות",
     description: "קביעת תקרה חודשית להוצאות לפי קטגוריה.",
     icon: Wallet,
-    roles: ["owner", "admin"]
+    can: canViewCategoryBudgets
   },
   {
     // Late onboarding / edit mode — re-run the wizard against the existing household.
-    // Owner/admin only (mirrors the backend SEC-01b guard on /onboarding/complete).
     href: "/onboarding?mode=edit",
     title: "עדכון בסיס התקציב",
     description: "עריכת הכנסות, הוצאות קבועות, תקציבי קטגוריות והתראות.",
     icon: SlidersHorizontal,
-    roles: ["owner", "admin"]
+    can: canEditBaseline
   },
   {
     href: "/billing",
     title: "תשלום ומסלול",
     description: "ניהול מסלול, פרטי תשלום והיסטוריית חשבוניות.",
     icon: CreditCard,
-    roles: ["owner", "admin"]
+    can: canViewBilling
   },
   {
     href: "/privacy",
     title: "פרטיות ותנאים",
     description: "מדיניות הפרטיות ותנאי השימוש.",
     icon: ShieldCheck,
-    roles: "all"
+    can: () => true
   }
 ];
+
+const PRIVACY_CARD = CARDS[CARDS.length - 1]!;
 
 function CardLink({ card }: { card: SettingCard }) {
   const Icon = card.icon;
@@ -80,8 +88,8 @@ export default function SettingsPage() {
   const viewer = useViewer();
 
   // Still resolving who the viewer is — show a loader, never the degraded
-  // (privacy-only) menu. This was the production "only a privacy card" symptom:
-  // a slow/empty /me left role undefined and only the roles:"all" card rendered.
+  // (privacy-only) menu. (A slow/empty /me previously left role undefined and only
+  // the roles:"all" card rendered → the production "only a privacy card" symptom.)
   if (viewer.status === "loading") {
     return (
       <AppShell>
@@ -92,7 +100,6 @@ export default function SettingsPage() {
   }
 
   // /me failed — be honest and offer a retry instead of silently hiding management.
-  // The privacy/terms link is always available regardless.
   if (viewer.status === "error") {
     return (
       <AppShell>
@@ -106,7 +113,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <section className="grid two">
-          <CardLink card={CARDS[CARDS.length - 1]!} />
+          <CardLink card={PRIVACY_CARD} />
         </section>
       </AppShell>
     );
@@ -127,15 +134,17 @@ export default function SettingsPage() {
             </h2>
             <p className="muted">כמה שאלות קצרות ונכין את התקציב שמתנהל בוואטסאפ.</p>
           </Link>
-          <CardLink card={CARDS[CARDS.length - 1]!} />
+          <CardLink card={PRIVACY_CARD} />
         </section>
       </AppShell>
     );
   }
 
-  // Ready with a household — show the cards permitted for the resolved role.
-  // limited_member sees only the roles:"all" cards (privacy); owner/admin see all.
-  const visibleCards = filterByRole(CARDS, viewer.role);
+  // Ready with a household — show every card the viewer's capabilities permit.
+  // owner/admin see all; adult_member sees members (+ household settings when
+  // permissions.all); limited_member sees only privacy. Capabilities mirror the
+  // backend so a surfaced card never 403s on the action it implies.
+  const visibleCards = CARDS.filter((card) => card.can(viewer.caps));
 
   return (
     <AppShell>

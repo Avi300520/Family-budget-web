@@ -1075,7 +1075,7 @@ export default function DashboardPage() {
           complete or correct the household financial baseline (income, fixed
           expenses, sub-budgets, alerts). Gated to owner/admin to match the backend
           SEC-01b guard; limited_member never sees it. */}
-      {canEditBaseline(role) && (
+      {canEditBaseline({ role, permissions: membership?.permissions }) && (
         <div style={{ marginBottom: "var(--sp-5)" }}>
           <Link
             className="button secondary"
