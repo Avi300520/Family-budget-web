@@ -23,6 +23,7 @@ import type {
   FinancialBaselineMode,
   KidAgeBracket,
   BaselineAlerts,
+  FinancialBaseline,
   OnboardingBaselineRequest
 } from "@shopping-assistant/shared-types";
 
@@ -462,6 +463,116 @@ export function coerceDraftState(raw: unknown): WizardState | null {
     const a: BaselineAlerts = { ...DEFAULT_ALERTS };
     for (const k of Object.keys(DEFAULT_ALERTS) as Array<keyof BaselineAlerts>) {
       const v = raw.alerts[k];
+      if (typeof v === "boolean") a[k] = v;
+    }
+    s.alerts = a;
+  }
+  return s;
+}
+
+// ── Edit mode: reverse-map a persisted baseline → wizard state ───────────────────
+// For "late onboarding / edit onboarding": an owner/admin re-enters the wizard at
+// /onboarding?mode=edit to correct or complete their household baseline. We rebuild
+// the wizard state from the persisted `financial_baseline` (+ household fallbacks for
+// a pre-baseline household), so every field is pre-populated. Pure + defensive: it
+// starts from a valid default and overlays ONLY present, type-valid fields — a
+// missing/partial/legacy baseline degrades gracefully to the household fallbacks and
+// defaults rather than crashing the wizard. The submit path is unchanged (the backend
+// `completeOnboarding` UPSERTs the existing household in place — no duplicate).
+export interface BaselineEditSource {
+  /** The persisted baseline (NULL/undefined for a pre-baseline household → fallbacks used). */
+  financialBaseline?: FinancialBaseline | null;
+  /** Household-level fallbacks (used when the baseline is absent or partial). */
+  name?: string;
+  monthlyBudgetAmount?: number;
+  defaultCity?: string | null;
+  budgetCycleDay?: number;
+}
+
+function fixedFromBaseline(raw: unknown): WizardFixedExpense | null {
+  if (!isPlainObject(raw)) return null;
+  const sourcePresetId = typeof raw.sourcePresetId === "string" ? raw.sourcePresetId : null;
+  const preset = sourcePresetId ? FIXED_PRESETS.find((p) => p.id === sourcePresetId) : undefined;
+  return {
+    // The wizard list key: prefer the server uuid, then the preset id, then a fresh local key.
+    key: typeof raw.id === "string" && raw.id ? raw.id : sourcePresetId ?? `f_${Math.random().toString(36).slice(2)}`,
+    sourcePresetId,
+    isCustom: raw.isCustom === true,
+    // Baseline persists `isActive` (the wizard toggle is `on`). Default to on when absent.
+    on: raw.isActive !== false,
+    label: typeof raw.label === "string" ? raw.label : preset?.label ?? "",
+    reportCat: inEnum(raw.reportCat, REPORT_CAT_IDS) ? raw.reportCat : preset?.reportCat ?? "misc",
+    // Emoji is display-only and never persisted — recover it from the preset, else a generic glyph.
+    emoji: preset?.emoji ?? "💸",
+    amount: numberOrEmpty(raw.amount),
+    frequency: inEnum(raw.frequency, FREQUENCY_IDS) ? raw.frequency : preset?.frequency ?? "monthly",
+    isEstimate: raw.isEstimate === true,
+    alertOnChange: raw.alertOnChange === true,
+    billingDay: typeof raw.billingDay === "number" && Number.isFinite(raw.billingDay) ? raw.billingDay : null
+  };
+}
+
+/** Build a guaranteed-safe WizardState for edit mode from the persisted baseline plus
+ *  household fallbacks. Overlays only validated fields onto a fresh default. */
+export function buildStateFromBaseline(source: BaselineEditSource | undefined, displayName?: string): WizardState {
+  const s = createDefaultState();
+  if (typeof displayName === "string" && displayName) s.displayName = displayName;
+  if (!source) return s;
+  // Household-level fallbacks first (a pre-baseline household has only these).
+  if (typeof source.name === "string" && source.name) s.householdName = source.name;
+  if (typeof source.defaultCity === "string" && source.defaultCity) s.city = source.defaultCity;
+  if (typeof source.monthlyBudgetAmount === "number" && Number.isFinite(source.monthlyBudgetAmount)) {
+    s.managedBudget = source.monthlyBudgetAmount;
+    s.managedTouched = true;
+  }
+  if (typeof source.budgetCycleDay === "number" && Number.isFinite(source.budgetCycleDay)) {
+    s.startDay = source.budgetCycleDay;
+    s.salaryDay = source.budgetCycleDay;
+  }
+  const b = source.financialBaseline;
+  if (!isPlainObject(b)) return s;
+  if (inEnum(b.mode, BASELINE_MODES)) s.mode = b.mode;
+  if (isPlainObject(b.profile)) {
+    const p = b.profile;
+    if (inEnum(p.type, PROFILE_TYPES)) s.householdType = p.type;
+    s.adults = finiteNumber(p.adults, s.adults);
+    s.kids = finiteNumber(p.kids, s.kids);
+    if (Array.isArray(p.kidAges)) s.kidAges = p.kidAges.filter((a): a is KidAgeBracket => inEnum(a, KID_AGE_BRACKETS));
+    if (typeof p.region === "string" && p.region) s.city = p.region;
+    s.cars = finiteNumber(p.cars, s.cars);
+  }
+  if (isPlainObject(b.cycle)) {
+    const c = b.cycle;
+    if (inEnum(c.basis, BUDGET_BASES)) s.basis = c.basis;
+    s.startDay = finiteNumber(c.startDay, s.startDay);
+    s.salaryDay = finiteNumber(c.salaryDay, s.salaryDay);
+    s.creditDay = finiteNumber(c.creditDay, s.creditDay);
+    s.incomeCount = finiteNumber(c.incomeCount, s.incomeCount);
+  }
+  if (isPlainObject(b.budget)) {
+    const bg = b.budget;
+    if (inEnum(bg.mode, BUDGET_MODES)) s.budgetMode = bg.mode;
+    s.income = numberOrEmpty(bg.income);
+    if (typeof bg.managedMonthlyBudget === "number" && Number.isFinite(bg.managedMonthlyBudget)) {
+      s.managedBudget = bg.managedMonthlyBudget;
+      s.managedTouched = true;
+    }
+  }
+  if (Array.isArray(b.fixedExpenses)) {
+    s.fixed = b.fixedExpenses.map(fixedFromBaseline).filter((f): f is WizardFixedExpense => f !== null);
+  }
+  if (isPlainObject(b.subBudgets)) {
+    const sb: Partial<Record<SubBudgetCatId, number>> = {};
+    for (const id of SUB_BUDGET_CAT_IDS) {
+      const v = b.subBudgets[id];
+      if (typeof v === "number" && Number.isFinite(v)) sb[id] = v;
+    }
+    s.subBudgets = sb;
+  }
+  if (isPlainObject(b.alerts)) {
+    const a: BaselineAlerts = { ...DEFAULT_ALERTS };
+    for (const k of Object.keys(DEFAULT_ALERTS) as Array<keyof BaselineAlerts>) {
+      const v = b.alerts[k];
       if (typeof v === "boolean") a[k] = v;
     }
     s.alerts = a;

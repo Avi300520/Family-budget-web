@@ -76,7 +76,12 @@ export default function OnboardingPage() {
     );
   }
 
-  const meta = STEP_META[wizard.stepKey];
+  // In edit mode the welcome step is reframed as "update your details" rather than a
+  // first-time greeting (the wizard prefilled every field from the saved baseline).
+  const meta =
+    wizard.editMode && wizard.stepKey === "welcome"
+      ? { title: "עדכון פרטי משק הבית", sub: "כל הפרטים כבר מלאים — אפשר לעבור ולעדכן מה שצריך." }
+      : STEP_META[wizard.stepKey];
   const StepComponent = STEP_COMPONENTS[wizard.stepKey as Exclude<StepKey, "done">];
   const totals = computeTotals(wizard.state);
 

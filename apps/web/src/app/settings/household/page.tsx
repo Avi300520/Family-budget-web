@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../../components/AppShell";
 import { api } from "../../../lib/api";
@@ -94,6 +95,19 @@ export default function HouseholdSettingsPage() {
           {success && <div className="status success">הגדרות נשמרו בהצלחה.</div>}
           {error && <div className="status error">{error}</div>}
         </form>
+      </section>
+
+      <section className="panel" style={{ maxWidth: 480, marginTop: 16 }}>
+        <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <SlidersHorizontal size={18} aria-hidden />
+          עריכה מתקדמת
+        </h2>
+        <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>
+          בנו מחדש את בסיס התקציב — הכנסות, הוצאות קבועות, תקציבי קטגוריות והתראות.
+        </p>
+        <Link className="button secondary" href="/onboarding?mode=edit" style={{ textDecoration: "none" }}>
+          עדכון בסיס התקציב
+        </Link>
       </section>
     </AppShell>
   );

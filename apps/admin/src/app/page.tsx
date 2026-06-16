@@ -3,16 +3,22 @@
 import { RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, toErrorMessage } from "../lib/api";
+import { api, isTransportError, toErrorMessage } from "../lib/api";
 
 type Overview = Awaited<ReturnType<typeof api.adminOverview>>;
 
 export default function AdminPage() {
   const [overview, setOverview] = useState<Overview>();
   const [error, setError] = useState<string>();
+  const [canReload, setCanReload] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string>();
   const [supportHouseholdId, setSupportHouseholdId] = useState("");
   const [supportBody, setSupportBody] = useState("");
+
+  function fail(err: unknown, context?: string) {
+    setError(toErrorMessage(err, context));
+    setCanReload(isTransportError(err));
+  }
 
   async function load() {
     try {
@@ -22,7 +28,7 @@ export default function AdminPage() {
       setAdminEmail(me.adminEmail);
       setOverview(data);
     } catch (err) {
-      setError(toErrorMessage(err));
+      fail(err, "operations overview");
     }
   }
 
@@ -34,7 +40,7 @@ export default function AdminPage() {
       setSupportBody("");
       await load();
     } catch (err) {
-      setError(toErrorMessage(err));
+      fail(err, "the support note");
     }
   }
 
@@ -60,7 +66,18 @@ export default function AdminPage() {
             Refresh
           </button>
         </div>
-        {error && <div className="panel status error">{error}</div>}
+        {error && (
+          <div className="panel status error">
+            {error}
+            {canReload && (
+              <div style={{ marginTop: 8 }}>
+                <button className="button" type="button" onClick={() => window.location.reload()}>
+                  Reload to re-authenticate
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {!overview && !error && <div className="panel">Loading…</div>}
         {overview && (
           <div className="grid two">

@@ -5,12 +5,23 @@ import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import {
   createDefaultState, computeTotals, validateStep, buildOnboardingPayload,
-  suggestedManagedBudget, loadDraft, saveDraft, clearDraft, humanizeOnboardingError,
-  STEP_ORDER, type StepKey, type WizardState
+  buildStateFromBaseline, suggestedManagedBudget, loadDraft, saveDraft, clearDraft,
+  humanizeOnboardingError, STEP_ORDER, type StepKey, type WizardState
 } from "../../lib/onboarding/model";
 
 // Steps where an empty answer is acceptable and a "skip" affordance is offered.
 const SKIPPABLE: ReadonlySet<StepKey> = new Set(["fixed", "alerts"]);
+
+/** Edit mode (?mode=edit): re-enter the wizard to complete/correct an existing
+ *  household baseline instead of creating a new one. Read once from the URL. */
+function readEditMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URLSearchParams(window.location.search).get("mode") === "edit";
+  } catch {
+    return false;
+  }
+}
 
 export interface WizardController {
   ready: boolean;
@@ -22,6 +33,8 @@ export interface WizardController {
   stepCount: number;
   canSkip: boolean;
   primaryLabel: string;
+  /** True when re-entered via ?mode=edit to update an existing baseline (owner/admin). */
+  editMode: boolean;
   error?: string;
   working: boolean;
   householdType: WizardState["householdType"];
@@ -39,6 +52,7 @@ export function useOnboardingWizard(): WizardController {
   const [index, setIndex] = useState(0); // index into STEP_ORDER
   const [error, setError] = useState<string | undefined>();
   const [working, setWorking] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,9 +63,31 @@ export function useOnboardingWizard(): WizardController {
       try {
         const me = await api.me();
         if (cancelled) return;
+        const wantsEdit = readEditMode();
         if (me.household) {
-          // Already onboarded — the gate is "household exists". Don't re-run the wizard.
-          router.replace("/dashboard");
+          const role = me.membership?.role;
+          // Edit mode completes/corrects an EXISTING baseline. Matching the backend
+          // SEC-01b guard on POST /onboarding/complete, only owner/admin may overwrite
+          // the household — anyone else (and any non-edit entry) goes to the dashboard
+          // instead of re-running the wizard.
+          if (!wantsEdit || (role !== "owner" && role !== "admin")) {
+            router.replace("/dashboard");
+            return;
+          }
+          setEditMode(true);
+          setState(buildStateFromBaseline(
+            {
+              financialBaseline: me.household.financialBaseline,
+              name: me.household.name,
+              monthlyBudgetAmount: me.household.monthlyBudgetAmount,
+              defaultCity: me.household.defaultCity,
+              budgetCycleDay: me.household.budgetCycleDay
+            },
+            me.user.displayName ?? undefined
+          ));
+          // Intentionally do NOT set userIdRef in edit mode: that disables draft
+          // autosave/restore, so a first-time onboarding draft is never polluted or
+          // resurrected over the live baseline being edited.
           return;
         }
         const uid = me.user.id;
@@ -115,7 +151,14 @@ export function useOnboardingWizard(): WizardController {
     setError(undefined);
     try {
       const payload = buildOnboardingPayload(state);
+      // Same endpoint for first-time and edit: the backend UPSERTs the existing household
+      // in place (no duplicate), keeps members/invites/expenses, and re-redacts the result.
       await api.completeOnboarding(payload);
+      if (editMode) {
+        // Baseline updated — return to the dashboard (no first-time "done" celebration).
+        router.replace("/dashboard");
+        return;
+      }
       if (userIdRef.current) clearDraft(userIdRef.current);
       goTo(STEP_ORDER.indexOf("done"));
     } catch (err) {
@@ -124,7 +167,7 @@ export function useOnboardingWizard(): WizardController {
     } finally {
       setWorking(false);
     }
-  }, [state, goTo]);
+  }, [state, goTo, editMode, router]);
 
   const next = useCallback(() => {
     const msg = validateStep(stepKey, state);
@@ -144,7 +187,10 @@ export function useOnboardingWizard(): WizardController {
     goTo(Math.min(STEP_ORDER.length - 1, index + 1));
   }, [stepKey, index, goTo, submit]);
 
-  const primaryLabel = stepKey === "welcome" ? "מתחילים" : stepKey === "alerts" ? "סיום" : "המשך";
+  const primaryLabel =
+    stepKey === "welcome" ? (editMode ? "ממשיכים" : "מתחילים")
+    : stepKey === "alerts" ? (editMode ? "שמירת השינויים" : "סיום")
+    : "המשך";
   const stepIndex = INTERACTIVE.indexOf(stepKey) + 1;
 
   return {
@@ -157,6 +203,7 @@ export function useOnboardingWizard(): WizardController {
     stepCount: INTERACTIVE.length,
     canSkip: SKIPPABLE.has(stepKey),
     primaryLabel,
+    editMode,
     error,
     working,
     householdType: state.householdType,

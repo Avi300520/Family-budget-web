@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { Activity, BarChart3, Gift, LayoutDashboard, ListChecks, Settings, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
-import { api } from "../lib/api";
+import { useViewer } from "../lib/useViewer";
+import { filterByRole } from "../lib/settingsView";
 
 interface NavLink {
   href: string;
@@ -35,17 +35,12 @@ const ALL_LINKS: NavLink[] = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<HouseholdRole>();
-
-  useEffect(() => {
-    api.me().then((me) => setRole(me.membership?.role)).catch(() => undefined);
-  }, []);
-
-  const links = ALL_LINKS.filter((link) => {
-    if (link.roles === "all") return true;
-    if (!role) return false;
-    return link.roles.includes(role);
-  });
+  // Resolve the role with explicit loading/error states. Role-gated links appear
+  // once the viewer is `ready`; while loading or on a transient /me failure only the
+  // always-available ("all") links show — but the settings index surfaces a real
+  // loader/retry rather than silently degrading (see lib/useViewer + settingsView).
+  const { role } = useViewer();
+  const links = filterByRole(ALL_LINKS, role);
 
   return (
     <div className="app-shell">

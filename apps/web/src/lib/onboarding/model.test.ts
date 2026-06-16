@@ -19,9 +19,11 @@ import {
   clearDraft,
   coerceDraftState,
   humanizeOnboardingError,
+  buildStateFromBaseline,
   type WizardState,
   type WizardFixedExpense
 } from "./model.ts";
+import type { FinancialBaseline } from "@shopping-assistant/shared-types";
 
 function withWindow(run: () => void): void {
   const store: Record<string, string> = {};
@@ -257,4 +259,95 @@ test("humanizeOnboardingError maps codes to Hebrew and never echoes raw server t
   const generic = humanizeOnboardingError(new Error("boom: secret-internal-detail"));
   assert.match(generic, /נסו שוב/);
   assert.equal(generic.includes("secret-internal-detail"), false);
+});
+
+// ── buildStateFromBaseline (edit mode / late onboarding) ─────────────────────────
+function fullBaseline(): FinancialBaseline {
+  return {
+    version: 1,
+    mode: "precise",
+    profile: { type: "couple", adults: 2, kids: 1, kidAges: ["4-6"], region: "חיפה", cars: 2 },
+    cycle: { basis: "salary", startDay: 3, salaryDay: 9, creditDay: 12, incomeCount: 2 },
+    budget: { mode: "income", income: 24000, managedMonthlyBudget: 9000 },
+    fixedExpenses: [
+      { id: "uuid-rent", sourcePresetId: "rent", isCustom: false, label: "שכירות", reportCat: "home", amount: 5000, frequency: "monthly", isEstimate: false, alertOnChange: true, billingDay: 1, isActive: true },
+      { id: "uuid-x", sourcePresetId: null, isCustom: true, label: "חוג שחייה", reportCat: "kids", amount: 300, frequency: "monthly", isEstimate: false, alertOnChange: false, billingDay: null, isActive: false }
+    ],
+    subBudgets: { groceries: 2500, eating: 800 },
+    alerts: { cat80: false, cat100: true, billUp: false, unusual: true, monthly: false, weekly: true }
+  };
+}
+
+test("buildStateFromBaseline: round-trips a full baseline into wizard state", () => {
+  const s = buildStateFromBaseline(
+    { financialBaseline: fullBaseline(), name: "בית כהן", monthlyBudgetAmount: 9000, defaultCity: "תל אביב", budgetCycleDay: 5 },
+    "אבי"
+  );
+  assert.equal(s.displayName, "אבי");
+  assert.equal(s.householdName, "בית כהן");
+  assert.equal(s.mode, "precise");
+  assert.equal(s.householdType, "couple");
+  assert.equal(s.adults, 2);
+  assert.equal(s.kids, 1);
+  assert.deepEqual(s.kidAges, ["4-6"]);
+  assert.equal(s.city, "חיפה"); // baseline region overrides defaultCity
+  assert.equal(s.cars, 2);
+  assert.equal(s.basis, "salary");
+  assert.equal(s.salaryDay, 9);
+  assert.equal(s.creditDay, 12);
+  assert.equal(s.incomeCount, 2);
+  assert.equal(s.budgetMode, "income");
+  assert.equal(s.income, 24000);
+  assert.equal(s.managedBudget, 9000); // baseline managedMonthlyBudget wins
+  assert.equal(s.managedTouched, true);
+  assert.equal(s.fixed.length, 2);
+  const rent = s.fixed.find((f) => f.key === "uuid-rent")!;
+  assert.equal(rent.on, true); // isActive → on
+  assert.equal(rent.emoji, "🏠"); // recovered from preset "rent"
+  assert.equal(rent.amount, 5000);
+  const swim = s.fixed.find((f) => f.key === "uuid-x")!;
+  assert.equal(swim.on, false); // isActive:false → on:false
+  assert.equal(swim.isCustom, true);
+  assert.equal(swim.emoji, "💸"); // custom → generic glyph
+  assert.deepEqual(s.subBudgets, { groceries: 2500, eating: 800 });
+  assert.equal(s.alerts.weekly, true);
+  assert.equal(s.alerts.cat80, false);
+});
+
+test("buildStateFromBaseline: pre-baseline household falls back to household fields", () => {
+  const s = buildStateFromBaseline(
+    { financialBaseline: null, name: "בית לוי", monthlyBudgetAmount: 6000, defaultCity: "ירושלים", budgetCycleDay: 10 },
+    "דנה"
+  );
+  assert.equal(s.displayName, "דנה");
+  assert.equal(s.householdName, "בית לוי");
+  assert.equal(s.city, "ירושלים");
+  assert.equal(s.managedBudget, 6000);
+  assert.equal(s.managedTouched, true);
+  assert.equal(s.startDay, 10);
+  assert.equal(s.salaryDay, 10);
+  // No baseline → defaults preserved for the rest.
+  assert.equal(s.fixed.length, 0);
+  assert.deepEqual(s.subBudgets, {});
+});
+
+test("buildStateFromBaseline: a corrupt/partial baseline never throws and uses defaults", () => {
+  const bad = { version: 1, mode: "nonsense", profile: "oops", fixedExpenses: [42, { label: 5 }], subBudgets: { groceries: "x" }, alerts: { cat80: "yes" } } as unknown as FinancialBaseline;
+  const s = buildStateFromBaseline({ financialBaseline: bad });
+  const d = createDefaultState();
+  assert.equal(s.mode, d.mode); // invalid enum → default
+  assert.equal(s.householdType, d.householdType); // non-object profile ignored
+  // Non-object fixed entries (42) are dropped; an object entry is coerced onto safe
+  // defaults (label 5 → "", reportCat → "misc", amount → "") rather than crashing.
+  assert.equal(s.fixed.length, 1);
+  assert.equal(s.fixed[0]!.label, "");
+  assert.equal(s.fixed[0]!.reportCat, "misc");
+  assert.equal(s.fixed[0]!.amount, "");
+  assert.deepEqual(s.subBudgets, {}); // non-number cap dropped
+  assert.equal(s.alerts.cat80, d.alerts.cat80); // non-boolean alert ignored
+});
+
+test("buildStateFromBaseline: undefined source returns clean defaults", () => {
+  const s = buildStateFromBaseline(undefined);
+  assert.deepEqual(s, createDefaultState());
 });

@@ -9,13 +9,14 @@ import type {
   AdminWebSessionView
 } from "@shopping-assistant/api-client";
 import Link from "next/link";
-import { api, toErrorMessage } from "../../lib/api";
+import { api, isTransportError, toErrorMessage } from "../../lib/api";
 
 const DANGER: React.CSSProperties = { background: "var(--rose)" };
 const SUBTLE: React.CSSProperties = { background: "var(--nav)" };
 
 export default function AdminUsersPage() {
   const [error, setError] = useState<string>();
+  const [canReload, setCanReload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string>();
 
@@ -27,13 +28,16 @@ export default function AdminUsersPage() {
   const [sessions, setSessions] = useState<AdminWebSessionView[]>([]);
   const [audit, setAudit] = useState<AdminAuditEntry[]>([]);
 
-  function fail(err: unknown) {
-    setError(toErrorMessage(err));
+  function fail(err: unknown, context?: string) {
+    setError(toErrorMessage(err, context));
+    // Offer a reload only for a transport/Access-challenge failure (no HTTP status);
+    // a real 4xx/5xx is shown honestly with its status and is not "fixed" by reloading.
+    setCanReload(isTransportError(err));
   }
 
   // Identify the verified Cloudflare Access admin on load (also surfaces an Access/session error early).
   useEffect(() => {
-    api.adminAuthMe().then((me) => setAdminEmail(me.adminEmail)).catch(fail);
+    api.adminAuthMe().then((me) => setAdminEmail(me.adminEmail)).catch((err) => fail(err, "admin identity"));
   }, []);
 
   async function search(event: React.FormEvent) {
@@ -45,7 +49,7 @@ export default function AdminUsersPage() {
       const res = await api.adminSearchUsers(by, q.trim());
       setResults(res.users);
     } catch (err) {
-      fail(err);
+      fail(err, "user search");
     } finally {
       setBusy(false);
     }
@@ -64,7 +68,7 @@ export default function AdminUsersPage() {
       setSessions(s.sessions);
       setAudit(a.entries);
     } catch (err) {
-      fail(err);
+      fail(err, "user details");
     } finally {
       setBusy(false);
     }
@@ -81,7 +85,7 @@ export default function AdminUsersPage() {
       setSessions(s.sessions);
       setAudit(a.entries);
     } catch (err) {
-      fail(err);
+      fail(err, "user details");
     }
   }
 
@@ -159,7 +163,18 @@ export default function AdminUsersPage() {
           <h1 className="page-title">User management</h1>
         </div>
 
-        {error && <div className="panel status error" style={{ display: "block" }}>{error}</div>}
+        {error && (
+          <div className="panel status error" style={{ display: "block" }}>
+            {error}
+            {canReload && (
+              <div style={{ marginTop: 8 }}>
+                <button className="button" type="button" onClick={() => window.location.reload()}>
+                  Reload to re-authenticate
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <section className="panel">
           <form className="row" onSubmit={search}>
