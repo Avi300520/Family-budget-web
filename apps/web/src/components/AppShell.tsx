@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, BarChart3, ClipboardList, Gift, LayoutDashboard, ListChecks, Settings, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Activity, BarChart3, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Settings, Sparkles } from "lucide-react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
+import { api, clearClientSession } from "../lib/api";
 import { useViewer } from "../lib/useViewer";
 import { filterByRole } from "../lib/settingsView";
 import { MobileNav } from "./MobileNav";
@@ -50,6 +53,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // loader/retry rather than silently degrading (see lib/useViewer + settingsView).
   const { role } = useViewer();
   const links = filterByRole(ALL_LINKS, role);
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
+
+  // Real logout: the backend revokes the session + clears the HttpOnly cookie (the FE
+  // cannot clear it). Only on a confirmed success do we drop the local csrf and route to
+  // /login — never optimistically, since a failed call leaves the session alive.
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError(false);
+    try {
+      await api.logout();
+      clearClientSession();
+      router.replace("/login");
+    } catch {
+      setLogoutError(true);
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -66,11 +89,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+        {/* Account / logout — pinned to the sidebar footer (desktop). */}
+        <div className="side-nav-footer">
+          <button type="button" className="nav-link nav-logout" onClick={handleLogout} disabled={loggingOut}>
+            <LogOut size={18} aria-hidden />
+            <span>{loggingOut ? "מתנתק…" : "התנתקות"}</span>
+          </button>
+          {logoutError && <div className="nav-logout-error">ההתנתקות נכשלה, נסו שוב.</div>}
+        </div>
       </aside>
       <main className="main">{children}</main>
-      {/* Mobile (≤820px): the sidebar is hidden via CSS; navigation is the bottom
-          tab bar + "עוד" sheet, driven off the SAME role-filtered `links`. */}
-      <MobileNav links={links} />
+      {/* Mobile (≤820px): the sidebar is hidden via CSS; navigation is the bottom tab
+          bar + "עוד" sheet (account/logout live under חשבון), driven off the SAME
+          role-filtered `links`. */}
+      <MobileNav links={links} onLogout={handleLogout} logoutError={logoutError} loggingOut={loggingOut} />
     </div>
   );
 }

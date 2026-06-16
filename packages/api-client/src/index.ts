@@ -183,6 +183,11 @@ export function createApiClient(options: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ token })
       }),
+    // Self-service logout: the backend revokes the caller's own session and clears the
+    // HttpOnly cookie. POST (state change, CSRF-protected). Returns 200 on success and
+    // also when the session was already gone (idempotent). The caller should still drop
+    // its local csrf afterwards (clearClientSession) and route to /login.
+    logout: () => request<{ ok: true }>("/api/v1/auth/logout", { method: "POST" }),
     me: () => request<{ user: User; household?: Household; membership?: HouseholdMember; csrfToken: string }>("/api/v1/me"),
     completeOnboarding: (body: {
       displayName: string;

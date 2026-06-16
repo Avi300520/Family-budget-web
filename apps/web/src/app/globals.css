@@ -121,6 +121,34 @@ button {
   color: var(--on-ink-0);
 }
 
+/* Account / logout pinned to the sidebar footer (desktop). */
+.side-nav-footer {
+  margin-top: auto;
+  display: grid;
+  gap: 4px;
+}
+
+.nav-logout {
+  width: 100%;
+  background: none;
+  border: 0;
+  font-family: var(--font-ui);
+  font-size: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.nav-logout:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.nav-logout-error {
+  color: var(--coral);
+  font-size: 12px;
+  padding: 0 12px;
+}
+
 .main {
   padding: 28px;
   max-width: 1180px;
@@ -1004,6 +1032,12 @@ button {
 
   .mobile-more-logout {
     color: var(--neg);
+  }
+
+  .mobile-more-logout-error {
+    color: var(--neg);
+    font-size: 13px;
+    padding: 4px var(--sp-3);
   }
 }
 

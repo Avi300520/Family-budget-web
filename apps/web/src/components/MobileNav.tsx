@@ -22,7 +22,17 @@ function isActive(pathname: string | null, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function MobileNav({ links, onLogout }: { links: MobileNavLink[]; onLogout?: () => void }) {
+export function MobileNav({
+  links,
+  onLogout,
+  logoutError,
+  loggingOut
+}: {
+  links: MobileNavLink[];
+  onLogout?: () => void;
+  logoutError?: boolean;
+  loggingOut?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -120,19 +130,24 @@ export function MobileNav({ links, onLogout }: { links: MobileNavLink[]; onLogou
                       </Link>
                     );
                   })}
-                  {/* Logout lives under the חשבון group (wired in Phase 2). */}
+                  {/* Logout lives under the חשבון group. Don't pre-close: on success the
+                      handler navigates to /login (unmounts this); on failure we keep the
+                      sheet open and show a retry so we never falsely claim success. */}
                   {group.title === "חשבון" && onLogout && (
-                    <button
-                      type="button"
-                      className="mobile-more-link mobile-more-logout"
-                      onClick={() => {
-                        close();
-                        onLogout();
-                      }}
-                    >
-                      <LogOut size={18} aria-hidden />
-                      <span>התנתקות</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="mobile-more-link mobile-more-logout"
+                        onClick={onLogout}
+                        disabled={loggingOut}
+                      >
+                        <LogOut size={18} aria-hidden />
+                        <span>{loggingOut ? "מתנתק…" : "התנתקות"}</span>
+                      </button>
+                      {logoutError && (
+                        <div className="mobile-more-logout-error">ההתנתקות נכשלה, נסו שוב.</div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
