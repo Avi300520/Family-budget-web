@@ -6,6 +6,7 @@ import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
 import { api } from "../../../lib/api";
 import { categoryLabel } from "../../../lib/categories";
+import { isHouseholdManager } from "../../../lib/settingsView";
 
 // Canonical 7-bucket taxonomy, in the same order the dashboard renders.
 const CATEGORY_KEYS = [
@@ -21,6 +22,7 @@ const CATEGORY_KEYS = [
 export default function CategoryBudgetsPage() {
   const [householdId, setHouseholdId] = useState<string>();
   const [role, setRole] = useState<HouseholdRole>();
+  const [permissions, setPermissions] = useState<Record<string, unknown> | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [savedCaps, setSavedCaps] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -33,15 +35,18 @@ export default function CategoryBudgetsPage() {
     try {
       const me = await api.me();
       setRole(me.membership?.role);
+      const perms = (me.membership?.permissions as Record<string, unknown> | undefined) ?? null;
+      setPermissions(perms);
       if (!me.household) {
         setLoading(false);
         return;
       }
       setHouseholdId(me.household.id);
-      // Only owner/admin may read/write caps — never fetch as a non-parent so a
-      // limited/adult member who navigates here directly issues no request.
-      const isParent = me.membership?.role === "owner" || me.membership?.role === "admin";
-      if (isParent) {
+      // Only a household manager (owner/admin or an adult_member co-manager with
+      // permissions.all) may read/write caps — never fetch as a non-manager so a
+      // limited/plain-adult member who navigates here directly issues no request.
+      const isManager = isHouseholdManager({ role: me.membership?.role, permissions: perms });
+      if (isManager) {
         const { budgets } = await api.categoryBudgets(me.household.id);
         const caps: Record<string, number> = {};
         const amt: Record<string, string> = {};
@@ -120,13 +125,13 @@ export default function CategoryBudgetsPage() {
 
   if (loading) return <AppShell><p className="muted">טוען...</p></AppShell>;
 
-  const isParent = role === "owner" || role === "admin";
-  if (!isParent) {
+  const isManager = isHouseholdManager({ role, permissions });
+  if (!isManager) {
     return (
       <AppShell>
         <h1 className="page-title">תקציבי קטגוריות</h1>
         <section className="panel">
-          <p className="muted">לעריכת תקציבי קטגוריות נדרשת הרשאת בעלים או מנהל.</p>
+          <p className="muted">לעריכת תקציבי קטגוריות נדרשת הרשאת ניהול של משק הבית.</p>
         </section>
       </AppShell>
     );

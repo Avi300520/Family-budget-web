@@ -5,22 +5,24 @@
 // loading / error / no-household *states* via useViewer(); this file owns the
 // *capability* policy.
 //
-// CAPABILITY, not role-only (2026-06-16b owner evidence): the settings index
-// previously gated every management card to roles ["owner","admin"], so an
-// `adult_member` — even one carrying `permissions.all = true` — was filtered out
-// of all of them and saw ONLY the roles:"all" privacy card. The fix is to gate by
-// capability, derived from role + the membership `permissions` object, and aligned
-// with what the backend actually authorizes so a surfaced card never 403s on the
-// action it implies:
+// CAPABILITY, not role-only (2026-06-16c owner decision): an `adult_member` whose
+// membership carries `permissions.all === true` is a spouse / CO-MANAGER and is treated
+// as a household manager — equal in practice to owner/admin for household operations.
+// The backend now enforces this via `isHouseholdManager` (packages/db), so capability
+// here MIRRORS the backend exactly — a surfaced card/action never 403s, and the UI never
+// hides something the backend would allow:
 //   - GET /households/:id/members        → owner/admin/adult_member (limited restricted)
-//   - POST/PATCH/DELETE members          → owner/admin only
-//   - GET /households/current (settings) → any member (read); PATCH settings → owner/admin only
-//   - GET /category-budgets              → owner/admin/adult_member; PUT/DELETE → owner/admin
-//     (the category-budgets PAGE is edit-only → its card stays owner/admin)
-//   - POST /onboarding/complete (baseline edit) → owner/admin only (backend SEC-01b)
-// The backend authorizes by ROLE (it does not read `permissions`), so capability
-// here must not exceed role enforcement for WRITES. `permissions.all` only widens
-// READ/visibility where product policy asks for it (e.g. the household-settings card).
+//   - POST /members/invite               → household MANAGER (owner/admin/adult+all);
+//       inviting an ADMIN role specifically → owner/admin only
+//   - PATCH/DELETE members               → household MANAGER; role/permissions changes
+//       and touching the owner → owner/admin only
+//   - PATCH /households/:id/settings     → household MANAGER
+//   - PUT/DELETE category-budgets        → household MANAGER
+//   - POST/PATCH/DELETE project-budgets  → household MANAGER
+//   - POST /onboarding/complete (baseline edit) → household MANAGER (backend SEC-01b)
+//   - billing                            → owner/admin only (product policy)
+// `permissions.all` is the FLOOR for co-management, never authority to mint other managers
+// (assign admin / grant permissions.all) — those stay owner/admin (`isOwnerOrAdmin`).
 // =============================================================================
 
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
@@ -36,12 +38,22 @@ function roleIn(role: HouseholdRole | undefined, allowed: ReadonlyArray<Househol
   return role !== undefined && allowed.includes(role);
 }
 
-const isOwnerAdmin = (c: ViewerCaps): boolean => roleIn(c.role, ["owner", "admin"]);
-
 /** True when the membership carries the full-capability flag (`permissions.all === true`). */
 export function hasAllPermission(c: ViewerCaps): boolean {
   const p = c.permissions;
   return !!p && typeof p === "object" && (p as Record<string, unknown>).all === true;
+}
+
+/** Owner or admin. The privilege ceiling — who may mint/unmake managers, assign admin,
+ *  or touch the owner. Mirrors the backend `isOwnerOrAdmin`. */
+export function isOwnerOrAdmin(c: ViewerCaps): boolean {
+  return roleIn(c.role, ["owner", "admin"]);
+}
+
+/** Household manager: owner, admin, OR an adult_member co-manager (`permissions.all`).
+ *  The floor for household co-management. Mirrors the backend `isHouseholdManager`. */
+export function isHouseholdManager(c: ViewerCaps): boolean {
+  return isOwnerOrAdmin(c) || (c.role === "adult_member" && hasAllPermission(c));
 }
 
 // ── Capabilities (each mirrors the backend's actual authorization) ───────────────
@@ -51,36 +63,38 @@ export function canViewHouseholdMembers(c: ViewerCaps): boolean {
   return roleIn(c.role, ["owner", "admin", "adult_member"]);
 }
 
-/** Invite / edit / remove members. Backend gates these to owner/admin only. */
+/** Invite / edit / remove members. Backend gates these to household managers
+ *  (owner/admin/adult+all). NOTE: assigning the admin role or changing a member's
+ *  role/permissions is owner/admin-only — gate those sub-controls with isOwnerOrAdmin. */
 export function canManageHouseholdMembers(c: ViewerCaps): boolean {
-  return isOwnerAdmin(c);
+  return isHouseholdManager(c);
 }
 
 /** See the household-settings section (budget / cycle / city). Owner/admin always;
- *  an adult_member only when granted full permissions (`permissions.all`). */
+ *  an adult_member only when granted full permissions (co-manager). */
 export function canViewHouseholdSettings(c: ViewerCaps): boolean {
-  return isOwnerAdmin(c) || (c.role === "adult_member" && hasAllPermission(c));
+  return isHouseholdManager(c);
 }
 
-/** Change household settings. Backend PATCH /households/:id/settings is owner/admin only. */
+/** Change household settings. Backend PATCH /households/:id/settings is a manager op. */
 export function canEditHouseholdSettings(c: ViewerCaps): boolean {
-  return isOwnerAdmin(c);
+  return isHouseholdManager(c);
 }
 
-/** The category-budgets surface is an edit page (owner/admin). Backend write is owner/admin. */
+/** Category-budgets edit surface. Backend PUT/DELETE is a manager op. */
 export function canViewCategoryBudgets(c: ViewerCaps): boolean {
-  return isOwnerAdmin(c);
+  return isHouseholdManager(c);
 }
 
-/** Billing / plan. Owner/admin only (no product policy grants adult_member yet). */
+/** Billing / plan. Owner/admin only (product policy keeps payment with owner/admin). */
 export function canViewBilling(c: ViewerCaps): boolean {
-  return isOwnerAdmin(c);
+  return isOwnerOrAdmin(c);
 }
 
 /** Re-enter onboarding to edit/correct the financial baseline. Backend SEC-01b on
- *  POST /onboarding/complete is owner/admin only (adult_member → 403; limited never). */
+ *  POST /onboarding/complete is a manager op (plain adult / limited → 403). */
 export function canEditBaseline(c: ViewerCaps): boolean {
-  return isOwnerAdmin(c);
+  return isHouseholdManager(c);
 }
 
 // ── Role-only helpers (still used by AppShell nav, whose links map 1:1 to

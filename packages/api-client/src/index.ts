@@ -317,7 +317,7 @@ export function createApiClient(options: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify(body)
       }),
-    updateMember: (householdId: string, memberId: string, body: { role?: HouseholdRole; personalBudgetMonthly?: number | null; color?: string }) =>
+    updateMember: (householdId: string, memberId: string, body: { role?: HouseholdRole; personalBudgetMonthly?: number | null; color?: string; permissions?: { all: boolean } }) =>
       request<{ member: HouseholdMember }>(`/api/v1/households/${householdId}/members/${memberId}`, {
         method: "PATCH",
         body: JSON.stringify(body)

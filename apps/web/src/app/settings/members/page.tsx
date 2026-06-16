@@ -10,6 +10,8 @@ import { LoadState } from "../../../components/LoadState";
 import { PhoneInput } from "../../../components/PhoneInput";
 import { api } from "../../../lib/api";
 import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../../lib/countryCodes";
+import { useViewer } from "../../../lib/useViewer";
+import { canManageHouseholdMembers, isOwnerOrAdmin } from "../../../lib/settingsView";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "בעלים",
@@ -39,6 +41,13 @@ function describeMemberActionError(err: unknown, fallback: string): string {
 }
 
 export default function MembersPage() {
+  const viewer = useViewer();
+  // A household manager (owner/admin or an adult_member co-manager) may invite/edit/remove
+  // members; this mirrors the backend gate so we never render an action that 403s.
+  const canManage = viewer.status === "ready" && canManageHouseholdMembers(viewer.caps);
+  // Assigning the admin role / changing a member's role stays owner/admin-only (a co-manager
+  // cannot mint managers) — so the role controls are gated more tightly than `canManage`.
+  const canAssignRoles = isOwnerOrAdmin(viewer.caps);
   const [household, setHousehold] = useState<Household>();
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [inviteName, setInviteName] = useState("");
@@ -54,6 +63,9 @@ export default function MembersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<HouseholdRole>("adult_member");
   const [editBudget, setEditBudget] = useState<string>("");
+  // Co-manager flag (permissions.all) — owner/admin only; grants an adult_member full
+  // household-management capability (spouse / co-manager).
+  const [editCoManager, setEditCoManager] = useState(false);
 
   async function load() {
     setError(undefined);
@@ -117,6 +129,7 @@ export default function MembersPage() {
     setEditingId(m.id);
     setEditRole(m.role);
     setEditBudget(m.personalBudgetMonthly != null ? String(m.personalBudgetMonthly) : "");
+    setEditCoManager((m.permissions as { all?: boolean } | undefined)?.all === true);
     setError(undefined);
   }
 
@@ -128,7 +141,14 @@ export default function MembersPage() {
     if (!household) return;
     setError(undefined);
     try {
-      const body: { role?: HouseholdRole; personalBudgetMonthly?: number | null } = { role: editRole };
+      const body: { role?: HouseholdRole; personalBudgetMonthly?: number | null; permissions?: { all: boolean } } = {};
+      // Role + permissions changes are owner/admin-only; a co-manager edits the personal
+      // budget only and must NOT send them (the backend would 403 on a privilege change).
+      if (canAssignRoles) {
+        body.role = editRole;
+        // The co-manager flag only applies to an adult_member; for other roles it is moot.
+        if (editRole === "adult_member") body.permissions = { all: editCoManager };
+      }
       body.personalBudgetMonthly = editBudget.trim() === "" ? null : Number(editBudget);
       await api.updateMember(household.id, memberId, body);
       setEditingId(null);
@@ -172,18 +192,20 @@ export default function MembersPage() {
                         )}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {m.role !== "owner" && (
-                        <button className="button secondary" onClick={() => beginEdit(m)} style={{ padding: "4px 8px" }} title="ערוך">
-                          <Pencil size={14} aria-hidden />
-                        </button>
-                      )}
-                      {m.role !== "owner" && (
-                        <button className="button secondary" onClick={() => removeMember(m.id)} style={{ padding: "4px 8px" }} title="הסר">
-                          <Trash2 size={14} aria-hidden />
-                        </button>
-                      )}
-                    </div>
+                    {canManage && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {m.role !== "owner" && (
+                          <button className="button secondary" onClick={() => beginEdit(m)} style={{ padding: "4px 8px" }} title="ערוך">
+                            <Pencil size={14} aria-hidden />
+                          </button>
+                        )}
+                        {m.role !== "owner" && (
+                          <button className="button secondary" onClick={() => removeMember(m.id)} style={{ padding: "4px 8px" }} title="הסר">
+                            <Trash2 size={14} aria-hidden />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -192,14 +214,16 @@ export default function MembersPage() {
                       <span style={{ fontWeight: 700 }}>{displayName}</span>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
-                        תפקיד
-                        <select className="input" value={editRole} onChange={(e) => setEditRole(e.target.value as HouseholdRole)}>
-                          <option value="admin">מנהל</option>
-                          <option value="adult_member">חבר מבוגר</option>
-                          <option value="limited_member">חבר מוגבל</option>
-                        </select>
-                      </label>
+                      {canAssignRoles && (
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
+                          תפקיד
+                          <select className="input" value={editRole} onChange={(e) => setEditRole(e.target.value as HouseholdRole)}>
+                            <option value="admin">מנהל</option>
+                            <option value="adult_member">חבר מבוגר</option>
+                            <option value="limited_member">חבר מוגבל</option>
+                          </select>
+                        </label>
+                      )}
                       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
                         תקציב אישי חודשי (₪, ריק = ללא)
                         <input
@@ -213,6 +237,16 @@ export default function MembersPage() {
                         />
                       </label>
                     </div>
+                    {canAssignRoles && editRole === "adult_member" && (
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                        <input
+                          type="checkbox"
+                          checked={editCoManager}
+                          onChange={(e) => setEditCoManager(e.target.checked)}
+                        />
+                        מנהל/ת שותף/ה — גישת ניהול מלאה (הזמנת חברים, הגדרות בית ותקציבים)
+                      </label>
+                    )}
                     <div style={{ display: "flex", gap: 6 }}>
                       <button className="button" onClick={() => saveEdit(m.id)} style={{ padding: "4px 10px" }}>
                         <Check size={14} aria-hidden /> שמירה
@@ -229,6 +263,13 @@ export default function MembersPage() {
         </div>
       </section>
 
+      {viewer.status === "ready" && !canManage && (
+        <section className="panel">
+          <p className="muted">לצפייה בלבד. ניהול חברי הבית (הזמנה, עריכה והסרה) זמין לבעלים, למנהל ולבן/בת זוג מנהל/ת.</p>
+        </section>
+      )}
+
+      {canManage && (
       <section className="panel">
         <h2>מוסיפים בן משפחה</h2>
         <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>נשלח לו הזמנה בוואטסאפ. הוא מצטרף בלחיצה.</p>
@@ -264,7 +305,8 @@ export default function MembersPage() {
           <label>
             תפקיד
             <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
-              <option value="admin">מנהל</option>
+              {/* Inviting an admin mints a manager — owner/admin only. */}
+              {canAssignRoles && <option value="admin">מנהל</option>}
               <option value="adult_member">חבר מבוגר</option>
               <option value="limited_member">חבר מוגבל</option>
             </select>
@@ -297,6 +339,7 @@ export default function MembersPage() {
         )}
         {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
       </section>
+      )}
     </AppShell>
   );
 }

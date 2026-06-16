@@ -6,6 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   hasAllPermission,
+  isHouseholdManager,
+  isOwnerOrAdmin,
   canViewHouseholdMembers,
   canManageHouseholdMembers,
   canViewHouseholdSettings,
@@ -27,13 +29,30 @@ const adultBase: ViewerCaps = { role: "adult_member", permissions: {} };
 const limited: ViewerCaps = { role: "limited_member", permissions: {} };
 const unknown: ViewerCaps = { role: undefined, permissions: null };
 
-// ── hasAllPermission ─────────────────────────────────────────────────────────────
+// ── hasAllPermission / manager predicates ────────────────────────────────────────
 test("hasAllPermission reads permissions.all defensively", () => {
   assert.equal(hasAllPermission({ permissions: { all: true } }), true);
   assert.equal(hasAllPermission({ permissions: { all: false } }), false);
   assert.equal(hasAllPermission({ permissions: {} }), false);
   assert.equal(hasAllPermission({ permissions: null }), false);
   assert.equal(hasAllPermission({}), false);
+});
+
+test("isHouseholdManager: owner/admin always; adult ONLY with permissions.all; never limited/unknown", () => {
+  assert.equal(isHouseholdManager(owner), true);
+  assert.equal(isHouseholdManager(admin), true);
+  assert.equal(isHouseholdManager(adultAll), true);
+  assert.equal(isHouseholdManager(adultBase), false);
+  assert.equal(isHouseholdManager(limited), false);
+  assert.equal(isHouseholdManager(unknown), false);
+});
+
+test("isOwnerOrAdmin: only owner/admin — a co-manager (adult+all) is NOT owner/admin", () => {
+  assert.equal(isOwnerOrAdmin(owner), true);
+  assert.equal(isOwnerOrAdmin(admin), true);
+  assert.equal(isOwnerOrAdmin(adultAll), false);
+  assert.equal(isOwnerOrAdmin(adultBase), false);
+  assert.equal(isOwnerOrAdmin(limited), false);
 });
 
 // ── individual capabilities ────────────────────────────────────────────────────
@@ -46,14 +65,15 @@ test("canViewHouseholdMembers: owner/admin/adult; NOT limited or unknown", () =>
   assert.equal(canViewHouseholdMembers(unknown), false);
 });
 
-test("canManageHouseholdMembers: owner/admin only (matches backend invite/update/remove)", () => {
+test("canManageHouseholdMembers: owner/admin/co-manager (matches backend manager gate); NOT plain adult/limited", () => {
   assert.equal(canManageHouseholdMembers(owner), true);
   assert.equal(canManageHouseholdMembers(admin), true);
-  assert.equal(canManageHouseholdMembers(adultAll), false);
+  assert.equal(canManageHouseholdMembers(adultAll), true);
+  assert.equal(canManageHouseholdMembers(adultBase), false);
   assert.equal(canManageHouseholdMembers(limited), false);
 });
 
-test("canViewHouseholdSettings: owner/admin always; adult ONLY with permissions.all", () => {
+test("canViewHouseholdSettings: owner/admin always; adult ONLY with permissions.all (co-manager)", () => {
   assert.equal(canViewHouseholdSettings(owner), true);
   assert.equal(canViewHouseholdSettings(admin), true);
   assert.equal(canViewHouseholdSettings(adultAll), true);
@@ -61,22 +81,24 @@ test("canViewHouseholdSettings: owner/admin always; adult ONLY with permissions.
   assert.equal(canViewHouseholdSettings(limited), false);
 });
 
-test("canEditHouseholdSettings: owner/admin only (backend PATCH gate) — even adult+all cannot edit", () => {
-  assert.equal(canEditHouseholdSettings(owner), true);
-  assert.equal(canEditHouseholdSettings(admin), true);
-  assert.equal(canEditHouseholdSettings(adultAll), false);
-  assert.equal(canEditHouseholdSettings(limited), false);
-});
-
-test("canViewCategoryBudgets / canViewBilling / canEditBaseline: owner/admin only", () => {
-  for (const cap of [canViewCategoryBudgets, canViewBilling, canEditBaseline]) {
+test("canEditHouseholdSettings / canViewCategoryBudgets / canEditBaseline: owner/admin/co-manager; NOT plain adult/limited", () => {
+  for (const cap of [canEditHouseholdSettings, canViewCategoryBudgets, canEditBaseline]) {
     assert.equal(cap(owner), true);
     assert.equal(cap(admin), true);
-    assert.equal(cap(adultAll), false); // adult+all still cannot (backend/edit-only page)
+    assert.equal(cap(adultAll), true); // co-manager now allowed (backend isHouseholdManager)
     assert.equal(cap(adultBase), false);
     assert.equal(cap(limited), false);
     assert.equal(cap(unknown), false);
   }
+});
+
+test("canViewBilling: owner/admin only — a co-manager (adult+all) is NOT shown billing", () => {
+  assert.equal(canViewBilling(owner), true);
+  assert.equal(canViewBilling(admin), true);
+  assert.equal(canViewBilling(adultAll), false);
+  assert.equal(canViewBilling(adultBase), false);
+  assert.equal(canViewBilling(limited), false);
+  assert.equal(canViewBilling(unknown), false);
 });
 
 // ── settings index integration (mirrors the CARDS `can` predicates) ──────────────
@@ -96,12 +118,16 @@ test("owner/admin see every settings card", () => {
   assert.deepEqual(visible(admin), ["household", "members", "category", "edit-baseline", "billing", "privacy"]);
 });
 
-test("adult_member with permissions.all sees household+members+privacy — NOT reduced to privacy-only", () => {
+test("adult_member with permissions.all (co-manager) sees all co-manage cards but NOT billing", () => {
   const keys = visible(adultAll);
-  assert.deepEqual(keys, ["household", "members", "privacy"]);
-  assert.notEqual(keys.length, 1); // the reported regression: must not be privacy-only
+  // Co-manager === household manager: household, members, category, edit-baseline, privacy.
+  // Billing stays owner/admin-only, so it is the ONLY card absent vs owner/admin.
+  assert.deepEqual(keys, ["household", "members", "category", "edit-baseline", "privacy"]);
+  assert.ok(!keys.includes("billing"));
   assert.ok(keys.includes("members"));
   assert.ok(keys.includes("household"));
+  assert.ok(keys.includes("category"));
+  assert.ok(keys.includes("edit-baseline"));
 });
 
 test("adult_member WITHOUT permissions.all still sees members+privacy — NOT privacy-only", () => {

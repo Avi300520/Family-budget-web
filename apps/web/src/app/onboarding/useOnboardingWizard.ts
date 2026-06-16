@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
+import { isHouseholdManager } from "../../lib/settingsView";
 import {
   createDefaultState, computeTotals, validateStep, buildOnboardingPayload,
   buildStateFromBaseline, suggestedManagedBudget, loadDraft, saveDraft, clearDraft,
@@ -65,12 +66,13 @@ export function useOnboardingWizard(): WizardController {
         if (cancelled) return;
         const wantsEdit = readEditMode();
         if (me.household) {
-          const role = me.membership?.role;
           // Edit mode completes/corrects an EXISTING baseline. Matching the backend
-          // SEC-01b guard on POST /onboarding/complete, only owner/admin may overwrite
-          // the household — anyone else (and any non-edit entry) goes to the dashboard
-          // instead of re-running the wizard.
-          if (!wantsEdit || (role !== "owner" && role !== "admin")) {
+          // manager gate on POST /onboarding/complete, only a household manager
+          // (owner/admin or an adult_member co-manager with permissions.all) may
+          // overwrite the household — anyone else (and any non-edit entry) goes to the
+          // dashboard instead of re-running the wizard.
+          const canEdit = isHouseholdManager({ role: me.membership?.role, permissions: me.membership?.permissions });
+          if (!wantsEdit || !canEdit) {
             router.replace("/dashboard");
             return;
           }
