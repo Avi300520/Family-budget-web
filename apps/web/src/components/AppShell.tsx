@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, BarChart3, Gift, LayoutDashboard, ListChecks, Settings, Sparkles } from "lucide-react";
+import { Activity, BarChart3, ClipboardList, Gift, LayoutDashboard, ListChecks, Settings, Sparkles } from "lucide-react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { useViewer } from "../lib/useViewer";
 import { filterByRole } from "../lib/settingsView";
+import { MobileNav } from "./MobileNav";
 
 interface NavLink {
   href: string;
   label: string;
+  /** Optional shorter label for the compact mobile bottom tab (falls back to label). */
+  short?: string;
   icon: typeof LayoutDashboard;
   roles: HouseholdRole[] | "all";
 }
@@ -18,7 +21,10 @@ interface NavLink {
 // /settings (2026-06-17); the dev-inbox is internal tooling, reached by URL in dev.
 const ALL_LINKS: NavLink[] = [
   { href: "/dashboard",        label: "דשבורד",        icon: LayoutDashboard, roles: "all" },
-  { href: "/shopping-list",    label: "רשימת קניות",   icon: ListChecks,      roles: "all" },
+  { href: "/shopping-list",    label: "רשימת קניות",   short: "קניות", icon: ListChecks,      roles: "all" },
+  // limited_member surface — their pending household-expense requests. Single nav
+  // source: shows in the desktop sidebar AND the mobile bottom bar for limited_member.
+  { href: "/my-requests",      label: "הבקשות שלי",    short: "בקשות", icon: ClipboardList,   roles: ["limited_member"] },
   { href: "/budget",           label: "תקציב",          icon: BarChart3,       roles: ["owner", "admin", "adult_member"] },
   // Iteration 7 — Insights / Weekly Wrapped. Privacy: same role scope as
   // /budget (limited_member hidden client-side; server returns 403).
@@ -62,6 +68,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
       <main className="main">{children}</main>
+      {/* Mobile (≤820px): the sidebar is hidden via CSS; navigation is the bottom
+          tab bar + "עוד" sheet, driven off the SAME role-filtered `links`. */}
+      <MobileNav links={links} />
     </div>
   );
 }

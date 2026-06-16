@@ -285,24 +285,37 @@ function ItemRow({
         opacity: isPurchased ? 0.65 : 1,
       }}
     >
+      {/* 40px tap target (touch-friendly) with the 22px visual checkbox centered inside. */}
       <button
         type="button"
         onClick={onTogglePurchased}
         aria-label={isPurchased ? "החזר לפעיל" : "סמן כנקנה"}
         style={{
-          width: 22,
-          height: 22,
-          borderRadius: 7,
-          border: `1.5px solid ${isPurchased ? color : "var(--cream-4)"}`,
-          background: isPurchased ? color : "var(--cream-2)",
+          width: 40,
+          height: 40,
           display: "grid",
           placeItems: "center",
+          background: "none",
+          border: 0,
           cursor: "pointer",
           padding: 0,
           flexShrink: 0,
         }}
       >
-        {isPurchased && <Check size={14} color="white" strokeWidth={2.5} aria-hidden />}
+        <span
+          aria-hidden
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 7,
+            border: `1.5px solid ${isPurchased ? color : "var(--cream-4)"}`,
+            background: isPurchased ? color : "var(--cream-2)",
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          {isPurchased && <Check size={14} color="white" strokeWidth={2.5} aria-hidden />}
+        </span>
       </button>
 
       <div style={{ minWidth: 0 }}>
@@ -347,7 +360,7 @@ function ItemRow({
         onClick={onDelete}
         aria-label="הסר פריט"
         className="btn ghost"
-        style={{ width: 28, height: 28, padding: 0, borderRadius: 8 }}
+        style={{ width: 40, height: 40, padding: 0, borderRadius: 8, display: "grid", placeItems: "center" }}
       >
         <Trash2 size={14} aria-hidden style={{ color: "var(--text-2)" }} />
       </button>

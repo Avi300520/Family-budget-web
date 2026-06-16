@@ -15,6 +15,14 @@ const jetbrains = JetBrains_Mono({
   display: "swap"
 });
 
+// viewport-fit=cover is required for env(safe-area-inset-*) to apply on notched
+// devices (the bottom tab bar + "עוד" sheet pad against the home indicator).
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover" as const
+};
+
 export const metadata = {
   title: "Pingtally | פחות ניהול. יותר משפחה.",
   description: "Pingtally עוזר למשפחות לנהל הוצאות, קניות, פרויקטים ובקשות מהילדים דרך וואטסאפ, עם דשבורד משפחתי פשוט וברור.",
