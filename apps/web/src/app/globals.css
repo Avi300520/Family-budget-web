@@ -95,6 +95,17 @@ button {
   display: flex;
   flex-direction: column;
   gap: 22px;
+  /* App navigation rail: stays in view while the main content scrolls, so the
+     account/logout footer (pinned via .side-nav-footer { margin-top: auto }) is
+     always reachable without scrolling the page. On a very short viewport the
+     rail itself scrolls internally (overflow-y:auto) and logout stays at the
+     end of that scroll — never hidden below the page content. The whole rail is
+     hidden ≤820px (mobile uses the bottom tab bar + "עוד" sheet). */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .brand {
@@ -150,8 +161,15 @@ button {
 }
 
 .main {
-  padding: 28px;
-  max-width: 1180px;
+  /* Desktop content column. The cap was 1180px, which on wide screens (≥1680px)
+     centered a narrow column inside the area between the rail and the window edge
+     and left large empty gutters. 1440px is a premium app-content width that fills
+     large screens far better while keeping line lengths (activity feed, insights)
+     readable and the grid.two cards from over-stretching. Horizontal padding scales
+     a little with the viewport so the content breathes on the widest screens.
+     Overridden to 18px padding / full width ≤820px (mobile block below). */
+  padding: 28px clamp(28px, 3vw, 48px);
+  max-width: 1440px;
   width: 100%;
   margin: 0 auto;
 }
