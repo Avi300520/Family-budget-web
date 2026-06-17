@@ -1,5 +1,6 @@
 export * from "./shoppingCategories";
 export * from "./financialBaseline";
+export * from "./billing";
 
 import type { ShoppingCategoryId } from "./shoppingCategories";
 import type { FinancialBaseline } from "./financialBaseline";
@@ -9,7 +10,23 @@ export type UserStatus = "onboarding" | "active" | "blocked" | "deleted";
 export type HouseholdStatus = "trial" | "active" | "suspended" | "cancelled" | "deleted";
 export type HouseholdRole = "owner" | "admin" | "adult_member" | "limited_member";
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "cancelled" | "expired" | "paused";
-export type PlanCode = "trial" | "plus_monthly" | "plus_annual" | "family_pro_monthly" | "family_pro_annual";
+// Subscription plan codes. Canonical = `trial` + the 6 composition-tier paid
+// codes (see ./billing PaidPlanCode / PLAN_PRICEBOOK). The 4 legacy `plus_*` /
+// `family_pro_*` codes are DEPRECATED (old usage-metered model) and retained only
+// so existing DB rows and older tests still type-check — never offered for purchase.
+export type PlanCode =
+  | "trial"
+  | "couple_monthly"
+  | "couple_yearly"
+  | "family_small_monthly"
+  | "family_small_yearly"
+  | "family_large_monthly"
+  | "family_large_yearly"
+  /** @deprecated legacy usage-metered codes — do not offer for new checkouts. */
+  | "plus_monthly"
+  | "plus_annual"
+  | "family_pro_monthly"
+  | "family_pro_annual";
 export type ReceiptStatus = "uploaded" | "processing" | "parsed" | "needs_review" | "confirmed" | "failed" | "deleted";
 export type OutboxStatus = "pending" | "sent" | "failed" | "cancelled";
 

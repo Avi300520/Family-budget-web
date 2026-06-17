@@ -33,7 +33,11 @@ import type {
   WeeklyInsightsResponse,
   WishlistItem,
   WishlistItemPriority,
-  OnboardingBaselineRequest
+  OnboardingBaselineRequest,
+  BillingPlan,
+  BillingStatusDto,
+  Entitlement,
+  PaidPlanCode
 } from "@shopping-assistant/shared-types";
 
 export interface ApiClientOptions {
@@ -250,12 +254,33 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ receipt: Receipt; purchase: Purchase; budget: BudgetCurrent }>(`/api/v1/receipts/${receiptId}/confirm`, {
         method: "POST"
       }),
-    checkoutSession: (householdId: string, planCode: string) =>
+    // ── Billing (composition-tier model; pricebook is server-authoritative) ──
+    // The catalog of purchasable plans + the 20-day trial length. Render prices as
+    // ₪ = priceAgorot / 100. The server owns this list; never hardcode prices in the UI.
+    billingPlans: () =>
+      request<{ plans: BillingPlan[]; currency: "ILS"; trialDays: number }>("/api/v1/billing/plans"),
+    // Household billing status: raw subscription row, entitlements, and the computed
+    // BillingStatusDto (effectiveStatus / trialDaysRemaining / requiredTier / upgradeRequired).
+    billingStatus: () =>
+      request<{ subscription?: Subscription; entitlements: Entitlement[]; billing: BillingStatusDto }>(
+        "/api/v1/billing/subscription"
+      ),
+    // planCode is tightened to the 6 canonical paid codes — `trial`/legacy are not purchasable.
+    checkoutSession: (householdId: string, planCode: PaidPlanCode) =>
       request<{ checkoutUrl: string; checkoutSessionId: string }>(`/api/v1/billing/checkout-session`, {
         method: "POST",
         body: JSON.stringify({ householdId, planCode })
       }),
-    subscription: () => request<{ subscription?: Subscription }>("/api/v1/billing/subscription"),
+    changePlan: (householdId: string, planCode: PaidPlanCode) =>
+      request<{ subscription: Subscription }>(`/api/v1/billing/change-plan`, {
+        method: "POST",
+        body: JSON.stringify({ householdId, planCode })
+      }),
+    cancelSubscription: (householdId: string, immediate?: boolean) =>
+      request<{ subscription: Subscription }>(`/api/v1/billing/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ householdId, ...(immediate !== undefined ? { immediate } : {}) })
+      }),
     adminLogin: (token: string) =>
       request<{ csrfToken: string; adminSubject: string }>("/api/v1/admin/auth/login", {
         method: "POST",
