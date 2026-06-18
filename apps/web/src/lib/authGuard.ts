@@ -8,6 +8,13 @@ import { safeNextPath } from "./authRouting";
 // (alongside routeAfterConsume / requiresOnboarding) so it can be unit-tested.
 export { safeNextPath };
 
+// NOTE: there is intentionally NO Next.js middleware auth gate. The session cookie is
+// HttpOnly + host-only to api.pingtally.com, so it is invisible to middleware on the
+// frontend origin — a middleware redirect would break login (it would bounce
+// /auth/consume to /login before the token is consumed). Auth is enforced CLIENT-SIDE
+// here via /me (redirectIfUnauthorized). Do NOT re-introduce a frontend-cookie gate
+// unless the cookie is redesigned as Domain=.pingtally.com (out of scope).
+
 /**
  * Minimal router shape we need — avoids importing Next's internal router type.
  * `useRouter()` from `next/navigation` satisfies this.
