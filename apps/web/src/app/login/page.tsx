@@ -7,12 +7,11 @@
 // primitives (.btn/.card/.mono/.h3) already live in tokens.css/primitives.css.
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import {
   Camera, Check, Home, MessageCircle, Send, ShoppingCart,
   Sparkles, Target, Users, Wallet,
 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { api } from "../../lib/api";
 import { dialForIso, toE164 } from "../../lib/countryCodes";
 
@@ -34,9 +33,6 @@ function TrialBadge() {
 
 /* ── Phone capture (the conversion action — real magic-link) ─────────────── */
 function LoginForm() {
-  const params = useSearchParams();
-  const next = params.get("next") ?? undefined;
-
   const [phone, setPhone] = useState("");
   const [sentTo, setSentTo] = useState<string>();
   const [error, setError] = useState<string>();
@@ -44,6 +40,9 @@ function LoginForm() {
 
   async function submit() {
     setError(undefined);
+    // Read ?next= lazily at submit (client-only event) instead of useSearchParams,
+    // so the whole landing prerenders to static HTML instead of bailing to CSR.
+    const next = new URLSearchParams(window.location.search).get("next") ?? undefined;
     const e164 = toE164(dialForIso("IL"), phone);
     if (!e164) {
       setError("מספר הטלפון לא נראה תקין.");
@@ -498,9 +497,5 @@ function HomeContent() {
 }
 
 export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="login-page"><div className="login-box">טוען…</div></div>}>
-      <HomeContent />
-    </Suspense>
-  );
+  return <HomeContent />;
 }
