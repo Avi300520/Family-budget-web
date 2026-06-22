@@ -9,7 +9,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  Camera, Check, ChevronDown, Home, MessageCircle, Send, ShoppingCart,
+  Camera, Check, Home, MessageCircle, Send, ShoppingCart,
   Sparkles, Target, Users, Wallet,
 } from "lucide-react";
 import { Suspense, useState } from "react";
@@ -95,8 +95,9 @@ function LoginForm() {
           disabled={working}
           aria-invalid={Boolean(error)}
         />
+        {/* Static IL-only indicator (not a picker): no chevron, so it doesn't read as interactive. */}
         <span className="home-cc" aria-hidden>
-          🇮🇱 <span className="home-cc-name">ישראל</span> <span dir="ltr">+972</span> <ChevronDown size={14} />
+          🇮🇱 <span className="home-cc-name">ישראל</span> <span dir="ltr">+972</span>
         </span>
       </div>
       {error && <div role="alert" style={{ color: "var(--neg)", fontSize: 13, marginTop: 10 }}>{error}</div>}
