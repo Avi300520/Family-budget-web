@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { api } from "../../lib/api";
-import { dialForIso, toE164 } from "../../lib/countryCodes";
+import { PhoneInput } from "../../components/PhoneInput";
+import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../lib/countryCodes";
 
 const WA_GREEN = "#25D366";
 
@@ -33,6 +34,7 @@ function TrialBadge() {
 
 /* ── Phone capture (the conversion action — real magic-link) ─────────────── */
 function LoginForm() {
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [phone, setPhone] = useState("");
   const [sentTo, setSentTo] = useState<string>();
   const [error, setError] = useState<string>();
@@ -45,7 +47,7 @@ function LoginForm() {
     // Read ?next= lazily at submit (client-only event) instead of useSearchParams,
     // so the whole landing prerenders to static HTML instead of bailing to CSR.
     const next = new URLSearchParams(window.location.search).get("next") ?? undefined;
-    const e164 = toE164(dialForIso("IL"), phone);
+    const e164 = toE164(dialForIso(countryIso), phone);
     if (!e164) {
       setError("מספר הטלפון לא נראה תקין.");
       return;
@@ -88,22 +90,16 @@ function LoginForm() {
       <label htmlFor="home-phone" style={{ fontSize: 12, color: "var(--text-2)", fontWeight: 600, display: "block", marginBottom: 8 }}>
         מספר הטלפון שלכם
       </label>
-      <div className="home-phone-row">
-        <input
-          id="home-phone"
-          value={phone}
-          onChange={(e) => { setPhone(e.target.value); setError(undefined); }}
-          dir="ltr" inputMode="tel" placeholder="050-123-4567"
-          className="home-phone-input"
-          disabled={working}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? "home-phone-error" : undefined}
-        />
-        {/* Static IL-only indicator (not a picker): no chevron, so it doesn't read as interactive. */}
-        <span className="home-cc" aria-hidden>
-          🇮🇱 <span className="home-cc-name">ישראל</span> <span dir="ltr">+972</span>
-        </span>
-      </div>
+      <PhoneInput
+        id="home-phone"
+        countryIso={countryIso}
+        onCountryChange={(iso) => { setCountryIso(iso); setError(undefined); }}
+        phone={phone}
+        onPhoneChange={(v) => { setPhone(v); setError(undefined); }}
+        phoneAriaLabel="מספר הטלפון שלכם"
+        disabled={working}
+        invalid={Boolean(error)}
+      />
       {error && <div id="home-phone-error" role="alert" style={{ color: "var(--neg)", fontSize: 13, marginTop: 10 }}>{error}</div>}
       <button type="submit" disabled={working} className="btn primary" style={{ width: "100%", height: 50, fontSize: 15, marginTop: 12, borderRadius: "var(--r-3)" }}>
         <Send size={17} /> {working ? "שולח…" : "שלחו לי קישור כניסה"}
@@ -233,7 +229,7 @@ function HeroPhoneCard() {
     { emoji: "🧴", name: "טואלטיקה והיגיינה", items: ["תחליב רחצה"] },
   ];
   return (
-    <div style={{ width: 244, borderRadius: 30, background: "#0F1411", padding: 7, boxShadow: "var(--elev-3), 0 24px 48px rgba(15,42,40,0.28)" }}>
+    <div style={{ width: 264, borderRadius: 30, background: "#0F1411", padding: 7, boxShadow: "var(--elev-3), 0 24px 48px rgba(15,42,40,0.28)" }}>
       <div style={{ borderRadius: 24, overflow: "hidden", background: "#E5DDD5", position: "relative" }}>
         <div style={{ position: "absolute", top: 8, insetInlineStart: "50%", transform: "translateX(-50%)", width: 84, height: 20, background: "#0F1411", borderRadius: 999, zIndex: 2 }} />
         <div style={{ background: "#F6F6F6", padding: "26px 12px 8px", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
@@ -273,15 +269,15 @@ function HeroPhoneCard() {
 function HeroPreview() {
   return (
     <div style={{ width: "100%", paddingTop: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 18, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 250px", minWidth: 240, maxWidth: 296, position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 22, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 280px", minWidth: 240, maxWidth: 340, position: "relative" }}>
           <div style={{ position: "absolute", top: -13, insetInlineEnd: 14, zIndex: 3, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, background: "var(--ink-0)", color: "var(--on-ink-0)", fontSize: 11, fontWeight: 600, padding: "6px 12px", borderRadius: 999, boxShadow: "var(--elev-2)" }}>
             <span style={{ width: 6, height: 6, borderRadius: 999, background: WA_GREEN }} />
             מה שכתבתם, מסודר כאן
           </div>
           <div style={{ paddingTop: 16 }}><HeroDashboardCard /></div>
         </div>
-        <div style={{ flexShrink: 0 }}><HeroPhoneCard /></div>
+        <div style={{ flexShrink: 0, transform: "rotate(3deg)" }}><HeroPhoneCard /></div>
       </div>
     </div>
   );
