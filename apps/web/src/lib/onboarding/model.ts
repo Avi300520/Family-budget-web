@@ -176,8 +176,12 @@ export function createDefaultState(): WizardState {
     householdName: "",
     city: "",
     cars: 1,
-    acceptTerms: false,
-    acceptPrivacy: false,
+    // Consent is captured passively at /login (browse-wrap per the /privacy page) and the backend
+    // stamps consent_terms_at/consent_privacy_at unconditionally on completeOnboarding. Seed true so
+    // the legacy consent gate in validateStep('profile') and the hardcoded acceptTerms/acceptPrivacy
+    // wire payload stay satisfied without a UI checkbox (checkboxes removed from onboarding 2026-06-22).
+    acceptTerms: true,
+    acceptPrivacy: true,
     basis: "calendar",
     startDay: 1,
     salaryDay: 10,
@@ -437,8 +441,8 @@ export function coerceDraftState(raw: unknown): WizardState | null {
   if (typeof raw.householdName === "string") s.householdName = raw.householdName;
   if (typeof raw.city === "string") s.city = raw.city;
   s.cars = finiteNumber(raw.cars, s.cars);
-  if (typeof raw.acceptTerms === "boolean") s.acceptTerms = raw.acceptTerms;
-  if (typeof raw.acceptPrivacy === "boolean") s.acceptPrivacy = raw.acceptPrivacy;
+  // Consent is no longer a wizard field — a stale draft must not re-introduce a false consent and
+  // re-block the profile step (the seeded `true` default always wins). See createDefaultState.
   if (inEnum(raw.basis, BUDGET_BASES)) s.basis = raw.basis;
   s.startDay = finiteNumber(raw.startDay, s.startDay);
   s.salaryDay = finiteNumber(raw.salaryDay, s.salaryDay);

@@ -90,11 +90,13 @@ test("computeTotals reports remaining = managed − allocated", () => {
   assert.equal(t.remaining, 5800);
 });
 
-test("validateStep: profile requires name/household/city/consents", () => {
+test("validateStep: profile requires name/household/city (consent is no longer a wizard gate)", () => {
   const s = createDefaultState();
-  assert.ok(validateStep("profile", s)); // invalid (empty)
+  // Consent is seeded true (captured passively at /login; checkboxes removed 2026-06-22).
+  assert.equal(s.acceptTerms, true);
+  assert.equal(s.acceptPrivacy, true);
+  assert.ok(validateStep("profile", s)); // still invalid — empty name/household/city
   s.displayName = "אבי"; s.householdName = "לוי"; s.city = "תל אביב";
-  s.acceptTerms = true; s.acceptPrivacy = true;
   assert.equal(validateStep("profile", s), null);
 });
 

@@ -96,16 +96,6 @@ export function ProfileStep({ state, set }: StepProps) {
         </Field>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
-        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", fontSize: 14 }}>
-          <input type="checkbox" checked={state.acceptTerms} onChange={(e) => set({ acceptTerms: e.target.checked })} style={{ marginTop: 3 }} />
-          <span>קראתי ואני מסכים/ה ל<a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal)" }}>תנאי השימוש</a></span>
-        </label>
-        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", fontSize: 14 }}>
-          <input type="checkbox" checked={state.acceptPrivacy} onChange={(e) => set({ acceptPrivacy: e.target.checked })} style={{ marginTop: 3 }} />
-          <span>קראתי ואני מסכים/ה ל<a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal)" }}>מדיניות הפרטיות</a></span>
-        </label>
-      </div>
     </div>
   );
 }

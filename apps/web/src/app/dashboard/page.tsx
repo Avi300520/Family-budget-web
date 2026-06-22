@@ -13,8 +13,10 @@ import type {
   ProjectBudget,
   SpendingByCategoryEntry,
   User,
+  WeeklyInsightsResponse,
 } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
+import { InsightCard } from "../../components/InsightCard";
 import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
 import { WhatsAppCtaBanner } from "../../components/WhatsAppCta";
@@ -23,6 +25,7 @@ import { Donut, Thermometer } from "../../components/charts";
 import { api } from "../../lib/api";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
 import { requiresOnboarding } from "../../lib/authRouting";
+import { selectInsightPreview } from "../../lib/insightsPreview";
 
 // ── Category display definitions (no spend data — Iteration 5 will wire real data) ──
 const CATEGORIES: ReadonlyArray<{ key: string; label: string; color: string }> = [
@@ -744,37 +747,70 @@ function ActivityFeed({ entries, memberColorMap }: { entries: ActivityEntry[] | 
   );
 }
 
-// ── InsightsStrip (placeholder) ───────────────────────────────────────────────
-// Smart insights will be wired in Iteration 7.
-function InsightsStrip() {
+// ── InsightsStrip — weekly-insights preview ───────────────────────────────────
+// Reuses the deployed GET /households/:id/insights/weekly path: shows the first
+// 2-3 insights + a link to the full /insights page (fixes the empty placeholder
+// while real weekly insights existed). Renders ONLY inside FamilyView (the
+// non-limited branch), so household-wide data never reaches a limited_member.
+// A fetch error collapses to the friendly empty-state — it never blocks the page.
+function InsightsStrip({ householdId }: { householdId: string }) {
+  const [data, setData] = useState<WeeklyInsightsResponse>();
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .weeklyInsights(householdId, "current")
+      .then((res) => { if (!cancelled) setData(res); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [householdId]);
+
+  const { cards, isEmpty, emptyHeadlineHe } = selectInsightPreview(data?.insights, 3);
+  const showEmpty = failed || (data !== undefined && isEmpty);
+
   return (
     <section className="card" style={{ padding: "var(--sp-6)" }}>
-      <div style={{ marginBottom: "var(--sp-4)" }}>
-        <h3 className="h3">תובנות</h3>
-        <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
-          מבוסס על ההתנהגות שלכם
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "var(--sp-4)" }}>
+        <div>
+          <h3 className="h3">תובנות</h3>
+          <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
+            מבוסס על ההתנהגות שלכם
+          </div>
         </div>
+        <Link href="/insights" className="muted" style={{ fontSize: 13, textDecoration: "none", whiteSpace: "nowrap" }}>
+          לכל התובנות →
+        </Link>
       </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "var(--sp-8) var(--sp-4)",
-          gap: "var(--sp-3)",
-          textAlign: "center",
-          minHeight: 180,
-        }}
-      >
-        <span style={{ fontSize: 36 }} aria-hidden="true">✨</span>
-        <span style={{ fontWeight: 500, color: "var(--text-1)" }}>
-          עוד מעט
-        </span>
-        <span className="muted" style={{ fontSize: 13 }}>
-          אחרי כמה פעולות נתחיל להראות לכם דברים מעניינים על הבית.
-        </span>
-      </div>
+      {data === undefined && !failed ? (
+        <div style={{ minHeight: 180, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <LoadState />
+        </div>
+      ) : showEmpty ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "var(--sp-8) var(--sp-4)",
+            gap: "var(--sp-3)",
+            textAlign: "center",
+            minHeight: 180,
+          }}
+        >
+          <span style={{ fontSize: 36 }} aria-hidden="true">🌿</span>
+          <span className="muted" style={{ fontSize: 13 }}>
+            {emptyHeadlineHe ?? "אחרי כמה פעולות נתחיל להראות לכם דברים מעניינים על הבית."}
+          </span>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: "var(--sp-3)" }}>
+          {cards.map((ins, idx) => (
+            <InsightCard key={`${ins.kind}-${idx}`} insight={ins} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -878,6 +914,7 @@ function FamilyView({
   budget,
   activeProjects,
   role,
+  householdId,
   activity,
   spendingByCategory,
   categoryBudgets,
@@ -886,6 +923,7 @@ function FamilyView({
   budget: BudgetCurrent & { mySpentAmount: number };
   activeProjects: ProjectBudget[];
   role: string | undefined;
+  householdId: string;
   activity: ActivityEntry[] | undefined;
   spendingByCategory: SpendingByCategoryEntry[] | undefined;
   categoryBudgets: CategoryBudget[] | undefined;
@@ -899,7 +937,7 @@ function FamilyView({
       {/* Hero row: MonthProgress + InsightsStrip placeholder */}
       <div className="grid two">
         <MonthProgress budget={budget} />
-        <InsightsStrip />
+        <InsightsStrip householdId={householdId} />
       </div>
 
       {/* Project budgets strip */}
@@ -1081,6 +1119,7 @@ export default function DashboardPage() {
           budget={budget}
           activeProjects={activeProjects}
           role={role}
+          householdId={household.id}
           activity={activity}
           spendingByCategory={spendingByCategory}
           categoryBudgets={categoryBudgets}
