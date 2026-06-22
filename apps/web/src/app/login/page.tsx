@@ -100,7 +100,7 @@ function LoginForm() {
         disabled={working}
         invalid={Boolean(error)}
       />
-      {error && <div id="home-phone-error" role="alert" style={{ color: "var(--neg)", fontSize: 13, marginTop: 10 }}>{error}</div>}
+      {error && <div role="alert" style={{ color: "var(--neg)", fontSize: 13, marginTop: 10 }}>{error}</div>}
       <button type="submit" disabled={working} className="btn primary" style={{ width: "100%", height: 50, fontSize: 15, marginTop: 12, borderRadius: "var(--r-3)" }}>
         <Send size={17} /> {working ? "שולח…" : "שלחו לי קישור כניסה"}
       </button>
@@ -277,7 +277,7 @@ function HeroPreview() {
           </div>
           <div style={{ paddingTop: 16 }}><HeroDashboardCard /></div>
         </div>
-        <div style={{ flexShrink: 0, transform: "rotate(3deg)" }}><HeroPhoneCard /></div>
+        <div className="home-phone-tilt" style={{ flexShrink: 0 }}><HeroPhoneCard /></div>
       </div>
     </div>
   );

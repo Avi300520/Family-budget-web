@@ -438,6 +438,9 @@ button {
 .home-hero-grid { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: 64px; align-items: center; }
 .home-hero-text { max-width: 560px; min-width: 0; }
 .home-hero-visual { min-width: 0; }
+/* Subtle desktop tilt on the phone mock; neutralized at <=880px (below) so the
+   rotated bounding box can never cause horizontal overflow on mobile. */
+.home-phone-tilt { transform: rotate(3deg); }
 .home-h1 { font-size: 47px; font-weight: 800; line-height: 1.07; letter-spacing: -0.025em; margin: 0; color: var(--text-0); }
 .home-hero-lead { font-size: 17px; color: var(--text-1); line-height: 1.6; margin: 18px 0 26px; max-width: 48ch; }
 
@@ -527,6 +530,7 @@ button {
   .home-section { padding: 56px 0; }
   .home-final-inner { flex-direction: column; align-items: flex-start; }
   .home-hero-visual { display: flex; justify-content: center; }
+  .home-phone-tilt { transform: none; } /* no rotation on mobile = no overflow risk */
 }
 
 .table {
