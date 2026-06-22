@@ -11,7 +11,7 @@ import {
   Camera, Check, Home, MessageCircle, Send, ShoppingCart,
   Sparkles, Target, Users, Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../../lib/api";
 import { dialForIso, toE164 } from "../../lib/countryCodes";
 
@@ -37,8 +37,10 @@ function LoginForm() {
   const [sentTo, setSentTo] = useState<string>();
   const [error, setError] = useState<string>();
   const [working, setWorking] = useState(false);
+  const inFlight = useRef(false);
 
   async function submit() {
+    if (inFlight.current) return; // sync re-entrancy guard: never fire two magic-link sends
     setError(undefined);
     // Read ?next= lazily at submit (client-only event) instead of useSearchParams,
     // so the whole landing prerenders to static HTML instead of bailing to CSR.
@@ -48,6 +50,7 @@ function LoginForm() {
       setError("מספר הטלפון לא נראה תקין.");
       return;
     }
+    inFlight.current = true;
     setWorking(true);
     try {
       await api.requestMagicLink(e164, next);
@@ -55,6 +58,7 @@ function LoginForm() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בשליחת קישור");
     } finally {
+      inFlight.current = false;
       setWorking(false);
     }
   }
@@ -93,13 +97,14 @@ function LoginForm() {
           className="home-phone-input"
           disabled={working}
           aria-invalid={Boolean(error)}
+          aria-describedby={error ? "home-phone-error" : undefined}
         />
         {/* Static IL-only indicator (not a picker): no chevron, so it doesn't read as interactive. */}
         <span className="home-cc" aria-hidden>
           🇮🇱 <span className="home-cc-name">ישראל</span> <span dir="ltr">+972</span>
         </span>
       </div>
-      {error && <div role="alert" style={{ color: "var(--neg)", fontSize: 13, marginTop: 10 }}>{error}</div>}
+      {error && <div id="home-phone-error" role="alert" style={{ color: "var(--neg)", fontSize: 13, marginTop: 10 }}>{error}</div>}
       <button type="submit" disabled={working} className="btn primary" style={{ width: "100%", height: 50, fontSize: 15, marginTop: 12, borderRadius: "var(--r-3)" }}>
         <Send size={17} /> {working ? "שולח…" : "שלחו לי קישור כניסה"}
       </button>
