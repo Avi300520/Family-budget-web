@@ -1192,3 +1192,49 @@ html, body {
 }
 .legal-foot a { color: var(--teal-dark); text-decoration: none; }
 .legal-foot a:hover { text-decoration: underline; }
+
+/* Legal pages — top navigation (return button + page tabs). Public, RTL. */
+.legal-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.legal-nav__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--teal);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.legal-nav__back:hover { background: var(--teal-dark); }
+.legal-nav__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.legal-nav__tab {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--cream-3);
+  background: var(--surface);
+  color: var(--text-1, var(--text-0));
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.legal-nav__tab:hover { border-color: var(--teal-soft); }
+.legal-nav__tab[aria-current="page"] {
+  background: var(--teal-bg);
+  border-color: var(--teal-soft);
+  color: var(--teal-dark);
+  font-weight: 600;
+}

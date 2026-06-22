@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { LegalTopNav } from "./LegalTopNav";
 
 /**
  * Standalone wrapper for the public legal pages (/privacy, /terms).
@@ -22,6 +24,10 @@ export function LegalLayout({
 }) {
   return (
     <div className="legal-page">
+      {/* Suspense: useSearchParams in the client island; the page still prerenders. */}
+      <Suspense fallback={null}>
+        <LegalTopNav />
+      </Suspense>
       <header className="legal-head">
         <Link href="/" className="legal-brand">
           <span className="legal-brand__mark">P</span>
@@ -43,8 +49,6 @@ export function LegalLayout({
         <Link href="/privacy">מדיניות פרטיות</Link>
         <span aria-hidden>·</span>
         <Link href="/terms">תנאי שימוש</Link>
-        <span aria-hidden>·</span>
-        <Link href="/login">חזרה לכניסה</Link>
       </footer>
     </div>
   );
