@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Check, MessageCircle, Send, ShieldCheck } from "lucide-react";
 import { Suspense, useState } from "react";
@@ -119,7 +120,9 @@ function LoginInner() {
               </button>
 
               <p className="auth-legal">
-                בכניסה אתם מסכימים לתנאי השימוש ולמדיניות הפרטיות שלנו.
+                בכניסה אתם מסכימים{" "}
+                <Link href="/terms">לתנאי השימוש</Link>{" "}
+                ול<Link href="/privacy">מדיניות הפרטיות</Link> שלנו.
               </p>
             </form>
           ) : (
