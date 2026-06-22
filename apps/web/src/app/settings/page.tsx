@@ -78,7 +78,9 @@ const CARDS: SettingCard[] = [
     can: canViewHouseholdMembers
   },
   {
-    href: "/privacy",
+    // ?from=settings → the legal page's top nav shows "חזרה להגדרות" back to /settings
+    // (instead of the default "חזרה לכניסה"). Terms is reachable from that top nav.
+    href: "/privacy?from=settings",
     title: "פרטיות ותנאים",
     description: "מדיניות הפרטיות ותנאי השימוש.",
     icon: ShieldCheck,
