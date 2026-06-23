@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, isAuthError, isTransportError, toErrorMessage } from "../../../lib/api";
 import { AdminRail } from "../../AdminRail";
 import { isPreviewHost, DEMO_BANNER, demoHousehold360, demoNotes, demoAudit } from "../../../lib/demo";
+import { roleDisplay, memberStatusLabel, inviteStateLabel } from "../../../lib/roles";
 
 // Shared-types DTOs and the AdminGrantKind union live in @shopping-assistant/shared-types,
 // which is NOT directly resolvable from the admin app (only api-client is symlinked) and is
@@ -302,6 +303,17 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
   );
 }
 
+// A role label + plain-language help tooltip. Display-only — never changes authz.
+function RoleChip({ role, isCoManager, status }: { role: string; isCoManager?: boolean; status?: string }) {
+  const rd = roleDisplay(role, { isCoManager, status });
+  return (
+    <span className="status" title={rd.help} aria-label={rd.help ? `${rd.label} — ${rd.help}` : rd.label} style={{ cursor: rd.help ? "help" : undefined }}>
+      {rd.label}
+      {rd.help ? <span aria-hidden style={{ marginInlineStart: 4, opacity: 0.7 }}>ⓘ</span> : null}
+    </span>
+  );
+}
+
 // ── Members ─────────────────────────────────────────────────────────────────
 function MembersTab({
   members,
@@ -326,8 +338,8 @@ function MembersTab({
               <div className="row between">
                 <strong>{m.displayName ?? "(no name)"}</strong>
                 <div className="row">
-                  {m.isOwner && <span className="status">owner</span>}
-                  <span className={`status ${m.status === "active" ? "" : m.status === "removed" ? "error" : "warn"}`}>{m.status}</span>
+                  <RoleChip role={m.role} isCoManager={m.isCoManager} status={m.status} />
+                  <span className={`status ${m.status === "active" ? "" : m.status === "removed" ? "error" : "warn"}`}>{memberStatusLabel(m.status)}</span>
                   {m.onboardingStuck && <span className="status warn">onboarding stuck</span>}
                 </div>
               </div>
@@ -552,7 +564,7 @@ function OpsTab({
           <select className="input" style={{ maxWidth: 280 }} value={repairMemberId} onChange={(e) => setRepairMemberId(e.target.value)}>
             <option value="">Select an active member…</option>
             {activeMembers.map((m) => (
-              <option key={m.memberId} value={m.memberId}>{m.displayName ?? m.userId} ({m.role}){m.isOwner ? " · owner" : ""}</option>
+              <option key={m.memberId} value={m.memberId}>{m.displayName ?? m.userId} ({roleDisplay(m.role, { isCoManager: m.isCoManager }).label}){m.isOwner ? " · בעלים" : ""}</option>
             ))}
           </select>
           <button className="button" style={DANGER} onClick={onRepairOwner} disabled={disabled} title={disabled ? "Disabled in preview demo mode" : undefined}>Repair owner</button>
@@ -629,14 +641,17 @@ function InvitesSection({ invites }: { invites: Invite[] }) {
           // 'stale' = a still-'pending' invite whose expiry has passed.
           const stale = inv.state === "pending" && Date.parse(inv.expiresAt) < now;
           const cls = inv.state === "consumed" ? "" : inv.state === "expired" || stale ? "error" : "warn";
-          const label = stale ? "stale" : inv.state;
+          const label = stale ? "הזמנה שפגה" : inviteStateLabel(inv.state);
           return (
             <div className="item" key={inv.id}>
               <div className="row between">
                 <strong>{inv.invitedName ?? "(no name)"}</strong>
                 <span className={`status ${cls}`}>{label}</span>
               </div>
-              <div className="muted">{inv.invitedPhoneMasked} · {inv.role}</div>
+              <div className="row" style={{ marginTop: 2 }}>
+                <span className="muted">{inv.invitedPhoneMasked}</span>
+                <RoleChip role={inv.role} />
+              </div>
               <div className="muted" style={{ fontSize: 12 }}>expires {inv.expiresAt}{inv.consumedAt ? ` · consumed ${inv.consumedAt}` : ""}</div>
             </div>
           );

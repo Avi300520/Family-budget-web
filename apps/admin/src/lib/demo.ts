@@ -66,7 +66,7 @@ export const demoSearchRows: SearchRow[] = [
     status: "trial",
     planLabel: "Trial (no pricebook plan)",
     effectiveBillingStatus: "active",
-    memberCount: 4,
+    memberCount: 5,
     lastWaActivityAt: "2026-06-22T09:30:00.000Z",
     integrityFlagCount: 1
   },
@@ -88,11 +88,12 @@ export const demoHousehold360: Household360 = {
   household: { id: DEMO_HOUSEHOLD_ID, name: "Demo Household", status: "trial", ownerUserId: "demo-owner-user", createdAt: "2026-05-01T10:00:00.000Z" },
   owner: { id: "demo-owner-user", displayName: "Demo Owner", phoneMasked: "+972-50-***-1234" },
   members: [
-    { memberId: "m-owner", userId: "demo-owner-user", displayName: "Demo Owner", phoneMasked: "+972-50-***-1234", role: "owner", status: "active", isOwner: true, joinedAt: "2026-05-01T10:00:00.000Z", lastWaInboundAt: "2026-06-22T09:30:00.000Z", lastWaOutboundAt: "2026-06-22T09:31:00.000Z", dashboardLastSeenAt: "2026-06-22T20:00:00.000Z", onboardingStuck: false },
-    { memberId: "m-comgr", userId: "demo-comanager", displayName: "Demo Co-manager", phoneMasked: "+972-54-***-2222", role: "admin", status: "active", isOwner: false, joinedAt: "2026-05-02T08:00:00.000Z", lastWaInboundAt: "2026-06-20T12:00:00.000Z", dashboardLastSeenAt: "2026-06-21T19:00:00.000Z", onboardingStuck: false },
-    { memberId: "m-adult", userId: "demo-adult", displayName: "Demo Adult", phoneMasked: "+972-53-***-3333", role: "adult_member", status: "active", joinedAt: "2026-05-03T08:00:00.000Z", lastWaInboundAt: "2026-06-19T10:00:00.000Z", onboardingStuck: false, isOwner: false },
-    { memberId: "m-kid", userId: "demo-limited", displayName: "Demo Teen", phoneMasked: "+972-55-***-4444", role: "limited_member", status: "active", joinedAt: "2026-05-10T08:00:00.000Z", onboardingStuck: false, isOwner: false },
-    { memberId: "m-removed", userId: "demo-removed", displayName: "Demo Left Member", phoneMasked: "+972-58-***-7777", role: "adult_member", status: "removed", joinedAt: "2026-05-04T08:00:00.000Z", onboardingStuck: false, isOwner: false }
+    { memberId: "m-owner", userId: "demo-owner-user", displayName: "Demo Owner (בעל הבית)", phoneMasked: "+972-50-***-1234", role: "owner", status: "active", isOwner: true, isCoManager: false, joinedAt: "2026-05-01T10:00:00.000Z", lastWaInboundAt: "2026-06-22T09:30:00.000Z", lastWaOutboundAt: "2026-06-22T09:31:00.000Z", dashboardLastSeenAt: "2026-06-22T20:00:00.000Z", onboardingStuck: false },
+    { memberId: "m-admin", userId: "demo-admin", displayName: "Demo Admin (מנהל)", phoneMasked: "+972-54-***-2222", role: "admin", status: "active", isOwner: false, isCoManager: false, joinedAt: "2026-05-02T08:00:00.000Z", lastWaInboundAt: "2026-06-20T12:00:00.000Z", dashboardLastSeenAt: "2026-06-21T19:00:00.000Z", onboardingStuck: false },
+    { memberId: "m-comgr", userId: "demo-comanager", displayName: "Demo Co-manager (מנהל שותף)", phoneMasked: "+972-52-***-6666", role: "adult_member", status: "active", isOwner: false, isCoManager: true, joinedAt: "2026-05-02T09:00:00.000Z", lastWaInboundAt: "2026-06-20T13:00:00.000Z", dashboardLastSeenAt: "2026-06-21T20:00:00.000Z", onboardingStuck: false },
+    { memberId: "m-adult", userId: "demo-adult", displayName: "Demo Adult (מבוגר)", phoneMasked: "+972-53-***-3333", role: "adult_member", status: "active", isOwner: false, isCoManager: false, joinedAt: "2026-05-03T08:00:00.000Z", lastWaInboundAt: "2026-06-19T10:00:00.000Z", onboardingStuck: false },
+    { memberId: "m-kid", userId: "demo-limited", displayName: "Demo Teen (ילד / מוגבל)", phoneMasked: "+972-55-***-4444", role: "limited_member", status: "active", isOwner: false, isCoManager: false, joinedAt: "2026-05-10T08:00:00.000Z", onboardingStuck: false },
+    { memberId: "m-removed", userId: "demo-removed", displayName: "Demo Left Member", phoneMasked: "+972-58-***-7777", role: "adult_member", status: "removed", isOwner: false, isCoManager: false, joinedAt: "2026-05-04T08:00:00.000Z", onboardingStuck: false }
   ],
   invites: [
     { id: "inv-pending", invitedPhoneMasked: "+972-53-***-9999", invitedName: "Pending Teen", role: "limited_member", expiresAt: "2099-01-01T00:00:00.000Z", state: "pending" },
@@ -117,7 +118,7 @@ export const demoHousehold360: Household360 = {
       { id: "ev-grant", eventType: "manual_grant", reason: "goodwill — onboarding hiccup (demo)", adminSubject: "admin@demo.example", grantKind: "free_month", correlationId: "demo-corr-1", startsAt: "2026-06-15T08:00:00.000Z", endsAt: "2099-01-01T00:00:00.000Z", createdAt: "2026-06-15T08:00:00.000Z" }
     ]
   },
-  counts: { members: 5, activeMembers: 4, purchases: 128, receipts: 34, shoppingItems: 212 },
+  counts: { members: 6, activeMembers: 5, purchases: 128, receipts: 34, shoppingItems: 212 },
   ops: { failedWaMessageCount: 1, staleInviteCount: 1, pendingInviteCount: 1 },
   integrityFlags: ["stale_invites"]
 };

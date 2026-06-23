@@ -571,6 +571,9 @@ export interface AdminHousehold360Member {
   /** 'invited' | 'active' | 'removed' — removed/left members ARE included by design. */
   status: HouseholdMember["status"];
   isOwner: boolean;
+  /** DISPLAY-ONLY: an adult_member granted permissions.all (a household co-manager).
+   *  Derived from the existing permissions — NOT a new role, value, or authz rule. */
+  isCoManager: boolean;
   joinedAt: string;
   /** WA + dashboard activity — TIMESTAMPS ONLY, never message content. */
   lastWaInboundAt?: string;

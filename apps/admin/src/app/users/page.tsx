@@ -11,6 +11,7 @@ import type {
 import Link from "next/link";
 import { api, isTransportError, toErrorMessage } from "../../lib/api";
 import { AdminRail } from "../AdminRail";
+import { roleDisplay, memberStatusLabel } from "../../lib/roles";
 
 const DANGER: React.CSSProperties = { background: "var(--rose)" };
 const SUBTLE: React.CSSProperties = { background: "var(--nav)" };
@@ -225,7 +226,7 @@ export default function AdminUsersPage() {
                 {detail.memberships.map((m) => (
                   <div className="item" key={m.householdId}>
                     <strong>{m.householdName ?? m.householdId}</strong>
-                    <div className="muted">{m.role} · {m.memberStatus}{m.isOwner ? " · owner" : ""}</div>
+                    <div className="muted">{roleDisplay(m.role).label} · {memberStatusLabel(m.memberStatus)}{m.isOwner ? " · בעלים" : ""}</div>
                   </div>
                 ))}
                 {!detail.memberships.length && <div className="muted">No memberships.</div>}
