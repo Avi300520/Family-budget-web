@@ -31,14 +31,8 @@ export default function AdvancedToolsPage() {
       setOverview((p) => p ?? demoOverview);
       return;
     }
-    if (authish) {
-      setNotice({
-        tone: "info",
-        text: "Authenticated data is only available on admin.pingtally.com behind Cloudflare Access. This preview shows the layout only."
-      });
-    } else {
-      setNotice({ tone: "error", text: toErrorMessage(err, context) });
-    }
+    // Production (non-preview): honest re-auth / status message — NEVER the preview copy.
+    setNotice({ tone: authish ? "info" : "error", text: toErrorMessage(err, context) });
   }
 
   async function load() {

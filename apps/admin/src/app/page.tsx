@@ -40,14 +40,10 @@ export default function AdminDashboard() {
       setResults((p) => p ?? demoSearchRows);
       return;
     }
-    if (authish) {
-      setNotice({
-        tone: "info",
-        text: "Authenticated data is only available on admin.pingtally.com behind Cloudflare Access. This preview shows the layout only."
-      });
-    } else {
-      setNotice({ tone: "error", text: toErrorMessage(err, context) });
-    }
+    // Production (non-preview): show the HONEST message — re-authenticate for 401/403,
+    // a clear reload-to-reauth notice for a transport/Access-challenged request, or the
+    // real status for any other error. NEVER the preview "layout only" copy here.
+    setNotice({ tone: authish ? "info" : "error", text: toErrorMessage(err, context) });
   }
 
   useEffect(() => {
