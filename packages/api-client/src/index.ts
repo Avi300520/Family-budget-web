@@ -349,7 +349,12 @@ export function createApiClient(options: ApiClientOptions) {
       }),
     // ── Admin V2 — Household 360 ───────────────────────────────────────────
     adminSearchHouseholds: (by: AdminHouseholdSearchBy, q: string, limit = 20) =>
-      request<{ households: AdminHouseholdSearchRow[] }>(`/api/v1/admin/households/search?by=${by}&q=${encodeURIComponent(q)}&limit=${limit}`),
+      // POST (not GET-with-query): Cloudflare's edge WAF on admin.pingtally.com blocks the
+      // search query string before it reaches the same-origin BFF. Send params in the body.
+      request<{ households: AdminHouseholdSearchRow[] }>("/api/v1/admin/households/search", {
+        method: "POST",
+        body: JSON.stringify({ by, q, limit })
+      }),
     adminGetHousehold: (householdId: string) =>
       request<AdminHousehold360>(`/api/v1/admin/households/${encodeURIComponent(householdId)}`),
     adminHouseholdBilling: (householdId: string) =>
