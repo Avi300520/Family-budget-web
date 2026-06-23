@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, isTransportError, toErrorMessage } from "../../../lib/api";
+import { AdminRail } from "../../AdminRail";
 
 // Shared-types DTOs and the AdminGrantKind union live in @shopping-assistant/shared-types,
 // which is NOT directly resolvable from the admin app (only api-client is symlinked) and is
@@ -174,19 +175,11 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
 
   return (
     <div className="shell">
-      <aside className="nav">
-        <div className="brand">Admin</div>
-        <div className="list">
-          <Link href="/" style={{ color: "white" }}>Operations</Link>
-          <Link href="/households" style={{ color: "white", fontWeight: 800 }}>Households</Link>
-          <Link href="/users" style={{ color: "white" }}>User management</Link>
-        </div>
-        {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
-      </aside>
+      <AdminRail adminEmail={adminEmail} />
       <main className="main">
         <div className="row between">
           <h1 className="page-title">{h?.name ?? "Household"}</h1>
-          <Link href="/households" className="button" style={SUBTLE}>← Back to search</Link>
+          <Link href="/" className="button" style={SUBTLE}>← Dashboard</Link>
         </div>
 
         {error && (
