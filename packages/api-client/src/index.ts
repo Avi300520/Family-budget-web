@@ -19,6 +19,13 @@ import type {
   AdminReceiptView,
   AdminSupportNoteView,
   AdminWebhookEventView,
+  AdminHouseholdSearchRow,
+  AdminHousehold360,
+  AdminBillingView,
+  AdminIntegrityReport,
+  AdminOverviewCounts,
+  AdminHouseholdSearchBy,
+  AdminGrantKind,
   ProjectBudget,
   Purchase,
   Receipt,
@@ -339,6 +346,45 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ user: AdminUserSummary }>(`/api/v1/admin/users/${encodeURIComponent(userId)}/reactivate`, {
         method: "POST",
         body: JSON.stringify(reason ? { reason } : {})
+      }),
+    // ── Admin V2 — Household 360 ───────────────────────────────────────────
+    adminSearchHouseholds: (by: AdminHouseholdSearchBy, q: string, limit = 20) =>
+      request<{ households: AdminHouseholdSearchRow[] }>(`/api/v1/admin/households/search?by=${by}&q=${encodeURIComponent(q)}&limit=${limit}`),
+    adminGetHousehold: (householdId: string) =>
+      request<AdminHousehold360>(`/api/v1/admin/households/${encodeURIComponent(householdId)}`),
+    adminHouseholdBilling: (householdId: string) =>
+      request<AdminBillingView>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/billing`),
+    adminHouseholdAudit: (householdId: string, limit = 50) =>
+      request<{ audit: AdminAuditEntry[] }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/audit?limit=${limit}`),
+    adminHouseholdNotes: (householdId: string) =>
+      request<{ notes: AdminSupportNoteView[] }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/notes`),
+    adminIntegrity: () => request<AdminIntegrityReport>("/api/v1/admin/integrity"),
+    adminOverviewCounts: () => request<AdminOverviewCounts>("/api/v1/admin/overview/counts"),
+    /** Audited FULL-phone reveal (reason recorded before the value returns; value never logged). */
+    adminRevealPhone: (householdId: string, memberId: string, reason: string) =>
+      request<{ memberId: string; field: "phone"; value: string }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/reveal`, {
+        method: "POST",
+        body: JSON.stringify({ field: "phone", memberId, reason })
+      }),
+    adminGrant: (householdId: string, kind: AdminGrantKind, reason: string, endsAt?: string) =>
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/grant`, {
+        method: "POST",
+        body: JSON.stringify({ kind, reason, ...(endsAt ? { endsAt } : {}) })
+      }),
+    adminRevokeGrant: (householdId: string, correlationId: string, reason: string) =>
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/grant/${encodeURIComponent(correlationId)}/revoke`, {
+        method: "POST",
+        body: JSON.stringify({ reason })
+      }),
+    adminAddHouseholdNote: (householdId: string, body: string) =>
+      request<{ note: unknown }>("/api/v1/admin/support-notes", {
+        method: "POST",
+        body: JSON.stringify({ householdId, body })
+      }),
+    adminRepairOwner: (householdId: string, memberId: string, reason: string) =>
+      request<{ ok: true; memberId: string; role: string }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/repair-owner`, {
+        method: "POST",
+        body: JSON.stringify({ memberId, reason })
       }),
     listMembers: (householdId: string) =>
       request<{ members: Array<HouseholdMember & { displayName?: string; phoneE164?: string }> }>(`/api/v1/households/${householdId}/members`),

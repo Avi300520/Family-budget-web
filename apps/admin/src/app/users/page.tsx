@@ -10,6 +10,8 @@ import type {
 } from "@shopping-assistant/api-client";
 import Link from "next/link";
 import { api, isTransportError, toErrorMessage } from "../../lib/api";
+import { AdminRail } from "../AdminRail";
+import { roleDisplay, memberStatusLabel } from "../../lib/roles";
 
 const DANGER: React.CSSProperties = { background: "var(--rose)" };
 const SUBTLE: React.CSSProperties = { background: "var(--nav)" };
@@ -150,17 +152,11 @@ export default function AdminUsersPage() {
 
   return (
     <div className="shell">
-      <aside className="nav">
-        <div className="brand">Admin</div>
-        <div className="list">
-          <Link href="/" style={{ color: "white" }}>Operations</Link>
-          <Link href="/users" style={{ color: "white", fontWeight: 800 }}>User management</Link>
-        </div>
-        {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
-      </aside>
+      <AdminRail active="advanced" adminEmail={adminEmail} />
       <main className="main">
         <div className="row between">
           <h1 className="page-title">User management</h1>
+          <Link href="/advanced" className="button" style={{ background: "var(--nav)" }}>← Advanced tools</Link>
         </div>
 
         {error && (
@@ -230,7 +226,7 @@ export default function AdminUsersPage() {
                 {detail.memberships.map((m) => (
                   <div className="item" key={m.householdId}>
                     <strong>{m.householdName ?? m.householdId}</strong>
-                    <div className="muted">{m.role} · {m.memberStatus}{m.isOwner ? " · owner" : ""}</div>
+                    <div className="muted">{roleDisplay(m.role).label} · {memberStatusLabel(m.memberStatus)}{m.isOwner ? " · בעלים" : ""}</div>
                   </div>
                 ))}
                 {!detail.memberships.length && <div className="muted">No memberships.</div>}

@@ -1,224 +1,199 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, isTransportError, toErrorMessage } from "../lib/api";
+import Link from "next/link";
+import { api, isAuthError, isTransportError, toErrorMessage } from "../lib/api";
+import { AdminRail } from "./AdminRail";
+import { isPreviewHost, DEMO_BANNER, demoCounts, demoIntegrity, demoSearchRows } from "../lib/demo";
 
-type Overview = Awaited<ReturnType<typeof api.adminOverview>>;
+// Derive every shape from the api-client return/param types (shared-types is not
+// re-exported by api-client). Same convention used across the admin app.
+type Counts = Awaited<ReturnType<typeof api.adminOverviewCounts>>;
+type Integrity = Awaited<ReturnType<typeof api.adminIntegrity>>;
+type SearchResponse = Awaited<ReturnType<typeof api.adminSearchHouseholds>>;
+type HouseholdRow = SearchResponse["households"][number];
+type AdminHouseholdSearchBy = Parameters<typeof api.adminSearchHouseholds>[0];
 
-export default function AdminPage() {
-  const [overview, setOverview] = useState<Overview>();
-  const [error, setError] = useState<string>();
-  const [canReload, setCanReload] = useState(false);
+export default function AdminDashboard() {
   const [adminEmail, setAdminEmail] = useState<string>();
-  const [supportHouseholdId, setSupportHouseholdId] = useState("");
-  const [supportBody, setSupportBody] = useState("");
+  const [counts, setCounts] = useState<Counts>();
+  const [integrity, setIntegrity] = useState<Integrity>();
+  const [notice, setNotice] = useState<{ tone: "info" | "error"; text: string }>();
 
-  function fail(err: unknown, context?: string) {
-    setError(toErrorMessage(err, context));
-    setCanReload(isTransportError(err));
-  }
+  const [by, setBy] = useState<AdminHouseholdSearchBy>("phone");
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<HouseholdRow[]>();
 
-  async function load() {
-    try {
-      setError(undefined);
-      // Identify the verified Cloudflare Access admin first; then load the overview.
-      const [me, data] = await Promise.all([api.adminAuthMe(), api.adminOverview()]);
-      setAdminEmail(me.adminEmail);
-      setOverview(data);
-    } catch (err) {
-      fail(err, "operations overview");
+  // An auth/transport failure (e.g. this Vercel preview, which is NOT behind
+  // Cloudflare Access) is expected. On a PREVIEW host we render a clearly-labeled
+  // visual demo so the layout is reviewable; on the production host (never a
+  // preview host) we only ever show the calm re-auth notice — never demo data.
+  // A real HTTP error is shown honestly. `setX(p => p ?? demo)` never clobbers
+  // real data that already loaded.
+  function note(err: unknown, context?: string) {
+    const authish = isAuthError(err) || isTransportError(err);
+    if (authish && isPreviewHost()) {
+      setNotice({ tone: "info", text: DEMO_BANNER });
+      setCounts((p) => p ?? demoCounts);
+      setIntegrity((p) => p ?? demoIntegrity);
+      setResults((p) => p ?? demoSearchRows);
+      return;
     }
-  }
-
-  async function addSupportNote(event: React.FormEvent) {
-    event.preventDefault();
-    if (!supportHouseholdId || !supportBody) return;
-    try {
-      await api.addSupportNote(supportHouseholdId, supportBody);
-      setSupportBody("");
-      await load();
-    } catch (err) {
-      fail(err, "the support note");
+    if (authish) {
+      setNotice({
+        tone: "info",
+        text: "Authenticated data is only available on admin.pingtally.com behind Cloudflare Access. This preview shows the layout only."
+      });
+    } else {
+      setNotice({ tone: "error", text: toErrorMessage(err, context) });
     }
   }
 
   useEffect(() => {
-    load();
+    api.adminAuthMe().then((me) => setAdminEmail(me.adminEmail)).catch((err) => note(err, "admin identity"));
+    api.adminOverviewCounts().then(setCounts).catch((err) => note(err, "overview counts"));
+    api.adminIntegrity().then(setIntegrity).catch((err) => note(err, "integrity"));
   }, []);
+
+  async function search(event: React.FormEvent) {
+    event.preventDefault();
+    if (!q.trim()) return;
+    setBusy(true);
+    try {
+      const res = await api.adminSearchHouseholds(by, q.trim());
+      setResults(res.households);
+      setNotice(undefined);
+    } catch (err) {
+      note(err, "household search");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const integrityRows: Array<[string, number]> = integrity
+    ? [
+        ["Ownerless households", integrity.ownerlessHouseholds.length],
+        ["Owner-column mismatch", integrity.ownerColumnMismatch.length],
+        ["Users in >1 household", integrity.multiHouseholdUsers.length],
+        ["Duplicate phones", integrity.duplicatePhones.length],
+        ["Stale invites", integrity.staleInvites.length],
+        ["Failed sends", integrity.failedOutboxCount + integrity.failedWebhookCount],
+        ["Billing mismatch", integrity.billingMismatchCount]
+      ]
+    : [];
 
   return (
     <div className="shell">
-      <aside className="nav">
-        <div className="brand">Admin</div>
-        <div className="list">
-          <Link href="/" style={{ color: "white", fontWeight: 800 }}>Operations</Link>
-          <Link href="/users" style={{ color: "white" }}>User management</Link>
-        </div>
-        {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
-      </aside>
+      <AdminRail active="dashboard" adminEmail={adminEmail} />
       <main className="main">
-        <div className="row between">
-          <h1 className="page-title">Operations</h1>
-          <button className="button" onClick={load}>
-            <RefreshCw size={18} aria-hidden />
-            Refresh
-          </button>
-        </div>
-        {error && (
-          <div className="panel status error">
-            {error}
-            {canReload && (
-              <div style={{ marginTop: 8 }}>
-                <button className="button" type="button" onClick={() => window.location.reload()}>
-                  Reload to re-authenticate
-                </button>
+        <h1 className="page-title">Admin Dashboard</h1>
+        <p className="muted" style={{ marginTop: -8 }}>
+          One workspace for every household account. Search a household to open its 360 view — members, billing,
+          activity, ops, notes &amp; audit all live inside the account.
+        </p>
+
+        {notice && (
+          <div
+            className={notice.tone === "error" ? "panel status error" : "panel"}
+            style={notice.tone === "info" ? { borderInlineStart: "3px solid var(--amber)" } : undefined}
+          >
+            {notice.text}
+          </div>
+        )}
+
+        {/* Household lookup — the primary entry point into Household 360. */}
+        <section className="panel">
+          <h2>Find a household</h2>
+          <form className="row" onSubmit={search}>
+            <select className="input" style={{ maxWidth: 150 }} value={by} onChange={(e) => setBy(e.target.value as AdminHouseholdSearchBy)}>
+              <option value="phone">Phone</option>
+              <option value="owner">Owner name</option>
+              <option value="id">Household ID</option>
+              <option value="user_id">User ID</option>
+              <option value="status">Status</option>
+            </select>
+            <input className="input" style={{ maxWidth: 360 }} placeholder="search term" value={q} onChange={(e) => setQ(e.target.value)} />
+            <button className="button" type="submit" disabled={busy}>{busy ? "…" : "Search"}</button>
+          </form>
+          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>Owner phone is masked. Full reveal is audited, inside the household 360.</div>
+          {results && (
+            <div className="list" style={{ marginTop: 12 }}>
+              {results.map((r) => (
+                <Link
+                  key={r.householdId}
+                  href={`/households/${r.householdId}`}
+                  className="item"
+                  style={{ textAlign: "start", display: "block", color: "inherit", textDecoration: "none" }}
+                >
+                  <div className="row between">
+                    <strong>{r.name || "(no name)"}</strong>
+                    {r.integrityFlagCount > 0 && (
+                      <span className="status error">{r.integrityFlagCount} integrity {r.integrityFlagCount === 1 ? "flag" : "flags"}</span>
+                    )}
+                  </div>
+                  <div className="muted">{r.ownerDisplayName ? `${r.ownerDisplayName} · ` : ""}{r.ownerPhoneMasked}</div>
+                  <div className="row" style={{ marginTop: 4 }}>
+                    <span className="status">{r.status}</span>
+                    <span className="status">{r.planLabel}</span>
+                    <span className="status">{r.effectiveBillingStatus}</span>
+                    <span className="muted" style={{ fontSize: 12 }}>{r.memberCount} {r.memberCount === 1 ? "member" : "members"}</span>
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>id {r.householdId}{r.lastWaActivityAt ? ` · last WA ${r.lastWaActivityAt}` : ""}</div>
+                </Link>
+              ))}
+              {!results.length && <div className="muted">No households found.</div>}
+            </div>
+          )}
+        </section>
+
+        {/* At a glance — bounded counts. */}
+        {counts && (
+          <section className="panel">
+            <h2>At a glance</h2>
+            <div className="row">
+              {Object.entries(counts.householdsByStatus).map(([status, n]) => (
+                <span key={status} className="status">{status} {n}</span>
+              ))}
+              <span className="status">active trials {counts.activeTrials}</span>
+              <span className={`status ${counts.integrityFlagCount > 0 ? "error" : ""}`}>integrity flags {counts.integrityFlagCount}</span>
+              <span className={`status ${counts.failedSendsCount > 0 ? "warn" : ""}`}>failed sends {counts.failedSendsCount}</span>
+              <span className="status">WA active 7d {counts.waActiveThisWeek}</span>
+              <span className="status">dashboard active 7d {counts.dashboardActiveThisWeek}</span>
+            </div>
+          </section>
+        )}
+
+        {/* Integrity & support queue. */}
+        {integrity && (
+          <section className="panel">
+            <h2>Integrity &amp; support queue</h2>
+            <div className="grid two">
+              {integrityRows.map(([label, n]) => (
+                <div className="item" key={label}>
+                  <strong className={n > 0 ? undefined : "muted"}>{n}</strong>
+                  <div className="muted">{label}</div>
+                </div>
+              ))}
+            </div>
+            {integrity.ownerlessHouseholds.length > 0 && (
+              <div className="list" style={{ marginTop: 10 }}>
+                <div className="muted">Ownerless households — open to repair:</div>
+                {integrity.ownerlessHouseholds.map((h) => (
+                  <Link key={h.householdId} href={`/households/${h.householdId}`} className="item" style={{ display: "block", color: "inherit", textDecoration: "none" }}>
+                    <div className="row between">
+                      <strong>{h.name || h.householdId}</strong>
+                      <span className="status error">ownerless</span>
+                    </div>
+                  </Link>
+                ))}
               </div>
             )}
-          </div>
+          </section>
         )}
-        {!overview && !error && <div className="panel">Loading…</div>}
-        {overview && (
-          <div className="grid two">
-            <section className="panel">
-              <h2>Support note</h2>
-              <form className="list" onSubmit={addSupportNote}>
-                <input className="input" placeholder="household id" value={supportHouseholdId} onChange={(event) => setSupportHouseholdId(event.target.value)} />
-                <input className="input" placeholder="note" value={supportBody} onChange={(event) => setSupportBody(event.target.value)} />
-                <button className="button" type="submit">Add note</button>
-              </form>
-            </section>
-            <Section title="Households" items={overview.households} render={(item) => {
-              const entry = item as { household?: { name?: string; status?: string }; budget?: { spentAmount?: number; remainingAmount?: number }; subscription?: { planCode?: string } };
-              return (
-                <>
-                  <strong>{entry.household?.name ?? "household"}</strong>
-                  <div className="muted">{entry.household?.status} · {entry.subscription?.planCode ?? "trial"}</div>
-                  <div className="status">spent {entry.budget?.spentAmount ?? 0}</div>
-                </>
-              );
-            }} />
-            <Section title="Receipts" items={overview.receipts} render={(receipt) => (
-              <>
-                <strong>{receipt.merchantName ?? receipt.id}</strong>
-                <div className="muted">{receipt.status} · {receipt.confidenceScore}</div>
-              </>
-            )} />
-            <Section title="Outbox" items={overview.outbox} render={(message) => {
-              // Queue/send state (status) is distinct from the PROVIDER delivery
-              // state (deliveryStatus). "Accepted by WhatsApp" (Meta took the send)
-              // must NOT look like "Delivered"/"Read"; a failed delivery shows the
-              // provider error (e.g. 131047). The body is never shown (it can carry
-              // a magic-link token) — only safe metadata.
-              const delivery = message.deliveryStatus;
-              let label: string;
-              let cls = "";
-              if (message.status === "failed") {
-                label = "Send failed";
-                cls = "error";
-              } else if (message.status === "pending") {
-                label = "Queued";
-                cls = "warn";
-              } else if (delivery === "failed") {
-                label = `Failed: ${[message.deliveryErrorCode, message.deliveryErrorTitle].filter(Boolean).join(" ")}`.trim();
-                cls = "error";
-              } else if (delivery === "read") {
-                label = "Read";
-              } else if (delivery === "delivered") {
-                label = "Delivered";
-              } else {
-                label = "Accepted by WhatsApp";
-                cls = "warn";
-              }
-              return (
-                <>
-                  <strong>{message.channel} · {message.destinationMasked}</strong>
-                  <div className={`status ${cls}`}>{label}</div>
-                  <div className="muted">{[message.kind, message.providerMessageIdMasked].filter(Boolean).join(" · ")}</div>
-                </>
-              );
-            }} />
-            <Section title="Webhooks" items={overview.webhookEvents} render={(event) => (
-              <>
-                <strong>{event.provider}</strong>
-                <div className="muted">{event.eventType}</div>
-                <div className={`status ${event.status === "failed" ? "error" : event.status === "duplicate" ? "warn" : ""}`}>{event.status}</div>
-              </>
-            )} />
-            <Section title="Messages" items={overview.messages} render={(message) => (
-              <>
-                <strong>{message.direction} · {message.messageType}</strong>
-                <div className="muted">{message.normalizedText}</div>
-              </>
-            )} />
-            <Section title="Audit" items={overview.auditLogs} render={(item) => {
-              const log = item as { action?: string; entityType?: string; createdAt?: string };
-              return (
-                <>
-                  <strong>{log.action}</strong>
-                  <div className="muted">{log.entityType} · {log.createdAt}</div>
-                </>
-              );
-            }} />
-            <Section title="Entitlements" items={overview.entitlements} render={(item) => {
-              const entitlement = item as { householdId?: string; featureCode?: string; limitValue?: number; usedValue?: number };
-              return (
-                <>
-                  <strong>{entitlement.featureCode}</strong>
-                  <div className="muted">{entitlement.householdId}</div>
-                  <div className="status">{entitlement.usedValue ?? 0}/{entitlement.limitValue ?? "fair"}</div>
-                </>
-              );
-            }} />
-            <Section title="Provider logs" items={overview.providerLogs} render={(item) => {
-              const log = item as { provider?: string; eventType?: string; status?: string; failureReason?: string };
-              return (
-                <>
-                  <strong>{log.provider} · {log.eventType}</strong>
-                  <div className={`status ${log.status === "failed" ? "error" : ""}`}>{log.status}</div>
-                  {log.failureReason && <div className="muted">{log.failureReason}</div>}
-                </>
-              );
-            }} />
-            <Section title="Analytics" items={overview.analyticsEvents} render={(item) => {
-              const event = item as { name?: string; householdId?: string; createdAt?: string };
-              return (
-                <>
-                  <strong>{event.name}</strong>
-                  <div className="muted">{event.householdId} · {event.createdAt}</div>
-                </>
-              );
-            }} />
-            <Section title="Support notes" items={overview.supportNotes} render={(item) => {
-              const note = item as { adminSubject?: string; body?: string; createdAt?: string };
-              return (
-                <>
-                  <strong>{note.adminSubject}</strong>
-                  <div>{note.body}</div>
-                  <div className="muted">{note.createdAt}</div>
-                </>
-              );
-            }} />
-          </div>
-        )}
+
+        {!counts && !integrity && !notice && <div className="panel">Loading…</div>}
       </main>
     </div>
-  );
-}
-
-function Section<T>({ title, items, render }: { title: string; items: T[]; render: (item: T) => React.ReactNode }) {
-  return (
-    <section className="panel">
-      <h2>{title}</h2>
-      <div className="list">
-        {items.slice(0, 8).map((item, index) => (
-          <div className="item" key={index}>
-            {render(item)}
-          </div>
-        ))}
-        {!items.length && <div className="muted">No rows</div>}
-      </div>
-    </section>
   );
 }

@@ -4,6 +4,7 @@ export * from "./billing";
 
 import type { ShoppingCategoryId } from "./shoppingCategories";
 import type { FinancialBaseline } from "./financialBaseline";
+import type { EffectiveBillingStatus } from "./billing";
 
 export type Currency = "ILS";
 export type UserStatus = "onboarding" | "active" | "blocked" | "deleted";
@@ -516,6 +517,230 @@ export interface AdminSupportNoteView {
   createdAt: string;
 }
 
+// ── Admin V2 — Household Account 360 (read-only aggregate + audited writes) ───
+// Every view DTO below is masked by default. Full phone is exposed ONLY via the
+// dedicated audited reveal endpoint (AdminRevealResult) — never in a list/detail
+// view, never in logs. WhatsApp message CONTENT is never surfaced anywhere here;
+// the activity rollups carry timestamps/direction/counts only.
+
+/** Raw subscription_events row (migration 0026; first writer = the manual-grant flow). */
+export interface SubscriptionEvent {
+  id: string;
+  householdId: string;
+  /** trial_started | activated | manual_grant | manual_grant_revoked | … */
+  eventType: string;
+  planCode?: string;
+  fromStatus?: string;
+  toStatus?: string;
+  provider?: string;
+  /** For manual grants: { reason, adminSubject, grantKind, correlationId, startsAt, endsAt }. */
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** Search dimensions for the household console. */
+export type AdminHouseholdSearchBy = "phone" | "owner" | "id" | "user_id" | "status";
+
+/** Manual-entitlement grant kinds. NONE of these is ever "paid" — a grant is free
+ *  access, labeled distinctly, never faking provider payment state. */
+export type AdminGrantKind = "extend_trial" | "free_month" | "goodwill" | "internal_test";
+
+/** One household row in search / list. Owner phone MASKED. */
+export interface AdminHouseholdSearchRow {
+  householdId: string;
+  name: string;
+  ownerDisplayName?: string;
+  ownerPhoneMasked: string;
+  status: HouseholdStatus;
+  /** Resolved against the pricebook — NEVER the synthetic literal "trial" as a tier. */
+  planLabel: string;
+  effectiveBillingStatus: EffectiveBillingStatus;
+  memberCount: number;
+  /** Newest WA in/out timestamp for the household (content never read). */
+  lastWaActivityAt?: string;
+  integrityFlagCount: number;
+}
+
+/** A member in the 360 roster. Phone MASKED by default — reveal is separate + audited. */
+export interface AdminHousehold360Member {
+  memberId: string;
+  userId: string;
+  displayName?: string;
+  phoneMasked: string;
+  role: HouseholdRole;
+  /** 'invited' | 'active' | 'removed' — removed/left members ARE included by design. */
+  status: HouseholdMember["status"];
+  isOwner: boolean;
+  /** DISPLAY-ONLY: an adult_member granted permissions.all (a household co-manager).
+   *  Derived from the existing permissions — NOT a new role, value, or authz rule. */
+  isCoManager: boolean;
+  joinedAt: string;
+  /** WA + dashboard activity — TIMESTAMPS ONLY, never message content. */
+  lastWaInboundAt?: string;
+  lastWaOutboundAt?: string;
+  dashboardLastSeenAt?: string;
+  /** True when the user is still status='onboarding' (onboarding-stuck indicator). */
+  onboardingStuck: boolean;
+}
+
+/** A pending / consumed / stale invite shown in the 360 (invited phone MASKED). */
+export interface AdminHousehold360Invite {
+  id: string;
+  invitedPhoneMasked: string;
+  invitedName?: string;
+  role: HouseholdRole;
+  expiresAt: string;
+  consumedAt?: string;
+  /** Derived: 'pending' | 'consumed' | 'expired'. */
+  state: "pending" | "consumed" | "expired";
+}
+
+/** Audited reveal/grant timeline entry, masked-safe (no token, no raw value). */
+export interface AdminSubscriptionEventView {
+  id: string;
+  eventType: string;
+  reason?: string;
+  adminSubject?: string;
+  grantKind?: string;
+  correlationId?: string;
+  /** Set on the compensating revoke event → its target grant. */
+  revokesCorrelationId?: string;
+  startsAt?: string;
+  endsAt?: string;
+  createdAt: string;
+}
+
+/** Read-only billing/entitlement panel for a household. */
+export interface AdminBillingView {
+  /** Stored subscription status (forensic) — the headline is `effectiveStatus`. */
+  rawStatus?: SubscriptionStatus;
+  effectiveStatus: EffectiveBillingStatus;
+  /** Resolved pricebook label, or "Trial (no pricebook plan)" for the synthetic `trial`. */
+  planLabel: string;
+  /** Raw stored plan code (forensic) — NEVER used as the display tier. */
+  planCode?: PlanCode;
+  provider?: Subscription["provider"];
+  /** True when access is a manual grant (mock/manual provider granting active access). */
+  isManualGrant: boolean;
+  /** Real paid subscription — ALWAYS false for a mock/manual provider. */
+  isPaid: boolean;
+  trialEndsAt?: string;
+  trialDaysRemaining?: number | null;
+  currentPeriodEnd?: string;
+  cancelAtPeriodEnd?: boolean;
+  /** Usage meters — labeled DISTINCT from grants; a grant is never inferred from these. */
+  usageMeters: AdminEntitlementView[];
+  /** subscription_events timeline (empty until the first manual grant). */
+  events: AdminSubscriptionEventView[];
+}
+
+/** Per-household operational health. Only fields cleanly scopable to ONE household
+ *  (outbox/webhook_events carry no household_id; whatsapp_messages does). */
+export interface AdminHousehold360Ops {
+  /** whatsapp_messages for this household with processingStatus='failed' (timestamps/status only). */
+  failedWaMessageCount: number;
+  /** Unconsumed invites past expiry. */
+  staleInviteCount: number;
+  /** Unconsumed invites still valid. */
+  pendingInviteCount: number;
+}
+
+export interface AdminHousehold360Counts {
+  members: number;
+  activeMembers: number;
+  purchases: number;
+  receipts: number;
+  shoppingItems: number;
+}
+
+/** The Household-360 aggregate. All PII masked; activity is timestamps-only. */
+export interface AdminHousehold360 {
+  household: {
+    id: string;
+    name: string;
+    status: HouseholdStatus;
+    ownerUserId: string;
+    createdAt: string;
+  };
+  owner?: { id: string; displayName?: string; phoneMasked: string };
+  members: AdminHousehold360Member[];
+  invites: AdminHousehold360Invite[];
+  billing: AdminBillingView;
+  counts: AdminHousehold360Counts;
+  ops: AdminHousehold360Ops;
+  /** Integrity flag codes scoped to this household (e.g. "ownerless", "owner_col_mismatch"). */
+  integrityFlags: string[];
+}
+
+/** Result of the audited full-phone reveal. The `value` is the UNMASKED phone and
+ *  must NEVER be logged or persisted anywhere but the transient HTTP response. */
+export interface AdminRevealResult {
+  memberId: string;
+  field: "phone";
+  value: string;
+}
+
+/** Cross-household integrity report (bounded; lists are small flagged sets). */
+export interface AdminIntegrityReport {
+  ownerlessHouseholds: Array<{ householdId: string; name: string }>;
+  ownerColumnMismatch: Array<{ householdId: string; name: string }>;
+  multiHouseholdUsers: Array<{ userId: string; householdCount: number }>;
+  duplicatePhones: Array<{ phoneMasked: string; userCount: number }>;
+  pendingInviteToActiveMember: Array<{ inviteId: string; householdId: string }>;
+  staleInvites: Array<{ inviteId: string; householdId: string; expiresAt: string }>;
+  failedOutboxCount: number;
+  failedWebhookCount: number;
+  billingMismatchCount: number;
+}
+
+/** Bounded Overview counts block (no unbounded dumps, no funnels). */
+export interface AdminOverviewCounts {
+  householdsByStatus: Record<string, number>;
+  activeTrials: number;
+  integrityFlagCount: number;
+  failedSendsCount: number;
+  waActiveThisWeek: number;
+  dashboardActiveThisWeek: number;
+}
+
+// ── C Minimal household category labels + aliases (migration 0027) ───────────
+// Labels are personalization that roll up to one of the 7 system budget buckets;
+// the bucket (Purchase["category"]) stays the source of truth for budget math.
+
+export interface ExpenseCategoryLabel {
+  id: string;
+  householdId: string;
+  /** Display label, e.g. "צדקה". */
+  label: string;
+  /** Folded form (case/whitespace/punct) — unique per household. */
+  normalizedLabel: string;
+  /** The 7-bucket parent this label rolls up to (budget math unchanged). */
+  systemBucket: Purchase["category"];
+  /** 'active' = live; 'proposed' = adult suggestion awaiting a manager; 'archived' = soft-off. */
+  status: "active" | "proposed" | "archived";
+  createdBy?: string;
+  source?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CategoryAlias {
+  id: string;
+  householdId: string;
+  /** The label this alias maps to. */
+  categoryId: string;
+  alias: string;
+  /** Folded form — unique per household. */
+  normalizedAlias: string;
+  /** 'candidate' = proposed (NOT auto-applied); 'approved' = manager-approved (active). */
+  status: "candidate" | "approved";
+  createdBy?: string;
+  approvedBy?: string;
+  source?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type AnalyticsEventName =
   | "onboarding_started"
   | "onboarding_completed"
@@ -526,6 +751,12 @@ export type AnalyticsEventName =
   | "receipt_parsed"
   | "receipt_review_opened"
   | "receipt_confirmed"
+  // WhatsApp Trust Loop (2026-06-18) receipt-proposal lifecycle instrumentation.
+  | "receipt_proposal_created"
+  | "receipt_proposal_approved"
+  | "receipt_proposal_corrected"
+  | "receipt_proposal_dismissed"
+  | "receipt_proposal_expired"
   | "trial_limit_reached"
   | "checkout_started"
   | "subscription_activated";
