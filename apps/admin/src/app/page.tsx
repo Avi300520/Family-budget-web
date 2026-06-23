@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import { api, isTransportError, toErrorMessage } from "../lib/api";
 
 type Overview = Awaited<ReturnType<typeof api.adminOverview>>;
+type Counts = Awaited<ReturnType<typeof api.adminOverviewCounts>>;
 
 export default function AdminPage() {
   const [overview, setOverview] = useState<Overview>();
+  const [counts, setCounts] = useState<Counts>();
   const [error, setError] = useState<string>();
   const [canReload, setCanReload] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string>();
@@ -29,6 +31,12 @@ export default function AdminPage() {
       setOverview(data);
     } catch (err) {
       fail(err, "operations overview");
+    }
+    // Independent: a counts failure must never block the main overview above.
+    try {
+      setCounts(await api.adminOverviewCounts());
+    } catch {
+      // non-fatal — the counts strip simply stays hidden.
     }
   }
 
@@ -54,6 +62,7 @@ export default function AdminPage() {
         <div className="brand">Admin</div>
         <div className="list">
           <Link href="/" style={{ color: "white", fontWeight: 800 }}>Operations</Link>
+          <Link href="/households" style={{ color: "white" }}>Households</Link>
           <Link href="/users" style={{ color: "white" }}>User management</Link>
         </div>
         {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
@@ -77,6 +86,21 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+        )}
+        {counts && (
+          <section className="panel">
+            <h2>At a glance</h2>
+            <div className="row">
+              {Object.entries(counts.householdsByStatus).map(([status, n]) => (
+                <span key={status} className="status">{status} {n}</span>
+              ))}
+              <span className="status">active trials {counts.activeTrials}</span>
+              <span className={`status ${counts.integrityFlagCount > 0 ? "error" : ""}`}>integrity flags {counts.integrityFlagCount}</span>
+              <span className={`status ${counts.failedSendsCount > 0 ? "warn" : ""}`}>failed sends {counts.failedSendsCount}</span>
+              <span className="status">WA active this week {counts.waActiveThisWeek}</span>
+              <span className="status">dashboard active this week {counts.dashboardActiveThisWeek}</span>
+            </div>
+          </section>
         )}
         {!overview && !error && <div className="panel">Loading…</div>}
         {overview && (

@@ -154,6 +154,7 @@ export default function AdminUsersPage() {
         <div className="brand">Admin</div>
         <div className="list">
           <Link href="/" style={{ color: "white" }}>Operations</Link>
+          <Link href="/households" style={{ color: "white" }}>Households</Link>
           <Link href="/users" style={{ color: "white", fontWeight: 800 }}>User management</Link>
         </div>
         {adminEmail && <div className="muted" style={{ marginTop: "auto", fontSize: 12, color: "#cbd5e1" }}>Signed in via Cloudflare Access<br />{adminEmail}</div>}
