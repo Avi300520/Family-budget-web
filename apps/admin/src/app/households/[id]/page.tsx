@@ -2,8 +2,9 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, isTransportError, toErrorMessage } from "../../../lib/api";
+import { api, isAuthError, isTransportError, toErrorMessage } from "../../../lib/api";
 import { AdminRail } from "../../AdminRail";
+import { isPreviewHost, DEMO_BANNER, demoHousehold360, demoNotes, demoAudit } from "../../../lib/demo";
 
 // Shared-types DTOs and the AdminGrantKind union live in @shopping-assistant/shared-types,
 // which is NOT directly resolvable from the admin app (only api-client is symlinked) and is
@@ -45,10 +46,27 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
   const [grantKind, setGrantKind] = useState<AdminGrantKind>("extend_trial");
   const [repairMemberId, setRepairMemberId] = useState("");
   const [noteBody, setNoteBody] = useState("");
+  // Preview-only visual demo (Vercel preview has no Cloudflare Access). Never true
+  // on the production host; while true, every write action is disabled.
+  const [demoMode, setDemoMode] = useState(false);
 
   function fail(err: unknown, context?: string) {
     setError(toErrorMessage(err, context));
     setCanReload(isTransportError(err));
+  }
+
+  // Load failures on a PREVIEW host fall back to a clearly-labeled visual demo;
+  // anywhere else they surface honestly. Never clobbers real data that loaded.
+  function handleLoadError(err: unknown) {
+    if (isPreviewHost() && (isAuthError(err) || isTransportError(err))) {
+      setDemoMode(true);
+      setError(undefined);
+      setDetail((p) => p ?? demoHousehold360);
+      setNotes((p) => (p.length ? p : demoNotes));
+      setAudit((p) => (p.length ? p : demoAudit));
+      return;
+    }
+    fail(err, "household details");
   }
 
   function askReason(action: string): string | undefined {
@@ -73,12 +91,12 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
       setNotes(n.notes);
       setAudit(a.audit);
     } catch (err) {
-      fail(err, "household details");
+      handleLoadError(err);
     }
   }
 
   useEffect(() => {
-    api.adminAuthMe().then((me) => setAdminEmail(me.adminEmail)).catch((err) => fail(err, "admin identity"));
+    api.adminAuthMe().then((me) => setAdminEmail(me.adminEmail)).catch((err) => handleLoadError(err));
   }, []);
 
   useEffect(() => {
@@ -88,6 +106,7 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
 
   // ── Member reveal ───────────────────────────────────────────────────────
   async function revealPhone(memberId: string) {
+    if (demoMode) return;
     const reason = askReason("reveal phone");
     if (!reason) return;
     try {
@@ -101,6 +120,7 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
 
   // ── Billing grants ──────────────────────────────────────────────────────
   async function grant() {
+    if (demoMode) return;
     const reason = askReason(`grant ${grantKind}`);
     if (!reason) return;
     try {
@@ -113,6 +133,7 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
   }
 
   async function revokeGrant(correlationId: string) {
+    if (demoMode) return;
     const reason = askReason("revoke grant");
     if (!reason) return;
     try {
@@ -126,6 +147,7 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
 
   // ── Dangerous: repair owner ─────────────────────────────────────────────
   async function repairOwner() {
+    if (demoMode) return;
     if (!repairMemberId) {
       setError("Select a member to promote to owner first.");
       return;
@@ -145,6 +167,7 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
   // ── Notes ───────────────────────────────────────────────────────────────
   async function addNote(event: React.FormEvent) {
     event.preventDefault();
+    if (demoMode) return;
     if (noteBody.trim().length < 3) {
       setError("A note of at least 3 characters is required.");
       return;
@@ -195,6 +218,12 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
           </div>
         )}
 
+        {demoMode && (
+          <div className="panel" style={{ borderInlineStart: "3px solid var(--amber)" }}>
+            {DEMO_BANNER} <strong>Actions are disabled in preview demo mode.</strong>
+          </div>
+        )}
+
         {!detail && !error && <div className="panel">Loading…</div>}
 
         {detail && h && (
@@ -233,7 +262,7 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
             </div>
 
             {tab === "Members" && (
-              <MembersTab members={detail.members} revealed={revealed} onReveal={revealPhone} />
+              <MembersTab members={detail.members} revealed={revealed} onReveal={revealPhone} disabled={demoMode} />
             )}
 
             {tab === "Billing" && (
@@ -243,6 +272,7 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
                 setGrantKind={setGrantKind}
                 onGrant={grant}
                 onRevokeGrant={revokeGrant}
+                disabled={demoMode}
               />
             )}
 
@@ -256,11 +286,12 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
                 repairMemberId={repairMemberId}
                 setRepairMemberId={setRepairMemberId}
                 onRepairOwner={repairOwner}
+                disabled={demoMode}
               />
             )}
 
             {tab === "Notes & Audit" && (
-              <NotesAuditTab notes={notes} audit={audit} noteBody={noteBody} setNoteBody={setNoteBody} onAddNote={addNote} />
+              <NotesAuditTab notes={notes} audit={audit} noteBody={noteBody} setNoteBody={setNoteBody} onAddNote={addNote} disabled={demoMode} />
             )}
 
             <InvitesSection invites={detail.invites} />
@@ -275,11 +306,13 @@ export default function AdminHousehold360Page({ params }: { params: Promise<{ id
 function MembersTab({
   members,
   revealed,
-  onReveal
+  onReveal,
+  disabled
 }: {
   members: Member[];
   revealed: Record<string, string>;
   onReveal: (memberId: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <section className="panel">
@@ -303,7 +336,7 @@ function MembersTab({
                 {shownPhone ? (
                   <span className="status warn">revealed (transient)</span>
                 ) : (
-                  <button className="button" style={SUBTLE} onClick={() => onReveal(m.memberId)}>Reveal</button>
+                  <button className="button" style={SUBTLE} onClick={() => onReveal(m.memberId)} disabled={disabled} title={disabled ? "Disabled in preview demo mode" : undefined}>Reveal</button>
                 )}
               </div>
               <div className="muted" style={{ fontSize: 12 }}>{m.role} · joined {m.joinedAt}</div>
@@ -326,13 +359,15 @@ function BillingTab({
   grantKind,
   setGrantKind,
   onGrant,
-  onRevokeGrant
+  onRevokeGrant,
+  disabled
 }: {
   billing: Billing;
   grantKind: AdminGrantKind;
   setGrantKind: (k: AdminGrantKind) => void;
   onGrant: () => void;
   onRevokeGrant: (correlationId: string) => void;
+  disabled?: boolean;
 }) {
   // Active manual grants = manual_grant events whose correlationId has no matching
   // manual_grant_revoked.revokesCorrelationId in the same timeline.
@@ -403,7 +438,7 @@ function BillingTab({
               <option key={k} value={k}>{k}</option>
             ))}
           </select>
-          <button className="button" onClick={onGrant}>Grant</button>
+          <button className="button" onClick={onGrant} disabled={disabled} title={disabled ? "Disabled in preview demo mode" : undefined}>Grant</button>
         </div>
         <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>A grant is free access — labeled distinctly, never faking paid provider state. Requires a reason (recorded in the audit log).</div>
       </section>
@@ -418,7 +453,7 @@ function BillingTab({
                 <div className="row between">
                   <strong>{e.eventType}{e.grantKind ? ` · ${e.grantKind}` : ""}</strong>
                   {isActiveGrant && (
-                    <button className="button" style={DANGER} onClick={() => onRevokeGrant(e.correlationId as string)}>Revoke</button>
+                    <button className="button" style={DANGER} onClick={() => onRevokeGrant(e.correlationId as string)} disabled={disabled} title={disabled ? "Disabled in preview demo mode" : undefined}>Revoke</button>
                   )}
                 </div>
                 <div className="muted" style={{ fontSize: 12 }}>
@@ -470,7 +505,8 @@ function OpsTab({
   activeMembers,
   repairMemberId,
   setRepairMemberId,
-  onRepairOwner
+  onRepairOwner,
+  disabled
 }: {
   ops: Household360["ops"];
   integrityFlags: string[];
@@ -478,6 +514,7 @@ function OpsTab({
   repairMemberId: string;
   setRepairMemberId: (id: string) => void;
   onRepairOwner: () => void;
+  disabled?: boolean;
 }) {
   return (
     <>
@@ -518,7 +555,7 @@ function OpsTab({
               <option key={m.memberId} value={m.memberId}>{m.displayName ?? m.userId} ({m.role}){m.isOwner ? " · owner" : ""}</option>
             ))}
           </select>
-          <button className="button" style={DANGER} onClick={onRepairOwner}>Repair owner</button>
+          <button className="button" style={DANGER} onClick={onRepairOwner} disabled={disabled} title={disabled ? "Disabled in preview demo mode" : undefined}>Repair owner</button>
         </div>
       </section>
     </>
@@ -531,21 +568,23 @@ function NotesAuditTab({
   audit,
   noteBody,
   setNoteBody,
-  onAddNote
+  onAddNote,
+  disabled
 }: {
   notes: SupportNote[];
   audit: AuditEntry[];
   noteBody: string;
   setNoteBody: (v: string) => void;
   onAddNote: (event: React.FormEvent) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="grid two">
       <section className="panel">
         <h2>Support notes ({notes.length})</h2>
         <form className="list" onSubmit={onAddNote}>
-          <input className="input" placeholder="note (min 3 chars)" value={noteBody} onChange={(e) => setNoteBody(e.target.value)} />
-          <button className="button" type="submit">Add note</button>
+          <input className="input" placeholder="note (min 3 chars)" value={noteBody} onChange={(e) => setNoteBody(e.target.value)} disabled={disabled} />
+          <button className="button" type="submit" disabled={disabled} title={disabled ? "Disabled in preview demo mode" : undefined}>Add note</button>
         </form>
         <div className="list" style={{ marginTop: 10 }}>
           {notes.map((n) => (

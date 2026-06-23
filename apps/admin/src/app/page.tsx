@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, isAuthError, isTransportError, toErrorMessage } from "../lib/api";
 import { AdminRail } from "./AdminRail";
+import { isPreviewHost, DEMO_BANNER, demoCounts, demoIntegrity, demoSearchRows } from "../lib/demo";
 
 // Derive every shape from the api-client return/param types (shared-types is not
 // re-exported by api-client). Same convention used across the admin app.
@@ -25,10 +26,21 @@ export default function AdminDashboard() {
   const [results, setResults] = useState<HouseholdRow[]>();
 
   // An auth/transport failure (e.g. this Vercel preview, which is NOT behind
-  // Cloudflare Access) is expected — show a calm notice and keep the layout
-  // reviewable, instead of a red error banner. A real HTTP error is shown honestly.
+  // Cloudflare Access) is expected. On a PREVIEW host we render a clearly-labeled
+  // visual demo so the layout is reviewable; on the production host (never a
+  // preview host) we only ever show the calm re-auth notice — never demo data.
+  // A real HTTP error is shown honestly. `setX(p => p ?? demo)` never clobbers
+  // real data that already loaded.
   function note(err: unknown, context?: string) {
-    if (isAuthError(err) || isTransportError(err)) {
+    const authish = isAuthError(err) || isTransportError(err);
+    if (authish && isPreviewHost()) {
+      setNotice({ tone: "info", text: DEMO_BANNER });
+      setCounts((p) => p ?? demoCounts);
+      setIntegrity((p) => p ?? demoIntegrity);
+      setResults((p) => p ?? demoSearchRows);
+      return;
+    }
+    if (authish) {
       setNotice({
         tone: "info",
         text: "Authenticated data is only available on admin.pingtally.com behind Cloudflare Access. This preview shows the layout only."
@@ -41,9 +53,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     api.adminAuthMe().then((me) => setAdminEmail(me.adminEmail)).catch((err) => note(err, "admin identity"));
     api.adminOverviewCounts().then(setCounts).catch((err) => note(err, "overview counts"));
-    api.adminIntegrity().then(setIntegrity).catch(() => {
-      // non-fatal: the integrity summary just stays hidden.
-    });
+    api.adminIntegrity().then(setIntegrity).catch((err) => note(err, "integrity"));
   }, []);
 
   async function search(event: React.FormEvent) {

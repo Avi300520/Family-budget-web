@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, isAuthError, isTransportError, toErrorMessage } from "../../lib/api";
 import { AdminRail } from "../AdminRail";
+import { isPreviewHost, DEMO_BANNER, demoOverview } from "../../lib/demo";
 
 // Advanced / legacy operational tools. NOT a primary destination — reachable only
 // via the rail's "Advanced tools" link. The high-value summary (counts + integrity)
@@ -19,9 +20,18 @@ export default function AdvancedToolsPage() {
   const [notice, setNotice] = useState<{ tone: "info" | "error"; text: string }>();
   const [supportHouseholdId, setSupportHouseholdId] = useState("");
   const [supportBody, setSupportBody] = useState("");
+  // Preview-only visual demo (never on the production host); disables writes.
+  const [demoMode, setDemoMode] = useState(false);
 
   function note(err: unknown, context?: string) {
-    if (isAuthError(err) || isTransportError(err)) {
+    const authish = isAuthError(err) || isTransportError(err);
+    if (authish && isPreviewHost()) {
+      setDemoMode(true);
+      setNotice({ tone: "info", text: DEMO_BANNER });
+      setOverview((p) => p ?? demoOverview);
+      return;
+    }
+    if (authish) {
       setNotice({
         tone: "info",
         text: "Authenticated data is only available on admin.pingtally.com behind Cloudflare Access. This preview shows the layout only."
@@ -44,6 +54,7 @@ export default function AdvancedToolsPage() {
 
   async function addSupportNote(event: React.FormEvent) {
     event.preventDefault();
+    if (demoMode) return;
     if (!supportHouseholdId || supportBody.trim().length < 3) return;
     try {
       await api.addSupportNote(supportHouseholdId, supportBody.trim());
@@ -96,8 +107,8 @@ export default function AdvancedToolsPage() {
               <h2>Add support note</h2>
               <form className="list" onSubmit={addSupportNote}>
                 <input className="input" placeholder="household id" value={supportHouseholdId} onChange={(e) => setSupportHouseholdId(e.target.value)} />
-                <input className="input" placeholder="note (min 3 chars)" value={supportBody} onChange={(e) => setSupportBody(e.target.value)} />
-                <button className="button" type="submit">Add note</button>
+                <input className="input" placeholder="note (min 3 chars)" value={supportBody} onChange={(e) => setSupportBody(e.target.value)} disabled={demoMode} />
+                <button className="button" type="submit" disabled={demoMode} title={demoMode ? "Disabled in preview demo mode" : undefined}>Add note</button>
               </form>
             </section>
 
