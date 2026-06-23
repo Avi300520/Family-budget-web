@@ -17,6 +17,7 @@
  * path segments validated against traversal. No secrets are read from or returned to the browser.
  */
 import type { NextRequest } from "next/server";
+import { mapAdminAliasPath } from "../../../../../lib/adminAlias";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,12 +37,18 @@ async function proxy(req: NextRequest, segments: string[]): Promise<Response> {
   if (method !== "GET" && method !== "POST") return err("admin.method_not_allowed", "Method not allowed", 405);
   if (!segments.length || segments.some(unsafeSegment)) return err("admin.bad_path", "Invalid admin path", 400);
 
+  // Map the browser-facing /h360/* alias back to the real backend /households/* path. The
+  // traversal guard above runs on the RAW browser segments; mapAdminAliasPath only ever
+  // substitutes known-safe literals. See lib/adminAlias.ts for why the alias exists
+  // (Cloudflare Access 302s the literal /api/v1/admin/households* path at the edge).
+  const segs = mapAdminAliasPath(segments);
+
   // Cloudflare Access injects this on requests to admin.pingtally.com; a client cannot forge it
   // (Cloudflare overwrites any client-supplied value), and the backend re-verifies it.
   const assertion = req.headers.get("cf-access-jwt-assertion");
   if (!assertion) return err("admin.access_required", "Cloudflare Access authentication required", 401);
 
-  const target = `${BACKEND_ORIGIN}/api/v1/admin/${segments.map(encodeURIComponent).join("/")}${req.nextUrl.search}`;
+  const target = `${BACKEND_ORIGIN}/api/v1/admin/${segs.map(encodeURIComponent).join("/")}${req.nextUrl.search}`;
   const headers: Record<string, string> = {
     "cf-access-jwt-assertion": assertion,
     cookie: `CF_Authorization=${assertion}`

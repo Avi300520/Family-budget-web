@@ -348,36 +348,42 @@ export function createApiClient(options: ApiClientOptions) {
         body: JSON.stringify(reason ? { reason } : {})
       }),
     // ── Admin V2 — Household 360 ───────────────────────────────────────────
+    // ── Household-360 calls use the /h360/* alias, NOT /api/v1/admin/households/* ──────────
+    // Cloudflare Access 302s the literal /api/v1/admin/households* path at the admin.pingtally.com
+    // edge (proven: bare-path siblings reach Vercel 200, /households/search never reaches Vercel
+    // or the backend). The same-origin BFF maps /h360/* back to the real backend /households/*
+    // path server-side (apps/admin/src/lib/adminAlias.ts). Browser paths carry no "households"/
+    // "search" token, so the edge does not challenge them. Auth/JWT forwarding is unchanged.
     adminSearchHouseholds: (by: AdminHouseholdSearchBy, q: string, limit = 20) =>
-      // POST (not GET-with-query): Cloudflare's edge WAF on admin.pingtally.com blocks the
-      // search query string before it reaches the same-origin BFF. Send params in the body.
-      request<{ households: AdminHouseholdSearchRow[] }>("/api/v1/admin/households/search", {
+      request<{ households: AdminHouseholdSearchRow[] }>("/api/v1/admin/h360/find", {
         method: "POST",
         body: JSON.stringify({ by, q, limit })
       }),
     adminGetHousehold: (householdId: string) =>
-      request<AdminHousehold360>(`/api/v1/admin/households/${encodeURIComponent(householdId)}`),
+      request<AdminHousehold360>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}`),
     adminHouseholdBilling: (householdId: string) =>
-      request<AdminBillingView>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/billing`),
-    adminHouseholdAudit: (householdId: string, limit = 50) =>
-      request<{ audit: AdminAuditEntry[] }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/audit?limit=${limit}`),
+      request<AdminBillingView>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/billing`),
+    adminHouseholdAudit: (householdId: string) =>
+      // No query string: the backend defaults limit=50 (identical to the prior default). The 360
+      // loads this eagerly, so keeping it bare-path avoids any query-string edge sensitivity.
+      request<{ audit: AdminAuditEntry[] }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/audit`),
     adminHouseholdNotes: (householdId: string) =>
-      request<{ notes: AdminSupportNoteView[] }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/notes`),
+      request<{ notes: AdminSupportNoteView[] }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/notes`),
     adminIntegrity: () => request<AdminIntegrityReport>("/api/v1/admin/integrity"),
     adminOverviewCounts: () => request<AdminOverviewCounts>("/api/v1/admin/overview/counts"),
     /** Audited FULL-phone reveal (reason recorded before the value returns; value never logged). */
     adminRevealPhone: (householdId: string, memberId: string, reason: string) =>
-      request<{ memberId: string; field: "phone"; value: string }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/reveal`, {
+      request<{ memberId: string; field: "phone"; value: string }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/reveal`, {
         method: "POST",
         body: JSON.stringify({ field: "phone", memberId, reason })
       }),
     adminGrant: (householdId: string, kind: AdminGrantKind, reason: string, endsAt?: string) =>
-      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/grant`, {
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/grant`, {
         method: "POST",
         body: JSON.stringify({ kind, reason, ...(endsAt ? { endsAt } : {}) })
       }),
     adminRevokeGrant: (householdId: string, correlationId: string, reason: string) =>
-      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/grant/${encodeURIComponent(correlationId)}/revoke`, {
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/grant/${encodeURIComponent(correlationId)}/revoke`, {
         method: "POST",
         body: JSON.stringify({ reason })
       }),
@@ -387,7 +393,7 @@ export function createApiClient(options: ApiClientOptions) {
         body: JSON.stringify({ householdId, body })
       }),
     adminRepairOwner: (householdId: string, memberId: string, reason: string) =>
-      request<{ ok: true; memberId: string; role: string }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/repair-owner`, {
+      request<{ ok: true; memberId: string; role: string }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/repair-owner`, {
         method: "POST",
         body: JSON.stringify({ memberId, reason })
       }),
