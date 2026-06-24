@@ -1,28 +1,32 @@
 /**
- * Same-origin admin BFF proxy.
+ * Same-origin admin BFF proxy (app-level auth, 2026-06-24 — replaces the Cloudflare Access flow).
  *
- * The admin SPA calls its OWN origin — admin.pingtally.com/api/v1/admin/* — so the browser never
- * makes a cross-origin XHR to api.pingtally.com (which Cloudflare Access challenges with a 302 the
- * browser then blocks by CORS). admin.pingtally.com is itself Cloudflare-Access-protected, so this
- * route only ever runs for an authenticated admin, and Cloudflare injects the verified
- * `Cf-Access-Jwt-Assertion` header on the request reaching this server route.
+ * The admin SPA calls its OWN origin (admin.pingtally.com/api/v1/admin/*); the browser never makes a
+ * cross-origin XHR to api.pingtally.com. This server-side route:
+ *   1. validates the NextAuth (Google) app session + re-checks the live admin allowlist (401 if not);
+ *   2. answers /auth/me locally from the session (no backend call, no token) so identity renders even
+ *      if the backend is briefly unreachable;
+ *   3. on any non-GET, enforces CSRF — strict same-origin (Origin + Sec-Fetch-Site, fail-closed) AND
+ *      a double-submit token (X-CSRF-Token header === __Host-admin_csrf cookie, constant-time);
+ *   4. forwards server-side to the backend with `Authorization: Bearer $ADMIN_SERVICE_TOKEN`
+ *      (server-only, never in the browser) + `X-Admin-Email` derived ONLY from the validated session.
  *
- * This route forwards the request server-side to the backend at api.pingtally.com/api/v1/admin/*,
- * passing the verified assertion both as the header (which the backend verifies — JWT verification
- * is preserved, identity = the real human admin email for audit) and as the CF_Authorization cookie
- * (so the same-Access-app session is accepted at the api.pingtally.com edge). The assertion is only
- * ever handled server-side; it is never exposed to the browser.
- *
- * Not an open proxy: it forwards ONLY to the fixed /api/v1/admin/ prefix, GET/POST only, with
- * path segments validated against traversal. No secrets are read from or returned to the browser.
+ * The service token and the admin email are set fresh server-side, so a client-supplied Authorization
+ * or X-Admin-Email header is never forwarded. Not an open proxy: GET/POST only, fixed /api/v1/admin/
+ * prefix, traversal-guarded. The Cloudflare-Access JWT forwarding is gone; the /h360 alias is kept
+ * (harmless) until the post-cutover cleanup so the shared api-client paths are unchanged.
  */
 import type { NextRequest } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { auth } from "../../../../../auth";
+import { isAllowedAdmin } from "../../../../../lib/adminAllowlist";
 import { mapAdminAliasPath } from "../../../../../lib/adminAlias";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const BACKEND_ORIGIN = process.env.ADMIN_BACKEND_ORIGIN ?? "https://api.pingtally.com";
+const CSRF_COOKIE = "__Host-admin_csrf";
 
 function err(code: string, message: string, status: number): Response {
   return Response.json({ error: { code, message } }, { status });
@@ -32,26 +36,58 @@ function unsafeSegment(seg: string): boolean {
   return seg === "" || seg === "." || seg === ".." || seg.includes("/") || seg.includes("\\");
 }
 
+/** Constant-time compare of two strings (length-safe via sha256). */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
+}
+
 async function proxy(req: NextRequest, segments: string[]): Promise<Response> {
+  // 1. App session + LIVE allowlist (re-checked every request → instant revocation despite the
+  //    stateless 30-day JWT).
+  const session = await auth();
+  const email = session?.user?.email?.trim().toLowerCase();
+  if (!email || !isAllowedAdmin(email)) {
+    return err("admin.unauthorized", "Admin sign-in required", 401);
+  }
+
   const method = req.method.toUpperCase();
   if (method !== "GET" && method !== "POST") return err("admin.method_not_allowed", "Method not allowed", 405);
   if (!segments.length || segments.some(unsafeSegment)) return err("admin.bad_path", "Invalid admin path", 400);
 
-  // Map the browser-facing /h360/* alias back to the real backend /households/* path. The
-  // traversal guard above runs on the RAW browser segments; mapAdminAliasPath only ever
-  // substitutes known-safe literals. See lib/adminAlias.ts for why the alias exists
-  // (Cloudflare Access 302s the literal /api/v1/admin/households* path at the edge).
+  // 2. Identity is sourced from the app session — answer /auth/me without a backend round-trip.
+  if (segments.length === 2 && segments[0] === "auth" && segments[1] === "me") {
+    return Response.json({ adminEmail: email, via: "app-session" });
+  }
+
+  // 3. CSRF on every non-GET: same-origin (primary, fail-closed) + double-submit token (defense in
+  //    depth). A distinct code (admin.csrf_invalid, NOT auth.csrf_invalid) so the api-client's
+  //    auth.csrf_invalid self-heal retry is never triggered here.
+  if (method !== "GET") {
+    const origin = req.headers.get("origin");
+    const secFetchSite = req.headers.get("sec-fetch-site");
+    if (!origin || origin !== req.nextUrl.origin) return err("admin.csrf_origin", "Cross-origin admin request refused", 403);
+    if (secFetchSite && secFetchSite !== "same-origin") return err("admin.csrf_origin", "Cross-site admin request refused", 403);
+    const headerToken = req.headers.get("x-csrf-token") ?? "";
+    const cookieToken = req.cookies.get(CSRF_COOKIE)?.value ?? "";
+    if (!constantTimeEqual(headerToken, cookieToken)) {
+      return err("admin.csrf_invalid", "Admin CSRF token is missing or invalid", 403);
+    }
+  }
+
+  // 4. Server-only service token — fail closed if not configured (never silently send no auth).
+  const serviceToken = process.env.ADMIN_SERVICE_TOKEN;
+  if (!serviceToken) return err("admin.proxy_not_configured", "Admin API authentication is not configured", 503);
+
+  // Map the browser-facing /h360/* alias back to the real backend /households/* path. The traversal
+  // guard above runs on the RAW browser segments; mapAdminAliasPath only substitutes known literals.
   const segs = mapAdminAliasPath(segments);
-
-  // Cloudflare Access injects this on requests to admin.pingtally.com; a client cannot forge it
-  // (Cloudflare overwrites any client-supplied value), and the backend re-verifies it.
-  const assertion = req.headers.get("cf-access-jwt-assertion");
-  if (!assertion) return err("admin.access_required", "Cloudflare Access authentication required", 401);
-
   const target = `${BACKEND_ORIGIN}/api/v1/admin/${segs.map(encodeURIComponent).join("/")}${req.nextUrl.search}`;
+
+  // Headers built fresh server-side: a client cannot inject Authorization or X-Admin-Email.
   const headers: Record<string, string> = {
-    "cf-access-jwt-assertion": assertion,
-    cookie: `CF_Authorization=${assertion}`
+    authorization: `Bearer ${serviceToken}`,
+    "x-admin-email": email
   };
   let body: string | undefined;
   if (method === "POST") {
@@ -66,10 +102,10 @@ async function proxy(req: NextRequest, segments: string[]): Promise<Response> {
     return err("admin.proxy_unreachable", "Could not reach the admin API", 502);
   }
 
-  // A 3xx means Cloudflare Access challenged the forwarded session at the api.pingtally.com edge —
-  // surface a clear error instead of leaking a cross-origin redirect to the browser.
+  // A 3xx from the backend would mean an unexpected edge challenge — surface a clear error rather
+  // than leak a cross-origin redirect to the browser.
   if (backendRes.status >= 300 && backendRes.status < 400) {
-    return err("admin.access_proxy_challenged", "The admin API rejected the forwarded Access session", 502);
+    return err("admin.proxy_redirect", "The admin API returned an unexpected redirect", 502);
   }
 
   const text = await backendRes.text();

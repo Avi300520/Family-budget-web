@@ -24,7 +24,7 @@ export function isPreviewHost(): boolean {
 }
 
 export const DEMO_BANNER =
-  "Preview layout only — demo data is fake. Authenticated production data is only available on admin.pingtally.com behind Cloudflare Access.";
+  "Preview layout only — demo data is fake. Authenticated production data is only available on admin.pingtally.com after admin sign-in.";
 
 export const DEMO_HOUSEHOLD_ID = "demo-1";
 
