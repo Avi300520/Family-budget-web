@@ -2,13 +2,23 @@
 
 import { createApiClient } from "@shopping-assistant/api-client";
 
-// SAME-ORIGIN by design. The admin UI calls admin.pingtally.com/api/v1/admin/* (baseUrl ""), which
-// a same-origin Next.js route handler (src/app/api/v1/admin/[...path]/route.ts) proxies server-side
-// to the backend, forwarding the Cloudflare-verified Access identity. This avoids a cross-origin XHR
-// to api.pingtally.com — that XHR is challenged by Cloudflare Access (302 → login) and then blocked
-// by the browser as a CORS error, even with credentials:"include" and a valid Access session.
-// The browser only ever talks to its own origin (first-party Access cookie) and stores NO token/secret.
-export const api = createApiClient({ baseUrl: "" });
+/** Read a non-HttpOnly cookie by name (SSR-safe: returns undefined when document is unavailable). */
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  for (const part of document.cookie.split("; ")) {
+    const eq = part.indexOf("=");
+    if (eq > -1 && part.slice(0, eq) === name) return decodeURIComponent(part.slice(eq + 1));
+  }
+  return undefined;
+}
+
+// SAME-ORIGIN by design. The admin UI calls admin.pingtally.com/api/v1/admin/* (baseUrl ""), which a
+// same-origin Next.js route handler (src/app/api/v1/admin/[...path]/route.ts) proxies server-side to
+// the backend, attaching the server-only admin service token + the validated session email. The
+// browser only ever talks to its own origin and stores NO token/secret. On every non-GET, the
+// api-client echoes the readable double-submit CSRF cookie (__Host-admin_csrf, minted by middleware)
+// as X-CSRF-Token; the BFF verifies header === cookie.
+export const api = createApiClient({ baseUrl: "", getCsrfToken: () => readCookie("__Host-admin_csrf") });
 
 /** True for an auth/authorization failure (re-authenticate through Cloudflare Access). */
 export function isAuthError(err: unknown): boolean {
@@ -36,7 +46,7 @@ export function isTransportError(err: unknown): boolean {
 }
 
 export const ACCESS_DENIED_MESSAGE =
-  "Access denied or session expired. Re-authenticate through Cloudflare Access (reload the page).";
+  "Access denied or your admin session expired. Sign in again to continue.";
 
 /**
  * Map any thrown admin-API error to a safe, actionable message that always reflects the
@@ -55,5 +65,5 @@ export function toErrorMessage(err: unknown, context?: string): string {
     const code = (err as { code?: string })?.code;
     return `Request failed${where} (${status}${code ? ` · ${code}` : ""}).`;
   }
-  return `Could not reach the admin API${where} — no response (the request was blocked before any HTTP status). Your Cloudflare Access session may have expired; reload the page to re-authenticate.`;
+  return `Could not reach the admin API${where} — no response (the request was blocked before any HTTP status). Your admin session may have expired; reload the page to sign in again.`;
 }
