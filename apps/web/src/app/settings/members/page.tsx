@@ -83,7 +83,7 @@ type MemberRow = HouseholdMember & { displayName?: string; phoneE164?: string };
 function describeMemberActionError(err: unknown, fallback: string): string {
   if (err instanceof ApiClientError) {
     if (err.code === "auth.csrf_invalid" || err.code === "auth.unauthorized" || err.status === 401) {
-      return "החיבור לחשבון פג. רעננו את הדף ונסו שוב — ואם זה חוזר, התחברו מחדש.";
+      return "החיבור לחשבון פג. רעננו את הדף ונסו שוב - ואם זה חוזר, התחברו מחדש.";
     }
     if (err.code === "auth.forbidden") {
       return "רק בעלים או מנהל יכולים לבצע את הפעולה הזו.";
@@ -216,7 +216,7 @@ export default function MembersPage() {
 
   return (
     <AppShell>
-      <h1 className="page-title">חברי הבית — {household.name}</h1>
+      <h1 className="page-title">חברי הבית - {household.name}</h1>
 
       <section className="panel" style={{ marginBottom: 24 }}>
         <h2>חברים פעילים</h2>
@@ -226,7 +226,7 @@ export default function MembersPage() {
             const isEditing = editingId === m.id;
             const displayName = m.displayName ?? m.phoneE164 ?? "חבר";
             return (
-              <div key={m.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--cream-3)" }}>
+              <div key={m.userId} style={{ padding: "10px 0", borderBottom: "1px solid var(--cream-3)" }}>
                 {!isEditing ? (
                   <div className="row between" style={{ alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -296,7 +296,7 @@ export default function MembersPage() {
                           checked={editCoManager}
                           onChange={(e) => setEditCoManager(e.target.checked)}
                         />
-                        מנהל/ת שותף/ה — גישת ניהול מלאה (הזמנת חברים, הגדרות בית ותקציבים)
+                        מנהל/ת שותף/ה - גישת ניהול מלאה (הזמנת חברים, הגדרות בית ותקציבים)
                       </label>
                     )}
                     <div style={{ display: "flex", gap: 6 }}>
