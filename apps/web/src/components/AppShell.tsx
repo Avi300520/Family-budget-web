@@ -1,14 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import { Activity, BarChart3, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Settings, Sparkles } from "lucide-react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { api, clearClientSession } from "../lib/api";
 import { useViewer } from "../lib/useViewer";
 import { filterByRole } from "../lib/settingsView";
+import { roleLabelFor } from "../lib/roleLabels";
+import { Avatar } from "./Avatar";
 import { MobileNav } from "./MobileNav";
+
+/** Active when the current path equals the link or is nested under it (prefix match
+ *  on a path boundary), so e.g. /settings/members highlights "הגדרות". */
+function isActivePath(pathname: string | null, href: string): boolean {
+  if (!pathname) return false;
+  const base = href.split("?")[0]!;
+  return pathname === base || pathname.startsWith(base + "/");
+}
 
 interface NavLink {
   href: string;
@@ -51,9 +61,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // once the viewer is `ready`; while loading or on a transient /me failure only the
   // always-available ("all") links show — but the settings index surfaces a real
   // loader/retry rather than silently degrading (see lib/useViewer + settingsView).
-  const { role } = useViewer();
+  const { role, displayName, householdName, hasHousehold } = useViewer();
   const links = filterByRole(ALL_LINKS, role);
   const router = useRouter();
+  const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
 
@@ -82,15 +93,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {links.map((link) => {
             const Icon = link.icon;
             return (
-              <Link className="nav-link" href={link.href} key={link.href}>
+              <Link
+                className="nav-link"
+                href={link.href}
+                key={link.href}
+                aria-current={isActivePath(pathname, link.href) ? "page" : undefined}
+              >
                 <Icon size={18} aria-hidden />
                 <span>{link.label}</span>
               </Link>
             );
           })}
         </nav>
-        {/* Account / logout — pinned to the sidebar footer (desktop). */}
+        {/* Account / logout — pinned to the sidebar footer (desktop). The identity
+            block (name + role · household) is the SINGLE home for who-is-signed-in. */}
         <div className="side-nav-footer">
+          {hasHousehold && displayName && (
+            <div className="side-id">
+              <Avatar memberId={displayName} displayName={displayName} size="sm" />
+              <div className="side-id__text">
+                <div className="side-id__name">{displayName}</div>
+                <div className="side-id__meta">
+                  {[roleLabelFor(role), householdName].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+            </div>
+          )}
           <button type="button" className="nav-link nav-logout" onClick={handleLogout} disabled={loggingOut}>
             <LogOut size={18} aria-hidden />
             <span>{loggingOut ? "מתנתק…" : "התנתקות"}</span>

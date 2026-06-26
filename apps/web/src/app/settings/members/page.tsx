@@ -20,6 +20,58 @@ const ROLE_LABELS: Record<string, string> = {
   limited_member: "חבר מוגבל"
 };
 
+/**
+ * Role picker cards — same submitted values as the former <select> options
+ * (admin / adult_member / limited_member); only the presentation changed.
+ * `managerOnly` mirrors the old gate: assigning admin is owner/admin-only.
+ */
+type RoleOption = {
+  value: string;
+  title: string;
+  sub: string;
+  color: string;
+  managerOnly?: boolean;
+};
+
+const ROLE_OPTIONS: RoleOption[] = [
+  { value: "admin", title: "בן/בת זוג", sub: "הרשאות מלאות - רואה ומנהל הכול", color: "var(--m-mom)", managerOnly: true },
+  { value: "adult_member", title: "חבר מבוגר", sub: "רואה את התקציב ומוסיף הוצאות", color: "var(--m-teen)" },
+  { value: "limited_member", title: "ילד (מוגבל)", sub: "מעדכן ומבקש אישור - בלי לראות הכול", color: "var(--m-kid)" }
+];
+
+function RolePicker({
+  value,
+  onChange,
+  options
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: RoleOption[];
+}) {
+  return (
+    <div className="role-cards" role="group" aria-label="בחירת תפקיד">
+      {options.map((opt) => {
+        const selected = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            className="role-card"
+            aria-pressed={selected}
+            onClick={() => onChange(opt.value)}
+          >
+            <span className="avatar sm" style={{ background: opt.color }} aria-hidden />
+            <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+              <span className="role-card__title">{opt.title}</span>
+              <span className="role-card__sub">{opt.sub}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 type MemberRow = HouseholdMember & { displayName?: string; phoneE164?: string };
 
 /**
@@ -215,14 +267,14 @@ export default function MembersPage() {
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {canAssignRoles && (
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, width: "100%" }}>
                           תפקיד
-                          <select className="input" value={editRole} onChange={(e) => setEditRole(e.target.value as HouseholdRole)}>
-                            <option value="admin">מנהל</option>
-                            <option value="adult_member">חבר מבוגר</option>
-                            <option value="limited_member">חבר מוגבל</option>
-                          </select>
-                        </label>
+                          <RolePicker
+                            value={editRole}
+                            onChange={(v) => setEditRole(v as HouseholdRole)}
+                            options={ROLE_OPTIONS}
+                          />
+                        </div>
                       )}
                       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
                         תקציב אישי חודשי (₪, ריק = ללא)
@@ -302,15 +354,15 @@ export default function MembersPage() {
               </div>
             )}
           </div>
-          <label>
-            תפקיד
-            <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
-              {/* Inviting an admin mints a manager — owner/admin only. */}
-              {canAssignRoles && <option value="admin">מנהל</option>}
-              <option value="adult_member">חבר מבוגר</option>
-              <option value="limited_member">חבר מוגבל</option>
-            </select>
-          </label>
+          <div>
+            <span className="label" style={{ display: "block", marginBottom: 6 }}>תפקיד</span>
+            {/* Inviting an admin mints a manager - owner/admin only (managerOnly card hidden otherwise). */}
+            <RolePicker
+              value={inviteRole}
+              onChange={setInviteRole}
+              options={ROLE_OPTIONS.filter((o) => !o.managerOnly || canAssignRoles)}
+            />
+          </div>
           <label>
             תקציב אישי חודשי (₪, אופציונלי)
             <input
