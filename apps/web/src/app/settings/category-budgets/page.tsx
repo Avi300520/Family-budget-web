@@ -8,32 +8,17 @@ import { AppShell } from "../../../components/AppShell";
 import { LoadState } from "../../../components/LoadState";
 import { api } from "../../../lib/api";
 import { redirectIfUnauthorized } from "../../../lib/authGuard";
-import { CATEGORY_LABELS } from "../../../lib/categories";
+import { BUDGET_CATEGORIES, CAP_BUCKETS } from "../../../lib/categories";
 import { nis } from "../../../lib/format";
 import { isHouseholdManager } from "../../../lib/settingsView";
 import { useViewer } from "../../../lib/useViewer";
 
-// Canonical 7-bucket taxonomy, in the same order the dashboard renders. The
-// backend cap endpoint validates against EXACTLY these 7 (zod enum) — never add more.
-const CATEGORY_KEYS = [
-  "supermarket",
-  "pharmacy_health",
-  "restaurants_cafes",
-  "fuel_transport",
-  "kids",
-  "entertainment",
-  "other",
-] as const;
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  supermarket: "🛒",
-  pharmacy_health: "💊",
-  restaurants_cafes: "🍕",
-  fuel_transport: "⛽",
-  kids: "🎨",
-  entertainment: "🎬",
-  other: "✨",
-};
+// The "canonical 14" display taxonomy (design handoff) lives in lib/categories.
+// Only the `capable` rows own a UNIQUE backend bucket and carry a real cap — the
+// backend cap endpoint validates EXACTLY the 7-enum, so the 8 tracking rows that
+// all roll into `other` are shown read-only (no fake caps, no migration).
+const CAP_CATEGORIES = BUDGET_CATEGORIES.filter((c) => c.capable); // 6 editable rows
+const TRACKING_CATEGORIES = BUDGET_CATEGORIES.filter((c) => !c.capable); // 8 display rows
 
 export default function CategoryBudgetsPage() {
   const router = useRouter();
@@ -119,9 +104,9 @@ export default function CategoryBudgetsPage() {
     return server[cat] ?? null;
   }
 
-  const allocated = CATEGORY_KEYS.reduce((sum, c) => sum + (desiredCap(c) ?? 0), 0);
-  const cappedCount = CATEGORY_KEYS.filter((c) => desiredCap(c) !== null).length;
-  const hasChanges = CATEGORY_KEYS.some((c) => desiredCap(c) !== serverCap(c));
+  const allocated = CAP_BUCKETS.reduce((sum, c) => sum + (desiredCap(c) ?? 0), 0);
+  const cappedCount = CAP_BUCKETS.filter((c) => desiredCap(c) !== null).length;
+  const hasChanges = CAP_BUCKETS.some((c) => desiredCap(c) !== serverCap(c));
   const overIncome = incomeKnown && allocated > inc;
   const unassigned = incomeKnown ? Math.max(0, inc - allocated) : 0;
   const overBy = incomeKnown ? Math.max(0, allocated - inc) : 0;
@@ -130,7 +115,7 @@ export default function CategoryBudgetsPage() {
   async function handleSave() {
     if (!householdId || !canManage) return;
     // Guard a capped row left with a non-empty but non-positive value before any call.
-    for (const c of CATEGORY_KEYS) {
+    for (const c of CAP_BUCKETS) {
       const v = local[c];
       if (typeof v === "string" && v.trim() !== "") {
         const n = Number(v.trim());
@@ -145,7 +130,7 @@ export default function CategoryBudgetsPage() {
     setJustSaved(false);
     try {
       const ops: Promise<unknown>[] = [];
-      for (const c of CATEGORY_KEYS) {
+      for (const c of CAP_BUCKETS) {
         const d = desiredCap(c);
         if (d === serverCap(c)) continue;
         ops.push(d === null ? api.removeCategoryBudget(householdId, c) : api.setCategoryBudget(householdId, c, d));
@@ -222,14 +207,14 @@ export default function CategoryBudgetsPage() {
         )}
       </section>
 
-      {/* Per-category rows */}
+      {/* Cap-able categories — the 6 rows that own a unique backend bucket */}
       <section className="panel">
-        {CATEGORY_KEYS.map((key, idx) => {
+        {CAP_CATEGORIES.map((meta, idx) => {
+          const key = meta.bucket;
           const capped = typeof local[key] === "string";
           const cap = desiredCap(key);
           const pct = incomeKnown && cap ? Math.round((cap / inc) * 100) : null;
-          const label = CATEGORY_LABELS[key] ?? key;
-          const isLast = idx === CATEGORY_KEYS.length - 1;
+          const isLast = idx === CAP_CATEGORIES.length - 1;
           return (
             <div
               key={key}
@@ -241,11 +226,15 @@ export default function CategoryBudgetsPage() {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", minWidth: 0 }}>
-                <span className="cat-tile" style={{ background: "var(--cream-3)" }} aria-hidden>
-                  {CATEGORY_EMOJI[key]}
+                <span
+                  className="cat-tile"
+                  style={{ background: `color-mix(in oklab, ${meta.color} 14%, var(--cream-2))` }}
+                  aria-hidden
+                >
+                  {meta.icon}
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{label}</div>
+                  <div style={{ fontWeight: 600 }}>{meta.labelHe}</div>
                   {pct !== null && (
                     <div className="muted" style={{ fontSize: 12 }}>{pct}% מההכנסה</div>
                   )}
@@ -261,7 +250,7 @@ export default function CategoryBudgetsPage() {
                     dir="ltr"
                     inputMode="numeric"
                     placeholder="0"
-                    aria-label={`תקרה חודשית ל${label}`}
+                    aria-label={`תקרה חודשית ל${meta.labelHe}`}
                     value={local[key] ?? ""}
                     onChange={(e) => setLocal((prev) => ({ ...prev, [key]: e.target.value }))}
                     style={{ width: 116, textAlign: "left" }}
@@ -283,6 +272,42 @@ export default function CategoryBudgetsPage() {
         {error && (
           <div className="status error" style={{ marginTop: "var(--sp-3)" }}>{error}</div>
         )}
+      </section>
+
+      {/* Tracking categories — the remaining display rows roll into the general
+          budget; no separate backend cap exists for them (so: no cap input, no
+          fabricated numbers). Honest delivery of the design's "canonical 14". */}
+      <section className="panel" style={{ marginTop: "var(--sp-5)" }}>
+        <div className="label" style={{ marginBottom: "var(--sp-2)" }}>קטגוריות נוספות</div>
+        <p className="muted" style={{ fontSize: 12, marginBottom: "var(--sp-3)" }}>
+          מוצגות למעקב ונכללות בתקציב הכללי. תקרה נפרדת זמינה כרגע ל-{CAP_CATEGORIES.length} הקטגוריות המרכזיות שלמעלה.
+        </p>
+        {TRACKING_CATEGORIES.map((meta, idx) => {
+          const isLast = idx === TRACKING_CATEGORIES.length - 1;
+          return (
+            <div
+              key={meta.id}
+              className="row between"
+              style={{
+                gap: "var(--sp-3)",
+                padding: "var(--sp-3) 0",
+                borderBottom: isLast ? "none" : "1px solid var(--cream-3)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", minWidth: 0 }}>
+                <span
+                  className="cat-tile"
+                  style={{ background: `color-mix(in oklab, ${meta.color} 14%, var(--cream-2))`, opacity: 0.85 }}
+                  aria-hidden
+                >
+                  {meta.icon}
+                </span>
+                <div style={{ fontWeight: 600 }}>{meta.labelHe}</div>
+              </div>
+              <span className="chip">מעקב</span>
+            </div>
+          );
+        })}
       </section>
 
       <p className="muted" style={{ marginTop: "var(--sp-5)" }}>
