@@ -1,5 +1,6 @@
 "use client";
 
+import { Info } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +20,42 @@ import { useViewer } from "../../../lib/useViewer";
 // all roll into `other` are shown read-only (no fake caps, no migration).
 const CAP_CATEGORIES = BUDGET_CATEGORIES.filter((c) => c.capable); // 6 editable rows
 const TRACKING_CATEGORIES = BUDGET_CATEGORIES.filter((c) => !c.capable); // 8 display rows
+
+// Summary stat tile - mirrors the design handoff's StatTile (set-screens-a.jsx):
+// centered label + mono value, with a teal-bg "strong" highlight variant.
+function StatTile({
+  label,
+  value,
+  sub,
+  strong,
+  color,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  strong?: boolean;
+  color?: string;
+}) {
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "var(--sp-3) var(--sp-2)",
+        borderRadius: "var(--r-3)",
+        background: strong ? "var(--teal-bg)" : "var(--cream-1)",
+      }}
+    >
+      <div className="label" style={{ marginBottom: "var(--sp-1)" }}>{label}</div>
+      <div
+        className="mono"
+        style={{ fontSize: 20, fontWeight: 700, color: color ?? (strong ? "var(--teal-dark)" : "var(--text-0)") }}
+      >
+        {value}
+      </div>
+      {sub && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{sub}</div>}
+    </div>
+  );
+}
 
 export default function CategoryBudgetsPage() {
   const router = useRouter();
@@ -177,27 +214,19 @@ export default function CategoryBudgetsPage() {
       {/* Ceiling summary — income vs. total caps */}
       <section className="panel" style={{ marginBottom: "var(--sp-5)" }}>
         <div className="grid three">
-          <div>
-            <div className="label">הכנסה חודשית</div>
-            <div className="mono" style={{ fontSize: 20, fontWeight: 700 }}>
-              {incomeKnown ? nis(inc) : "לא הוגדר"}
-            </div>
-          </div>
-          <div>
-            <div className="label">סך התקרות</div>
-            <div className="mono" style={{ fontSize: 20, fontWeight: 700 }}>{nis(allocated)}</div>
-            <div className="muted" style={{ fontSize: 12 }}>{cappedCount} קטגוריות מוגבלות</div>
-          </div>
+          <StatTile label="הכנסה חודשית" value={incomeKnown ? nis(inc) : "לא הוגדר"} />
+          <StatTile
+            label="סך התקרות"
+            value={nis(allocated)}
+            sub={`${cappedCount} קטגוריות מוגבלות`}
+            strong
+          />
           {incomeKnown && (
-            <div>
-              <div className="label">{overIncome ? "מעל ההכנסה" : "לא הוקצה"}</div>
-              <div
-                className="mono"
-                style={{ fontSize: 20, fontWeight: 700, color: overIncome ? "var(--warn)" : undefined }}
-              >
-                {nis(overIncome ? overBy : unassigned)}
-              </div>
-            </div>
+            <StatTile
+              label={overIncome ? "מעל ההכנסה" : "לא הוקצה"}
+              value={nis(overIncome ? overBy : unassigned)}
+              color={overIncome ? "var(--warn)" : undefined}
+            />
           )}
         </div>
         {incomeKnown && (
@@ -205,6 +234,26 @@ export default function CategoryBudgetsPage() {
             <i style={{ width: `${barPct}%`, background: overIncome ? "var(--warn)" : "var(--teal)" }} />
           </div>
         )}
+        {/* Household cross-link - moved INTO the ceiling panel with an Info cue,
+            matching the design ("רוצים לעדכן הכנסות או הוצאות קבועות?"). */}
+        <div
+          className="muted"
+          style={{
+            marginTop: "var(--sp-4)",
+            fontSize: 12.5,
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--sp-2)",
+          }}
+        >
+          <Info size={15} aria-hidden style={{ flexShrink: 0 }} />
+          <span>
+            רוצים לעדכן הכנסות או הוצאות קבועות?{" "}
+            <Link href="/settings/household" style={{ color: "var(--teal-dark)", fontWeight: 600 }}>
+              פרטי משק הבית
+            </Link>
+          </span>
+        </div>
       </section>
 
       {/* Cap-able categories — the 6 rows that own a unique backend bucket */}
@@ -310,12 +359,11 @@ export default function CategoryBudgetsPage() {
         })}
       </section>
 
-      <p className="muted" style={{ marginTop: "var(--sp-5)" }}>
-        רוצים לעדכן הכנסות או הוצאות קבועות?{" "}
-        <Link href="/settings/household" style={{ color: "var(--teal-dark)", fontWeight: 600 }}>
-          פרטי משק הבית
-        </Link>
-      </p>
+      {/* "הוספת קטגוריה" (custom categories) is intentionally NOT rendered. The cap
+          endpoints validate EXACTLY the backend 7-value Purchase enum (packages/validation
+          `categoryBudgetCategorySchema`), so a real new category needs a backend change
+          (enum + cap storage + spend aggregation). Deferred (Path A) - we do not ship a
+          disabled/non-functional affordance for a feature the backend cannot persist. */}
 
       {/* Sticky save bar — managers only; inert when there is nothing to save */}
       {(hasChanges || justSaved) && (

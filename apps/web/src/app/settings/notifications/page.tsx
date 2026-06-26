@@ -21,19 +21,17 @@ const DEFAULT_ALERTS: BaselineAlerts = {
   weekly: false,
 };
 
-// SAVE-GAP (intentional, documented): there is currently NO backend endpoint to
-// persist an individual alert toggle. Alert preferences are only written as part of
-// the full onboarding baseline (POST /onboarding/complete), and we must NOT re-POST
-// the whole baseline just to flip one switch. So this screen is preview-only: toggles
-// mutate LOCAL state so the owner can see/interact with the design, but nothing is
-// persisted and we never show a "נשמר" confirmation.
-// Minimal backend dependency to make this real: a focused
+// Persistence is REAL: NotificationsEditor runs in SELF-PERSIST mode and PATCHes
+// households.financial_baseline.alerts on every toggle via the manager-gated
 //   PATCH /api/v1/households/:id/financial-baseline/alerts  (body: Partial<BaselineAlerts>)
-// endpoint (manager-gated) that updates only households.financial_baseline.alerts.
+// (api.updateAlerts). Each toggle is optimistic - the editor reverts + shows a small
+// inline error on failure, and a brief "נשמר" confirmation on success. No save bar.
+// This page only fetches the household once (for its id + current alerts) and hands
+// both to the editor as initial state.
 export default function NotificationsPage() {
   const viewer = useViewer();
   const canManage = canViewHouseholdSettings(viewer.caps);
-  const [alerts, setAlerts] = useState<BaselineAlerts | null>(null);
+  const [data, setData] = useState<{ householdId: string; alerts: BaselineAlerts } | null>(null);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -47,7 +45,7 @@ export default function NotificationsPage() {
       .currentHousehold()
       .then(({ household }) => {
         if (cancelled) return;
-        setAlerts(household.financialBaseline?.alerts ?? DEFAULT_ALERTS);
+        setData({ householdId: household.id, alerts: household.financialBaseline?.alerts ?? DEFAULT_ALERTS });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -90,13 +88,8 @@ export default function NotificationsPage() {
   return (
     <AppShell>
       <h1 className="page-title">התראות</h1>
-      <p className="muted" style={{ marginBottom: "var(--sp-3)" }}>
+      <p className="muted" style={{ marginBottom: "var(--sp-5)" }}>
         מתי נעדכן אתכם - בחרנו ברירות מחדל חכמות, ולא נציף אתכם.
-      </p>
-
-      {/* Honest save-gap note — preview only, persistence not wired yet. */}
-      <p className="muted" style={{ fontSize: 13, marginBottom: "var(--sp-5)" }}>
-        שמירת ההעדפות תופעל בקרוב (דורש חיבור שרת).
       </p>
 
       {error && (
@@ -105,14 +98,9 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {!error && alerts === null && <LoadState />}
+      {!error && data === null && <LoadState />}
 
-      {alerts !== null && (
-        <NotificationsEditor
-          value={alerts}
-          onChange={(key, next) => setAlerts((a) => (a ? { ...a, [key]: next } : a))}
-        />
-      )}
+      {data !== null && <NotificationsEditor householdId={data.householdId} initialAlerts={data.alerts} />}
 
       {/* Footer tip — quiet explanation of the bill-increase guardrail. */}
       <div

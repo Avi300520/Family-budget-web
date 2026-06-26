@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw, Receipt as ReceiptIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Receipt, ReceiptStatus } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
@@ -26,6 +26,32 @@ function formatDate(iso?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("he-IL", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// WhatsApp brand mark (the channel receipts arrive through). Inline SVG so we
+// can render the actual brand glyph in its brand green - lucide has no WhatsApp
+// icon. Path matches the design handoff's window.Icons.Whatsapp.
+const WHATSAPP_GREEN = "#25D366";
+function WhatsappGlyph({ size = 24 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={WHATSAPP_GREEN}
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M20.5 3.5A11 11 0 0 0 3.2 17.3L2 22l4.9-1.2a11 11 0 0 0 16.6-9.4 11 11 0 0 0-3-7.9z" />
+      <path
+        d="M9 8.5c-.4 0-.7.1-1 .5-.4.4-1.4 1.4-1.4 3.3 0 2 1.4 3.9 1.6 4.2.2.3 2.8 4.4 7 5.4.8.2 1.5.2 2 .1.7-.2 2-.8 2.3-1.6.3-.8.3-1.5.2-1.7-.1-.2-.4-.3-.8-.5-.4-.2-2.3-1.2-2.7-1.3-.4-.2-.7-.2-1 .2-.3.4-1 1.3-1.3 1.5-.2.3-.5.3-.9.1-.4-.2-1.6-.6-3-1.8-1.1-1-1.8-2.2-2-2.6-.2-.4 0-.6.2-.8.2-.2.4-.5.5-.7.2-.2.2-.4.4-.7.1-.2 0-.5 0-.7l-1-2.3c-.3-.7-.5-.6-.8-.6h-.6z"
+        fill={WHATSAPP_GREEN}
+      />
+    </svg>
+  );
 }
 
 export default function ReceiptsPage() {
@@ -81,11 +107,10 @@ export default function ReceiptsPage() {
             height: 48,
             flex: "none",
             borderRadius: "var(--r-3)",
-            background: "var(--teal)",
-            fontSize: 24,
+            background: "#E7F8EE",
           }}
         >
-          💬
+          <WhatsappGlyph size={24} />
         </div>
         <div style={{ minWidth: 0 }}>
           <strong style={{ color: "var(--teal-dark)" }}>קבלות נקלטות מהוואטסאפ</strong>
@@ -113,11 +138,12 @@ export default function ReceiptsPage() {
                     height: 40,
                     flex: "none",
                     borderRadius: "var(--r-2)",
-                    background: "var(--cream-3)",
-                    fontSize: 20,
+                    background:
+                      "repeating-linear-gradient(135deg, var(--cream-1), var(--cream-1) 6px, var(--cream-3) 6px, var(--cream-3) 7px)",
+                    color: "var(--text-3)",
                   }}
                 >
-                  🧾
+                  <ReceiptIcon size={20} aria-hidden />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <strong>{receipt.parsedJson?.merchantName ?? "קבלה"}</strong>
@@ -132,7 +158,12 @@ export default function ReceiptsPage() {
                 </div>
               </div>
               {receipt.status === "failed" ? (
-                <Link className="btn sm" href={reviewHref}>
+                <Link
+                  className="btn sm"
+                  href={reviewHref}
+                  style={{ color: "var(--coral-dark)", borderColor: "var(--coral-soft)" }}
+                >
+                  <RefreshCw size={15} aria-hidden />
                   נסו שוב
                 </Link>
               ) : (

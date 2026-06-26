@@ -14,6 +14,7 @@ import {
 import {
   Stepper, ChipSelect, OptionCards, MoneyInput, DayChips, FreqPick, Field, MiniToggle, TextInput
 } from "./controls";
+import { NotificationsEditor } from "../../components/NotificationsEditor";
 
 export interface StepProps {
   state: WizardState;
@@ -38,7 +39,7 @@ export function WelcomeStep({ state, set }: StepProps) {
       value={state.mode}
       onChange={(id) => set({ mode: id as WizardState["mode"] })}
       options={[
-        { id: "quick", emoji: "⚡", title: "מהיר", sub: "הבסיס בלבד — אפשר להשלים בהמשך" },
+        { id: "quick", emoji: "⚡", title: "מהיר", sub: "הבסיס בלבד - אפשר להשלים בהמשך" },
         { id: "precise", emoji: "🔍", title: "מדויק", sub: "שאלות נוספות לתמונה מלאה יותר" }
       ]}
     />
@@ -47,6 +48,9 @@ export function WelcomeStep({ state, set }: StepProps) {
 
 // ── Profile ─────────────────────────────────────────────────────────────────────
 export function ProfileStep({ state, set }: StepProps) {
+  // Quick mode keeps the profile to the essentials (type, name, #adults, #kids).
+  // The region/city, #cars and kid age-range chips are precise-only details.
+  const precise = state.mode === "precise";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <Field label="סוג הבית">
@@ -69,9 +73,11 @@ export function ProfileStep({ state, set }: StepProps) {
       <Field label="שם הבית">
         <TextInput value={state.householdName} onChange={(v) => set({ householdName: v })} placeholder="למשל: משפחת לוי" />
       </Field>
-      <Field label="עיר / אזור">
-        <TextInput value={state.city} onChange={(v) => set({ city: v })} placeholder="העיר או השכונה שלך" />
-      </Field>
+      {precise && (
+        <Field label="עיר / אזור" hint="אופציונלי - עוזר להשוואות בעתיד">
+          <TextInput value={state.city} onChange={(v) => set({ city: v })} placeholder="העיר או השכונה שלך" />
+        </Field>
+      )}
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <Field label="מבוגרים">
@@ -80,12 +86,14 @@ export function ProfileStep({ state, set }: StepProps) {
         <Field label="ילדים">
           <Stepper value={state.kids} onChange={(v) => set({ kids: v })} min={0} max={12} />
         </Field>
-        <Field label="רכבים">
-          <Stepper value={state.cars} onChange={(v) => set({ cars: v })} min={0} max={6} />
-        </Field>
+        {precise && (
+          <Field label="רכבים">
+            <Stepper value={state.cars} onChange={(v) => set({ cars: v })} min={0} max={6} />
+          </Field>
+        )}
       </div>
 
-      {state.kids > 0 && (
+      {state.kids > 0 && precise && (
         <Field label="גילאי הילדים" hint="אפשר לבחור כמה">
           <ChipSelect
             multi
@@ -117,11 +125,11 @@ export function CycleStep({ state, set }: StepProps) {
       </Field>
 
       {state.basis === "calendar" ? (
-        <Field label="יום תחילת החודש התקציבי" hint="היום בחודש שבו מתחדש התקציב (1–28)">
+        <Field label="יום תחילת החודש התקציבי" hint="היום בחודש שבו מתחדש התקציב (1-28)">
           <DayChips value={state.startDay} onChange={(v) => set({ startDay: v })} />
         </Field>
       ) : (
-        <Field label="יום המשכורת" hint="היום בחודש שבו נכנסת המשכורת (1–28)">
+        <Field label="יום המשכורת" hint="היום בחודש שבו נכנסת המשכורת (1-28)">
           <DayChips value={state.salaryDay} onChange={(v) => set({ salaryDay: v })} />
         </Field>
       )}
@@ -154,7 +162,7 @@ export function IncomeStep({ state, set }: StepProps) {
         ]}
       />
       {state.budgetMode === "income" ? (
-        <Field label="הכנסה חודשית נטו (משק הבית)" hint="לא חובה — נעזר בזה כדי להציע תקציב לניהול. הסכום נשאר אצלכם.">
+        <Field label="הכנסה חודשית נטו (משק הבית)" hint="לא חובה - נעזר בזה כדי להציע תקציב לניהול. הסכום נשאר אצלכם.">
           <MoneyInput size="lg" value={state.income} onChange={(v) => set({ income: v })} placeholder="24,000" autoFocus />
         </Field>
       ) : (
@@ -167,10 +175,11 @@ export function IncomeStep({ state, set }: StepProps) {
 }
 
 // ── Fixed expenses ────────────────────────────────────────────────────────────────
-function FixedExpenseCard({ item, onPatch, onRemove }: {
+function FixedExpenseCard({ item, onPatch, onRemove, precise }: {
   item: WizardFixedExpense;
   onPatch: (patch: Partial<WizardFixedExpense>) => void;
   onRemove: () => void;
+  precise: boolean;
 }) {
   const monthly = monthlyOf(typeof item.amount === "number" ? item.amount : 0, item.frequency);
   return (
@@ -197,7 +206,7 @@ function FixedExpenseCard({ item, onPatch, onRemove }: {
         <div style={{ flex: "1 1 140px", minWidth: 130 }}>
           <MoneyInput value={item.amount} onChange={(v) => onPatch({ amount: v })} placeholder={item.isEstimate ? "הערכה" : "סכום"} />
         </div>
-        <FreqPick value={item.frequency} onChange={(v: FrequencyId) => onPatch({ frequency: v })} />
+        {precise && <FreqPick value={item.frequency} onChange={(v: FrequencyId) => onPatch({ frequency: v })} />}
       </div>
 
       {item.isCustom && (
@@ -210,10 +219,12 @@ function FixedExpenseCard({ item, onPatch, onRemove }: {
         </Field>
       )}
 
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-        {item.isCustom && <MiniToggle label="הסכום מוערך" on={item.isEstimate} onChange={(v) => onPatch({ isEstimate: v })} />}
-        <MiniToggle label="🔔 התריעו אם משתנה" on={item.alertOnChange} onChange={(v) => onPatch({ alertOnChange: v })} />
-      </div>
+      {(item.isCustom || precise) && (
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+          {item.isCustom && <MiniToggle label="הסכום מוערך" on={item.isEstimate} onChange={(v) => onPatch({ isEstimate: v })} />}
+          {precise && <MiniToggle label="🔔 התריעו אם משתנה" on={item.alertOnChange} onChange={(v) => onPatch({ alertOnChange: v })} />}
+        </div>
+      )}
 
       <div className="muted" style={{ fontSize: 12.5 }}>
         ~{fmt(monthly)} לחודש
@@ -223,6 +234,9 @@ function FixedExpenseCard({ item, onPatch, onRemove }: {
 }
 
 export function FixedStep({ state, set }: StepProps) {
+  // Quick mode keeps each fixed expense to its amount only; the frequency picker and
+  // the per-expense change-alert toggle are precise-only.
+  const precise = state.mode === "precise";
   const activeKeys = new Set(state.fixed.map((f) => f.key));
 
   const togglePreset = (presetId: string) => {
@@ -258,7 +272,7 @@ export function FixedStep({ state, set }: StepProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Field label="מה כבר חייב לצאת כל חודש" hint="בחרו מהרשימה — ומלאו סכום. אפשר להוסיף הוצאות משלכם.">
+      <Field label="מה כבר חייב לצאת כל חודש" hint="בחרו מהרשימה - ומלאו סכום. אפשר להוסיף הוצאות משלכם.">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {FIXED_PRESETS.map((p) => {
             const on = activeKeys.has(p.id);
@@ -280,7 +294,7 @@ export function FixedStep({ state, set }: StepProps) {
       {state.fixed.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {state.fixed.map((f) => (
-            <FixedExpenseCard key={f.key} item={f} onPatch={(patch) => patchItem(f.key, patch)} onRemove={() => removeItem(f.key)} />
+            <FixedExpenseCard key={f.key} item={f} precise={precise} onPatch={(patch) => patchItem(f.key, patch)} onRemove={() => removeItem(f.key)} />
           ))}
         </div>
       )}
@@ -339,36 +353,16 @@ export function BudgetStep({ state, set, totals }: StepProps) {
 }
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
-const ALERT_ROWS: Array<{ key: keyof WizardState["alerts"]; emoji: string; title: string; sub: string }> = [
-  { key: "cat80", emoji: "🟡", title: "קטגוריה מגיעה ל-80%", sub: "נעדכן כשנשאר עוד מעט בקטגוריה" },
-  { key: "cat100", emoji: "🔴", title: "חריגה מעבר ל-100%", sub: "התראה כשקטגוריה עברה את התקציב" },
-  { key: "billUp", emoji: "📈", title: "חשבון קבוע שעלה", sub: "רק אם עלה משמעותית" },
-  { key: "unusual", emoji: "👀", title: "הוצאה חריגה", sub: "סכום שלא אופייני לקטגוריה" },
-  { key: "monthly", emoji: "🗓️", title: "סיכום חודשי", sub: "תזכורת לסגירת חודש + תמונת מצב" },
-  { key: "weekly", emoji: "📊", title: "סיכום שבועי", sub: "טעימה קצרה של השבוע" }
-];
-
+// Reuses the shared NotificationsEditor (CONTROLLED mode) - the single source of
+// truth also mounted in /settings/notifications. Here it does NOT persist: it edits
+// the wizard's `alerts` state, which is written as part of completeOnboarding. The
+// WhatsApp channel card is hidden in onboarding.
 export function AlertsStep({ state, set }: StepProps) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {ALERT_ROWS.map((row) => (
-        <div key={row.key} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--cream-2)", border: "1px solid var(--cream-3)", borderRadius: 14, padding: 14 }}>
-          <span style={{ fontSize: 20 }}>{row.emoji}</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-0)" }}>{row.title}</div>
-            <div style={{ fontSize: 12.5, color: "var(--text-2)" }}>{row.sub}</div>
-          </div>
-          <label style={{ display: "inline-flex" }}>
-            <input
-              type="checkbox"
-              checked={state.alerts[row.key]}
-              onChange={(e) => set({ alerts: { ...state.alerts, [row.key]: e.target.checked } })}
-              aria-label={row.title}
-              style={{ width: 20, height: 20 }}
-            />
-          </label>
-        </div>
-      ))}
-    </div>
+    <NotificationsEditor
+      value={state.alerts}
+      onChange={(next) => set({ alerts: next })}
+      showChannel={false}
+    />
   );
 }

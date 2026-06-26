@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type {
@@ -21,7 +20,7 @@ import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
 import { WhatsAppCtaBanner } from "../../components/WhatsAppCta";
 import { WishlistPanel } from "../../components/WishlistPanel";
-import { Donut, Thermometer } from "../../components/charts";
+import { Donut } from "../../components/charts";
 import { api } from "../../lib/api";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
 import { requiresOnboarding } from "../../lib/authRouting";
@@ -37,13 +36,6 @@ const CATEGORIES: ReadonlyArray<{ key: string; label: string; color: string }> =
   { key: "entertainment",     label: "בילוי",            color: "var(--plum)"    },
   { key: "other",             label: "אחר",              color: "var(--berry)"   },
 ] as const;
-
-const ROLE_LABELS: Record<string, string> = {
-  owner:          "בעלים",
-  admin:          "מנהל",
-  adult_member:   "חבר מבוגר",
-  limited_member: "חבר מוגבל",
-};
 
 // Deterministic color for project cards (derived from project id)
 const PROJECT_COLORS = [
@@ -322,8 +314,8 @@ function PendingApprovals({ role }: { role: string | undefined }) {
 }
 
 // ── ProjectsStrip ─────────────────────────────────────────────────────────────
-// Thermometer shown at pct=0 — no per-project spend from listProjectBudgets.
-// Wire actual accumulated spend in Iteration 5 via getProjectBudgetDetail.
+// Per-project EXPENSE tracking (redesign §H): label "הוצא", spent/budget from the
+// ProjectBudget.spent field (all-time confirmed project spend). Not savings.
 function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
   const visible = projects.slice(0, 3);
 
@@ -333,7 +325,7 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
         <div>
           <h3 className="h3">פרויקטים פעילים</h3>
           <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
-            חסכונות לטווח
+            מעקב הוצאות לכל פרויקט
           </div>
         </div>
         <Link className="btn sm ghost" href="/budget" style={{ textDecoration: "none" }}>
@@ -417,37 +409,34 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
                     </div>
                     {p.endDate && (
                       <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                        יעד: {p.endDate}
+                        יעד: {new Date(p.endDate + "T00:00:00").toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" })}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* amount + thermometer */}
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-end",
-                  }}
-                >
-                  <div>
-                    <div className="label" style={{ marginBottom: "var(--sp-1)" }}>
-                      תקציב פרויקט
+                {/* spent / budget — per-project expense tracking ("הוצא") */}
+                {(() => {
+                  const spent = p.spent ?? 0;
+                  const pct = p.totalAmount > 0 ? Math.min(100, (spent / p.totalAmount) * 100) : 0;
+                  const over = spent > p.totalAmount;
+                  return (
+                    <div>
+                      <div className="row between" style={{ marginBottom: "var(--sp-1)" }}>
+                        <span className="label">הוצא</span>
+                        <span
+                          className="mono"
+                          style={{ fontSize: 13, fontWeight: 700, color: over ? "var(--coral-dark)" : color }}
+                        >
+                          ₪{spent.toLocaleString("he-IL")} / ₪{p.totalAmount.toLocaleString("he-IL")}
+                        </span>
+                      </div>
+                      <div className="bar" aria-hidden>
+                        <i style={{ width: `${pct}%`, background: over ? "var(--coral)" : color }} />
+                      </div>
                     </div>
-                    <span
-                      className="mono"
-                      style={{ fontSize: 20, fontWeight: 700, color }}
-                    >
-                      ₪{p.totalAmount.toLocaleString("he-IL")}
-                    </span>
-                  </div>
-                  <Thermometer pct={0} color={color} height={72} />
-                </div>
-
-                <div className="muted" style={{ fontSize: 11, textAlign: "center" }}>
-                  צבירה תופיע כאן בקרוב
-                </div>
+                  );
+                })()}
               </Link>
             );
           })}
@@ -857,10 +846,10 @@ function LimitedMemberView({
             </div>
             <div className="help-box">
               <div className="help-line">
-                📌 הוצאות אישיות — שלח <strong>#אישי</strong> בסוף ההודעה.
+                📌 הוצאות אישיות - שלח <strong>#אישי</strong> בסוף ההודעה.
               </div>
               <div className="help-line">
-                🏠 קניות לבית — נרשמות לתקציב הבית ללא הגבלה.
+                🏠 קניות לבית - נרשמות לתקציב הבית ללא הגבלה.
               </div>
             </div>
           </>
@@ -873,7 +862,7 @@ function LimitedMemberView({
             <div className="muted">סך ההוצאות האישיות שלי החודש</div>
             <div className="help-box">
               <div className="help-line">
-                📌 הוצאות אישיות — שלח <strong>#אישי</strong> בסוף ההודעה.
+                📌 הוצאות אישיות - שלח <strong>#אישי</strong> בסוף ההודעה.
               </div>
             </div>
           </>
@@ -1073,32 +1062,20 @@ export default function DashboardPage() {
   const isLimited = role === "limited_member";
   const greetingName =
     firstName(user.displayName) || user.displayName || user.phoneE164;
-  const roleLabel = ROLE_LABELS[role ?? ""] ?? "";
 
   return (
     <AppShell>
-      {/* Greeting row */}
-      <div className="row between" style={{ marginBottom: "var(--sp-6)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)" }}>
-          <Avatar memberId={user.id} displayName={user.displayName} colorKey={membership?.color} size="lg" />
-          <div>
-            <p className="h2" style={{ margin: 0 }}>
-              שלום {greetingName} 👋
-            </p>
-            <div className="muted" style={{ marginTop: "var(--sp-1)" }}>
-              {household.name}
-              {roleLabel && (
-                <span className="role-pill" style={{ marginInlineStart: 10 }}>
-                  {roleLabel}
-                </span>
-              )}
-            </div>
+      {/* Greeting only — role + household identity live in the sidebar footer (redesign §H/§L). */}
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", marginBottom: "var(--sp-6)" }}>
+        <Avatar memberId={user.id} displayName={user.displayName} colorKey={membership?.color} size="lg" />
+        <div>
+          <p className="h2" style={{ margin: 0 }}>
+            שלום {greetingName} 👋
+          </p>
+          <div className="muted" style={{ marginTop: "var(--sp-1)" }}>
+            הנה מה שקורה בבית החודש
           </div>
         </div>
-        <button className="button secondary" onClick={load} type="button">
-          <RefreshCw size={18} aria-hidden />
-          רענון
-        </button>
       </div>
 
       {/* 2026-06-12 cold-start fix: while the household has no activity, the bot has

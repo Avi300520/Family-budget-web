@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, ChevronLeft, SlidersHorizontal } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronLeft, SlidersHorizontal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type {
   FrequencyId,
   Household,
@@ -10,10 +10,11 @@ import type {
 } from "@shopping-assistant/shared-types";
 import { REPORT_CATEGORIES, monthlyOf, totalMonthlyFixed } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
+import { DayChips, Field, MoneyInput, TextInput } from "../../onboarding/controls";
 import { api } from "../../../lib/api";
 import { nis } from "../../../lib/format";
 import { useViewer } from "../../../lib/useViewer";
-import { canEditBaseline, canEditHouseholdSettings } from "../../../lib/settingsView";
+import { canEditBaseline, canEditHouseholdSettings, canViewHouseholdSettings } from "../../../lib/settingsView";
 
 // Hebrew labels for the recurring frequencies (inline map, per the baseline card spec).
 const FREQ_LABEL: Record<FrequencyId, string> = {
@@ -29,185 +30,240 @@ function reportCatIcon(id: ReportCatId): string {
   return REPORT_CATEGORIES.find((c) => c.id === id)?.icon ?? "🧾";
 }
 
+// Summary stat tile (ported from the design ScreenHousehold StatTile). `strong` paints the
+// emphasized "פנוי לניהול" tile teal; `minus` prefixes a hyphen to a deduction value.
+function StatTile({ label, value, sub, strong, minus }: {
+  label: string;
+  value: string;
+  sub?: string;
+  strong?: boolean;
+  minus?: boolean;
+}) {
+  return (
+    <div style={{ textAlign: "center", padding: "12px 8px", borderRadius: 13, background: strong ? "var(--teal-bg)" : "var(--cream-1)" }}>
+      <div className="label" style={{ marginBottom: 6 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 20, fontWeight: 700, color: strong ? "var(--teal-dark)" : "var(--text-0)" }}>
+        {minus ? "-" : ""}{value}
+      </div>
+      {sub && <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 3 }}>{sub}</div>}
+    </div>
+  );
+}
+
 export default function HouseholdSettingsPage() {
   const viewer = useViewer();
+  // canView == canEdit == isHouseholdManager here; the whole financial view is manager-only.
+  const canView = canViewHouseholdSettings(viewer.caps);
   const canEdit = canEditHouseholdSettings(viewer.caps);
   const canEditFullBaseline = canEditBaseline(viewer.caps);
+
   const [household, setHousehold] = useState<Household>();
   const [householdId, setHouseholdId] = useState<string>();
   const [monthlyBudgetAmount, setMonthlyBudgetAmount] = useState<number | "">("");
   const [budgetCycleDay, setBudgetCycleDay] = useState<number>(1);
   const [defaultCity, setDefaultCity] = useState("");
+  // Last-persisted snapshot of the three editable fields - the diff baseline for the save bar.
+  const [savedSnapshot, setSavedSnapshot] = useState<{ amount: number | ""; day: number; city: string }>({
+    amount: "",
+    day: 1,
+    city: ""
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string>();
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function seed(h: Household) {
+    setHousehold(h);
+    setHouseholdId(h.id);
+    setMonthlyBudgetAmount(h.monthlyBudgetAmount);
+    setBudgetCycleDay(h.budgetCycleDay);
+    setDefaultCity(h.defaultCity ?? "");
+    setSavedSnapshot({ amount: h.monthlyBudgetAmount, day: h.budgetCycleDay, city: h.defaultCity ?? "" });
+  }
 
   useEffect(() => {
-    api.currentHousehold().then(({ household }) => {
-      setHousehold(household);
-      setHouseholdId(household.id);
-      setMonthlyBudgetAmount(household.monthlyBudgetAmount);
-      setBudgetCycleDay(household.budgetCycleDay);
-      setDefaultCity(household.defaultCity ?? "");
+    if (viewer.status !== "ready") return;
+    // Never fetch household financials for a non-manager (privacy): a limited/plain-adult member
+    // who navigates here directly issues no /households/current request.
+    if (!viewer.hasHousehold || !canView) {
       setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+      return;
+    }
+    let cancelled = false;
+    api
+      .currentHousehold()
+      .then(({ household: h }) => {
+        if (cancelled) return;
+        seed(h);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer.status, viewer.hasHousehold, canView]);
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    []
+  );
+
+  async function handleSave() {
     if (!householdId || !canEdit) return;
+    if (monthlyBudgetAmount === "" || !(Number(monthlyBudgetAmount) > 0)) {
+      setError("הזינו סכום תקציב חוקי.");
+      return;
+    }
     setSaving(true);
-    setSuccess(false);
     setError(undefined);
+    setJustSaved(false);
     try {
       await api.updateHouseholdSettings(householdId, {
         monthlyBudgetAmount: Number(monthlyBudgetAmount),
         budgetCycleDay,
         defaultCity: defaultCity.trim()
       });
-      setSuccess(true);
+      // Re-fetch so the full-model figures (income / fixed / available) aren't stale after a save.
+      const { household: fresh } = await api.currentHousehold();
+      seed(fresh);
+      setJustSaved(true);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setJustSaved(false), 1800);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "לא הצלחנו לשמור. נסה שוב.");
+      setError(err instanceof Error ? err.message : "לא הצלחנו לשמור. נסו שוב.");
     } finally {
       setSaving(false);
     }
   }
 
+  // ── states ─────────────────────────────────────────────────────────────────────
+  if (viewer.status === "loading") return <AppShell><p className="muted">טוען...</p></AppShell>;
+
+  if (viewer.status === "error") {
+    return (
+      <AppShell>
+        <h1 className="page-title">פרטי משק הבית</h1>
+        <section className="panel" style={{ maxWidth: 480 }}>
+          <p className="muted">לא הצלחנו לטעון את פרטי הבית. נסו לרענן.</p>
+        </section>
+      </AppShell>
+    );
+  }
+
+  // Privacy gate: a non-manager (especially limited_member) must NOT see the household
+  // budget / cycle / city - only a friendly access message.
+  if (!canView) {
+    return (
+      <AppShell>
+        <h1 className="page-title">פרטי משק הבית</h1>
+        <section className="panel" style={{ maxWidth: 480 }}>
+          <p className="muted">
+            פרטי משק הבית - הכנסות, תקציב ומבנה החודש - זמינים לבעלים ולמנהלי הבית בלבד.
+          </p>
+        </section>
+      </AppShell>
+    );
+  }
+
   if (loading) return <AppShell><p className="muted">טוען...</p></AppShell>;
 
-  // Manager-only financial model. `canEdit` (isHouseholdManager) is the same gate that
-  // allows editing — never render income/fixed-expense data for a non-manager viewer.
   const baseline = household?.financialBaseline;
-  const incomeIsReal = baseline?.budget?.income != null;
+  const incomeMode = baseline?.budget?.mode === "income";
   const income = baseline?.budget?.income ?? household?.monthlyBudgetAmount ?? 0;
   const fixedMonthly = baseline ? totalMonthlyFixed(baseline.fixedExpenses) : 0;
   const available = Math.max(0, income - fixedMonthly);
   const activeFixed = baseline ? baseline.fixedExpenses.filter((f) => f.isActive) : [];
+
+  const dirty =
+    monthlyBudgetAmount !== savedSnapshot.amount ||
+    budgetCycleDay !== savedSnapshot.day ||
+    defaultCity !== savedSnapshot.city;
 
   return (
     <AppShell>
       <h1 className="page-title">פרטי משק הבית</h1>
       <p className="muted" style={{ marginBottom: 20 }}>המודל המלא של הבית - הכנסות, הוצאות קבועות ומבנה החודש.</p>
 
-      <section className="panel" style={{ maxWidth: 480 }}>
-        {viewer.status === "ready" && !canEdit && (
-          <div className="status" style={{ display: "block", marginBottom: 12 }}>
-            רק בעלים או מנהל יכולים לשנות את הגדרות הבית. אתם רואים את הפרטים לצפייה בלבד.
+      {/* ── Quick settings (income/budget · cycle day · region) ── */}
+      <div className="label" style={{ marginBottom: 10 }}>הגדרות מהירות</div>
+      <section className="panel" style={{ maxWidth: 480, marginBottom: 16 }}>
+        <Field
+          label={incomeMode ? "הכנסה חודשית נטו (₪)" : "תקציב חודשי (₪)"}
+          hint={incomeMode ? "הסכום שעליו נבנה כל התקציב. אפשר לעדכן בכל שינוי בשכר." : undefined}
+        >
+          <div style={{ maxWidth: 240 }}>
+            <MoneyInput value={monthlyBudgetAmount} onChange={(v) => setMonthlyBudgetAmount(v)} />
           </div>
-        )}
-        <form className="form" onSubmit={handleSubmit}>
-          <label>
-            תקציב חודשי (₪)
-            <input
-              className="input"
-              type="number"
-              min={100}
-              max={100000}
-              value={monthlyBudgetAmount}
-              onChange={(e) => setMonthlyBudgetAmount(e.target.value === "" ? "" : Number(e.target.value))}
-              disabled={!canEdit}
-              required
-            />
-          </label>
-          <label>
-            יום תחילת חודש תקציבי
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={28}
-              value={budgetCycleDay}
-              onChange={(e) => setBudgetCycleDay(Math.min(28, Math.max(1, Number(e.target.value) || 1)))}
-              disabled={!canEdit}
-              required
-            />
-            <span className="muted" style={{ fontSize: 13 }}>היום בחודש שבו מתחדש התקציב (1-28).</span>
-          </label>
-          <label>
-            אזור קניות
-            <input
-              className="input"
-              value={defaultCity}
-              placeholder="העיר / שכונה שלך"
-              onChange={(e) => setDefaultCity(e.target.value)}
-              disabled={!canEdit}
-            />
-          </label>
-          {canEdit && (
-            <button className="button" type="submit" disabled={saving || !monthlyBudgetAmount}>
-              <CheckCircle2 size={18} aria-hidden />
-              {saving ? "שומר..." : "שמור שינויים"}
-            </button>
-          )}
-          {success && <div className="status success">הגדרות נשמרו בהצלחה.</div>}
-          {error && <div className="status error">{error}</div>}
-        </form>
+        </Field>
+
+        <Field label="יום תחילת החודש התקציבי" hint="היום בחודש שבו מתחדש התקציב (1-28)." style={{ marginTop: 22 }}>
+          <DayChips value={budgetCycleDay} onChange={(v) => setBudgetCycleDay(v)} />
+        </Field>
+
+        <Field label="אזור קניות" hint="עוזר להשוואות ולזיהוי חנויות בצ׳אט." style={{ marginTop: 22 }}>
+          <div style={{ maxWidth: 320 }}>
+            <TextInput value={defaultCity} onChange={(v) => setDefaultCity(v)} placeholder="בני ברק" />
+          </div>
+        </Field>
+
+        {error && <div className="status error" style={{ marginTop: 16 }}>{error}</div>}
       </section>
 
-      {/* Full financial model — manager-only (income/financial data). Gated by the same
-          capability that allows editing; never rendered for non-managers. */}
-      {canEdit && (
-        <section className="panel" style={{ maxWidth: 480, marginTop: 16 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 12 }}>המודל המלא של הבית</h2>
-          {baseline ? (
-            <>
-              <div className="grid three">
-                <div style={{ background: "var(--cream-2)", borderRadius: "var(--r-3)", padding: "var(--sp-3)" }}>
-                  <div className="label">{incomeIsReal ? "הכנסה" : "תקציב"}</div>
-                  <div className="mono" style={{ fontSize: 20, fontWeight: 700 }}>{nis(income)}</div>
-                </div>
-                <div style={{ background: "var(--cream-2)", borderRadius: "var(--r-3)", padding: "var(--sp-3)" }}>
-                  <div className="label">הוצאות קבועות</div>
-                  <div className="mono" style={{ fontSize: 20, fontWeight: 700 }}>{nis(fixedMonthly)}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>{activeFixed.length} חשבונות</div>
-                </div>
-                <div style={{ background: "var(--cream-2)", borderRadius: "var(--r-3)", padding: "var(--sp-3)" }}>
-                  <div className="label">פנוי לניהול</div>
-                  <div className="mono" style={{ fontSize: 20, fontWeight: 700 }}>{nis(available)}</div>
-                </div>
-              </div>
+      {/* ── Full financial model (read-only summary) ── */}
+      <div className="label" style={{ marginBottom: 10 }}>המודל המלא של הבית</div>
+      <section className="panel" style={{ maxWidth: 480, marginBottom: 16 }}>
+        {baseline ? (
+          <>
+            <div className="grid three" style={{ marginBottom: 18 }}>
+              <StatTile label={incomeMode ? "הכנסה" : "תקציב"} value={nis(income)} />
+              <StatTile label="הוצאות קבועות" value={nis(fixedMonthly)} minus sub={`${activeFixed.length} חשבונות`} />
+              <StatTile label="פנוי לניהול" value={nis(available)} strong />
+            </div>
 
-              {activeFixed.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  {activeFixed.map((f) => (
-                    <div
-                      key={f.id}
-                      className="row between"
-                      style={{ gap: 12, padding: "var(--sp-2) 0", borderBottom: "1px solid var(--cream-3)" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                        <span className="cat-tile" style={{ background: "var(--cream-1)" }} aria-hidden>
-                          {reportCatIcon(f.reportCat)}
-                        </span>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 600 }}>{f.label}</div>
-                          {f.frequency !== "monthly" && (
-                            <div className="muted" style={{ fontSize: 12 }}>
-                              {FREQ_LABEL[f.frequency]} · {nis(monthlyOf(f.amount, f.frequency))}/חודש
-                            </div>
-                          )}
+            {activeFixed.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {activeFixed.map((f) => (
+                  <div
+                    key={f.id}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12, background: "var(--cream-1)" }}
+                  >
+                    <span className="cat-tile" style={{ background: "var(--cream-2)" }} aria-hidden>
+                      {reportCatIcon(f.reportCat)}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{f.label}</div>
+                      {f.frequency !== "monthly" && (
+                        <div className="mono" style={{ fontSize: 11, color: "var(--text-2)" }}>
+                          {FREQ_LABEL[f.frequency]} · {nis(monthlyOf(f.amount, f.frequency))}/חודש
                         </div>
-                      </div>
-                      <span className="mono" style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{nis(f.amount)}</span>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="muted">עוד לא הוגדר מודל מלא - השלימו דרך האשף למטה.</p>
-          )}
-        </section>
-      )}
+                    <span className="mono" style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}>{nis(f.amount)}</span>
+                    {f.isEstimate && <span className="chip ocean" style={{ height: 20, fontSize: 10.5 }}>הערכה</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="muted">עוד לא הוגדר מודל מלא - השלימו דרך האשף למטה.</p>
+        )}
+      </section>
 
       {/* Re-run the full onboarding wizard against the existing household (edit mode).
-          Manager-only — mirrors the backend POST /onboarding/complete authz. */}
+          Manager-only - mirrors the backend POST /onboarding/complete authz. */}
       {canEditFullBaseline && (
         <Link
           className="panel settings-card"
           href="/onboarding?mode=edit"
-          style={{ maxWidth: 480, marginTop: 16, background: "var(--teal-bg)", borderColor: "var(--teal-soft)" }}
+          style={{ maxWidth: 480, background: "var(--teal-bg)", borderColor: "var(--teal-soft)" }}
         >
           <span className="settings-card__icon" style={{ background: "var(--teal-soft)", color: "var(--teal-dark)" }}>
             <SlidersHorizontal size={22} aria-hidden />
@@ -220,6 +276,27 @@ export default function HouseholdSettingsPage() {
           </div>
           <ChevronLeft className="settings-card__chev" size={20} aria-hidden />
         </Link>
+      )}
+
+      {/* Sticky save bar - dirty-aware; shows a transient "נשמר" for ~1.8s after a save. */}
+      {(dirty || justSaved) && (
+        <div className="save-bar">
+          {justSaved && !dirty ? (
+            <span style={{ color: "var(--pos)", fontWeight: 700 }}>✓ נשמר</span>
+          ) : (
+            <>
+              <span className="muted">יש שינויים שלא נשמרו</span>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={handleSave}
+                disabled={saving || monthlyBudgetAmount === ""}
+              >
+                {saving ? "שומר..." : "שמירת שינויים"}
+              </button>
+            </>
+          )}
+        </div>
       )}
     </AppShell>
   );

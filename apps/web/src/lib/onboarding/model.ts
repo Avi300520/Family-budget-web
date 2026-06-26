@@ -251,7 +251,9 @@ export function validateStep(step: StepKey, state: WizardState): string | null {
     case "profile":
       if (!state.displayName.trim()) return "כתבו את השם שלכם.";
       if (!state.householdName.trim()) return "כתבו שם לבית.";
-      if (!state.city.trim()) return "כתבו עיר או אזור.";
+      // City/region is a precise-only detail; quick mode never asks for it, so it
+      // must not block the profile step (defaultCity is sent as "" in that case).
+      if (state.mode === "precise" && !state.city.trim()) return "כתבו עיר או אזור.";
       if (state.adults < 1) return "צריך לפחות מבוגר אחד.";
       if (!state.acceptTerms || !state.acceptPrivacy) return "צריך לאשר את התנאים ואת מדיניות הפרטיות.";
       return null;

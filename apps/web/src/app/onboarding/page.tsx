@@ -15,8 +15,8 @@ const STEP_META: Record<StepKey, { title: string; sub: string }> = {
   welcome: { title: "ברוכים הבאים לפינגטלי", sub: "כמה שאלות קצרות ונכין תקציב שמתנהל בוואטסאפ." },
   profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
   cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
-  income: { title: "כמה כסף נכנס — וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
-  fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות — שכירות, חשבונות, מנויים ועוד." },
+  income: { title: "כמה כסף נכנס - וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
+  fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות - שכירות, חשבונות, מנויים ועוד." },
   budget: { title: "התקציב לניהול וחלוקה לקטגוריות", sub: "מאשרים את הסכום החודשי, ואפשר לחלק אותו." },
   alerts: { title: "מתי שנעדכן אתכם", sub: "בוחרים אילו התראות תרצו לקבל." },
   done: { title: "התקציב מוכן 🎉", sub: "" }
@@ -53,10 +53,10 @@ export default function OnboardingPage() {
           <h1 className="page-title" style={{ marginBottom: 8 }}>הבית מוכן!</h1>
           {hasWhatsAppCta ? (
             <p className="muted" style={{ marginBottom: 22 }}>
-              פינגטלי עובד בוואטסאפ — שלחו לבוט הודעה ראשונה, וכל ההוצאות והקניות יתנהלו משם.
+              פינגטלי עובד בוואטסאפ - שלחו לבוט הודעה ראשונה, וכל ההוצאות והקניות יתנהלו משם.
             </p>
           ) : (
-            <p className="muted" style={{ marginBottom: 22 }}>הצעד הבא — הוסיפו בני משפחה כדי להתחיל לעקוב יחד אחרי התקציב.</p>
+            <p className="muted" style={{ marginBottom: 22 }}>הצעד הבא - הוסיפו בני משפחה כדי להתחיל לעקוב יחד אחרי התקציב.</p>
           )}
           <div className="form" style={{ marginInline: "auto" }}>
             <WhatsAppCtaButton />
@@ -80,7 +80,7 @@ export default function OnboardingPage() {
   // first-time greeting (the wizard prefilled every field from the saved baseline).
   const meta =
     wizard.editMode && wizard.stepKey === "welcome"
-      ? { title: "עדכון פרטי משק הבית", sub: "כל הפרטים כבר מלאים — אפשר לעבור ולעדכן מה שצריך." }
+      ? { title: "עדכון פרטי משק הבית", sub: "כל הפרטים כבר מלאים - אפשר לעבור ולעדכן מה שצריך." }
       : STEP_META[wizard.stepKey];
   const StepComponent = STEP_COMPONENTS[wizard.stepKey as Exclude<StepKey, "done">];
   const totals = computeTotals(wizard.state);

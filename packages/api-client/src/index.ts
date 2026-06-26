@@ -41,6 +41,9 @@ import type {
   WishlistItem,
   WishlistItemPriority,
   OnboardingBaselineRequest,
+  SpendingPeriod,
+  MonthlyInsightsResponse,
+  BaselineAlerts,
   BillingPlan,
   BillingStatusDto,
   Entitlement,
@@ -204,7 +207,7 @@ export function createApiClient(options: ApiClientOptions) {
       displayName: string;
       householdName: string;
       monthlyBudgetAmount: number;
-      defaultCity: string;
+      defaultCity?: string;
       budgetCycleDay?: number;
       acceptTerms: true;
       acceptPrivacy: true;
@@ -222,10 +225,16 @@ export function createApiClient(options: ApiClientOptions) {
         method: "PATCH",
         body: JSON.stringify(body)
       }),
+    // Merge a PARTIAL BaselineAlerts into financial_baseline.alerts (manager-gated).
+    updateAlerts: (householdId: string, body: Partial<BaselineAlerts>) =>
+      request<{ household: Household }>(`/api/v1/households/${householdId}/financial-baseline/alerts`, {
+        method: "PATCH",
+        body: JSON.stringify(body)
+      }),
     myHouseholdRequests: (householdId: string) =>
       request<{ requests: HouseholdExpenseApproval[] }>(`/api/v1/households/${householdId}/my-requests`),
     budgetCurrent: (householdId: string) => request<BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number }>(`/api/v1/households/${householdId}/budget/current`),
-    shoppingList: (householdId: string) => request<{ list: ShoppingList; items: ShoppingListItem[] }>(`/api/v1/households/${householdId}/shopping-list`),
+    shoppingList: (householdId: string) => request<{ list: ShoppingList; items: ShoppingListItem[]; boughtThisMonth: ShoppingListItem[] }>(`/api/v1/households/${householdId}/shopping-list`),
     addShoppingItem: (householdId: string, rawText: string) =>
       request<{ item: ShoppingListItem }>(`/api/v1/households/${householdId}/shopping-list/items`, {
         method: "POST",
@@ -432,15 +441,17 @@ export function createApiClient(options: ApiClientOptions) {
     // ── Iteration 5 — Activity & spending ──────────────────────────────────
     householdActivity: (householdId: string, limit = 50) =>
       request<{ entries: ActivityEntry[] }>(`/api/v1/households/${householdId}/activity?limit=${limit}`),
-    spendingByCategory: (householdId: string) =>
-      request<{ entries: SpendingByCategoryEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-category?period=current`),
-    spendingByMember: (householdId: string) =>
-      request<{ entries: SpendingByMemberEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-member?period=current`),
-    spendingByWeekday: (householdId: string) =>
-      request<{ entries: SpendingByWeekdayEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-weekday?period=current`),
+    spendingByCategory: (householdId: string, period: SpendingPeriod = "month") =>
+      request<{ entries: SpendingByCategoryEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-category?period=${period}`),
+    spendingByMember: (householdId: string, period: SpendingPeriod = "month") =>
+      request<{ entries: SpendingByMemberEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-member?period=${period}`),
+    spendingByWeekday: (householdId: string, period: SpendingPeriod = "month") =>
+      request<{ entries: SpendingByWeekdayEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-weekday?period=${period}`),
     // ── Iteration 7 — Insights / Weekly Wrapped ───────────────────────────
     weeklyInsights: (householdId: string, week: "current" | "last" = "current") =>
       request<WeeklyInsightsResponse>(`/api/v1/households/${householdId}/insights/weekly?week=${week}`),
+    monthlyInsights: (householdId: string, month: "current" | "previous" = "current") =>
+      request<MonthlyInsightsResponse>(`/api/v1/households/${householdId}/insights/monthly?month=${month}`),
     // ── Iteration 10 — Per-category budget caps ───────────────────────────
     categoryBudgets: (householdId: string) =>
       request<{ budgets: CategoryBudget[] }>(`/api/v1/households/${householdId}/category-budgets`),
@@ -455,7 +466,7 @@ export function createApiClient(options: ApiClientOptions) {
     memberActivityHeatmap: (householdId: string, days = 14) =>
       request<MemberActivityHeatmapResponse>(`/api/v1/households/${householdId}/activity/heatmap?days=${days}`),
     // ── Iteration 8 — Wishlist ─────────────────────────────────────────────
-    createWishlistItem: (body: { title: string; note?: string; priceEst?: number; priority?: WishlistItemPriority }) =>
+    createWishlistItem: (body: { title: string; note?: string; priceEst?: number; priority?: WishlistItemPriority; ownerUserId?: string }) =>
       request<{ item: WishlistItem }>("/api/v1/wishlist", {
         method: "POST",
         body: JSON.stringify(body)

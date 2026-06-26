@@ -87,8 +87,8 @@ button {
   /* The nav rail is position:fixed (see .side-nav), so it no longer occupies a grid
      track. Reserve its width as a gutter on the inline-start edge — in this RTL UI the
      inline axis runs right→left, so inline-start is the RIGHT edge, matching the rail's
-     side — so the main content is offset and never slides under the rail. Neutralized ≤820px. */
-  padding-inline-start: 248px;
+     side — so the main content is offset and never slides under the rail. Neutralized ≤900px. */
+  padding-inline-start: 264px;
 }
 
 .side-nav {
@@ -109,11 +109,11 @@ button {
      transform/filter/perspective, which would otherwise re-base a fixed box.)
      The footer (account/logout, pinned via .side-nav-footer { margin-top:auto })
      stays visible without page scroll; on a very short viewport the rail scrolls
-     internally (overflow-y:auto). Hidden ≤820px (mobile = bottom tab bar + "עוד"). */
+     internally (overflow-y:auto). Hidden ≤900px (mobile = off-canvas drawer). */
   position: fixed;
   inset-inline-start: 0;
   top: 0;
-  width: 248px;
+  width: 264px;
   height: 100vh;
   height: 100dvh;
   overflow-y: auto;
@@ -121,8 +121,35 @@ button {
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-inline: 6px;
+  margin-bottom: 2px;
+}
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--coral) 0%, var(--mustard) 100%);
+  color: #fff;
   font-weight: 800;
-  font-size: 22px;
+  font-size: 19px;
+  box-shadow: 0 6px 16px rgba(217, 119, 87, 0.4);
+}
+.brand-text { min-width: 0; }
+.brand-name {
+  font-weight: 700;
+  font-size: 15.5px;
+  color: var(--on-ink-0);
+  line-height: 1.15;
+}
+.brand-sub {
+  font-size: 11.5px;
+  color: var(--on-ink-2);
 }
 
 .nav-links {
@@ -650,177 +677,108 @@ button {
   margin-top: 4px;
 }
 
-@media (max-width: 820px) {
-  /* Neutralize the fixed desktop rail: drop the reserved inline-start gutter so content
-     spans the full width (the rail itself is removed via display:none below). */
+/* ── Mobile top bar + off-canvas drawer (hidden on desktop) ───────────────── */
+.app-topbar { display: none; }
+.app-drawer,
+.app-drawer-scrim { display: none; }
+
+.topbar-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--cream-3);
+  background: var(--cream-2);
+  color: var(--text-1);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.app-topbar .brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+.topbar-spacer { width: 40px; flex: none; }
+
+@media (max-width: 900px) {
+  /* Neutralize the fixed desktop rail: drop the reserved inline-start gutter and hide
+     the rail; navigation moves into the off-canvas drawer opened from the top bar. */
   .app-shell {
     padding-inline-start: 0;
   }
-
-  /* Mobile: hide the desktop sidebar entirely (this also fully removes the fixed-rail
-     positioning — display:none takes it out of rendering). It used to stack above
-     content as a tall dark band and push the financial hero off the first screen;
-     navigation now lives in the fixed bottom tab bar + "עוד" sheet below
-     (.bottom-tab-bar / .mobile-more-*). */
   .side-nav {
     display: none;
   }
 
   .main {
-    padding: 18px;
-    /* room for the fixed bottom tab bar + the iOS home indicator */
-    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    padding: 22px 16px 60px;
     /* prevent inner content from forcing horizontal scroll on small screens */
     overflow-x: hidden;
   }
-}
 
-/* ── Mobile bottom navigation (≤820px = --breakpoint-md) — bar + "עוד" sheet ──── */
-/* Default (desktop ≥820px): the whole mobile nav is hidden; the side-nav is used. */
-.bottom-tab-bar,
-.mobile-more-backdrop,
-.mobile-more-sheet {
-  display: none;
-}
-
-@media (max-width: 820px) {
-  .bottom-tab-bar {
-    position: fixed;
-    inset-inline: 0;
-    bottom: 0;
-    z-index: 50;
+  .app-topbar {
     display: flex;
-    background: var(--nav);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .bottom-tab {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 3px;
-    min-height: 56px;
-    padding: 8px 4px;
-    background: none;
-    border: 0;
-    cursor: pointer;
-    color: var(--on-ink-1);
-    font-family: var(--font-ui);
-    font-size: 11px;
-    text-decoration: none;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--cream-3);
+    background: var(--cream-0);
+    position: sticky;
+    top: 0;
+    z-index: 45;
   }
 
-  .bottom-tab[aria-current="page"] {
-    color: var(--on-ink-0);
-  }
-
-  .bottom-tab-more-icon {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .bottom-tab-label {
-    white-space: nowrap;
-  }
-
-  .mobile-more-backdrop {
+  .app-drawer-scrim {
+    display: block;
     position: fixed;
     inset: 0;
-    z-index: 60;
-    display: block;
-    background: rgba(31, 42, 51, 0.45);
+    z-index: 49;
+    background: rgba(20, 28, 26, 0.5);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-2) var(--ease);
+  }
+  .app-drawer-scrim.open {
+    opacity: 1;
+    pointer-events: auto;
   }
 
-  .mobile-more-sheet {
+  /* Off-canvas drawer — slides in from the RTL right edge (physical right + translateX). */
+  .app-drawer {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
     position: fixed;
-    inset-inline: 0;
+    top: 0;
     bottom: 0;
-    z-index: 61;
-    display: block;
-    max-height: 80vh;
+    right: 0;
+    width: 272px;
+    z-index: 50;
+    padding: 24px 18px;
+    background: var(--ink-0);
+    color: var(--on-ink-0);
     overflow-y: auto;
-    padding: 10px 18px calc(20px + env(safe-area-inset-bottom));
-    background: var(--cream-2);
-    border-top-left-radius: var(--r-4);
-    border-top-right-radius: var(--r-4);
+    transform: translateX(100%);
+    transition: transform var(--dur-2) var(--ease);
     box-shadow: var(--elev-3);
   }
-
-  .mobile-more-handle {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 28px;
-    margin-bottom: var(--sp-2);
-  }
-
-  .mobile-more-grip {
-    width: 36px;
-    height: 4px;
-    border-radius: 999px;
-    background: var(--cream-4);
-  }
-
-  .mobile-more-close {
-    position: absolute;
-    inset-inline-end: 0;
-    top: 0;
-  }
-
-  .mobile-more-group {
-    margin-top: var(--sp-3);
-  }
-
-  .mobile-more-group-title {
-    margin-bottom: var(--sp-2);
-  }
-
-  .mobile-more-links {
-    display: grid;
-    gap: var(--sp-1);
-  }
-
-  .mobile-more-link {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    width: 100%;
-    min-height: 48px;
-    padding: 12px var(--sp-3);
-    border: 0;
-    border-radius: var(--r-3);
-    background: none;
-    color: var(--text-0);
-    font-family: var(--font-ui);
-    font-size: 15px;
-    text-align: start;
-    text-decoration: none;
-    cursor: pointer;
-  }
-
-  .mobile-more-link[aria-current="page"] {
-    background: var(--cream-1);
-    font-weight: 600;
-  }
-
-  .mobile-more-logout {
-    color: var(--neg);
-  }
-
-  .mobile-more-logout-error {
-    color: var(--neg);
-    font-size: 13px;
-    padding: 4px var(--sp-3);
+  .app-drawer.open {
+    transform: none;
   }
 }
+
+/* (Mobile bottom-tab bar + "עוד" sheet removed 2026-06-26 — replaced by the
+   off-canvas drawer + sticky top bar above, matching the Claude Design handoff.) */
 
 /* ── Global overflow guard ────────────────────────────────────────────────── */
 html, body {
@@ -999,7 +957,7 @@ html, body {
   background: var(--ink-1);
   color: var(--on-ink-0);
   border-inline-start-color: var(--coral);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .side-id {

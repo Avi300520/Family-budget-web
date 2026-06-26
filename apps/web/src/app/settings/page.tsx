@@ -273,10 +273,13 @@ export default function SettingsPage() {
     cards: group.cards.filter((card) => card.can(viewer.caps))
   })).filter((group) => group.cards.length > 0);
 
+  // Banner meta order mirrors the design: members · plan · region. The plan tier is
+  // billing-sensitive — gate it to owner/admin (canViewBilling) so a limited_member /
+  // adult never sees the household's billing tier even though the banner fetch returns it.
   const metaPills = [
     typeof banner.memberCount === "number" ? `👥 ${banner.memberCount} חברים` : null,
-    banner.region ? `📍 ${banner.region}` : null,
-    banner.planLabel ? `💳 מסלול ${banner.planLabel}` : null
+    banner.planLabel && canViewBilling(viewer.caps) ? `💳 מסלול ${banner.planLabel}` : null,
+    banner.region ? `📍 ${banner.region}` : null
   ].filter((p): p is string => p !== null);
 
   return (
