@@ -478,6 +478,20 @@ export default function ShoppingListPage() {
     }
   }
 
+  // Item check-off/restore/remove/add don't change the household or member roster,
+  // so refetch ONLY the list — not currentHousehold + listMembers. Avoids 3 GETs
+  // per mutation on the hot shopping path (full load() stays for initial mount).
+  async function reloadList() {
+    if (!household) return load();
+    try {
+      const list = await api.shoppingList(household.id);
+      setItems(list.items);
+      setBought(list.boughtThisMonth);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בטעינת הרשימה");
+    }
+  }
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
@@ -488,22 +502,22 @@ export default function ShoppingListPage() {
     if (!household || !rawText.trim()) return;
     await api.addShoppingItem(household.id, rawText.trim());
     setRawText("");
-    await load();
+    await reloadList();
   }
 
   async function markBought(id: string) {
     await api.patchShoppingItem(id, { status: "purchased" });
-    await load();
+    await reloadList();
   }
 
   async function restoreItem(id: string) {
     await api.patchShoppingItem(id, { status: "active" });
-    await load();
+    await reloadList();
   }
 
   async function removeItem(id: string) {
     await api.patchShoppingItem(id, { status: "removed" });
-    await load();
+    await reloadList();
   }
 
   async function sendToWhatsapp() {
