@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BarChart3, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Menu, Settings, Sparkles } from "lucide-react";
+import { BarChart3, ChevronRight, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Menu, Settings, Sparkles } from "lucide-react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { api, clearClientSession } from "../lib/api";
 import { useViewer } from "../lib/useViewer";
@@ -184,7 +184,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {sidebar}
       </aside>
 
-      <main className="main">{children}</main>
+      <main className="main">
+        {/* Back-to-hub affordance on every Settings sub-screen (and the two
+            settings-only sub-pages reached from the hub: /receipts, /export).
+            Never on the /settings hub itself. One place → covers all states. */}
+        {!!pathname && (pathname.startsWith("/settings/") || pathname === "/receipts" || pathname === "/export") && (
+          <Link
+            href="/settings"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              minHeight: 44,
+              padding: "6px 4px",
+              marginBottom: "var(--sp-2)",
+              color: "var(--text-2)",
+              fontWeight: 600,
+              fontSize: 14
+            }}
+          >
+            <ChevronRight size={18} aria-hidden />
+            <span>חזרה להגדרות</span>
+          </Link>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
