@@ -34,7 +34,7 @@ export default function MyRequestsPage() {
   return (
     <AppShell>
       <h1 className="page-title">הבקשות שלי</h1>
-      <p className="muted" style={{ marginBottom: 20 }}>בקשות ההוצאות שהגשת לתקציב הבית — סטטוס עדכני.</p>
+      <p className="muted" style={{ marginBottom: 20 }}>בקשות ההוצאות שהגשת לתקציב הבית - סטטוס עדכני.</p>
 
       {error && <div className="status error">{error}</div>}
 
@@ -44,7 +44,7 @@ export default function MyRequestsPage() {
         <div className="panel" style={{ textAlign: "center", padding: 32 }}>
           <p className="muted">אין בקשות ממתינות ב-48 שעות האחרונות.</p>
           <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-            כששולחים הוצאה לביתן בוואטסאפ — היא תופיע כאן עד לאישור ההורה.
+            כששולחים הוצאה לביתן בוואטסאפ - היא תופיע כאן עד לאישור ההורה.
           </p>
         </div>
       )}
@@ -55,7 +55,7 @@ export default function MyRequestsPage() {
             <div key={req.id} className="panel" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontWeight: 600 }}>
-                  {/* The pending_household_expense row predates nameType — default
+                  {/* The pending_household_expense row predates nameType - default
                       to "על" since it's grammatically safe for both stores and products. */}
                   {req.amount.toLocaleString()} ₪ {req.merchantNameRaw ? `על ${req.merchantNameRaw}` : ""}
                 </div>

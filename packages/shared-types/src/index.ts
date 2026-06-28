@@ -113,6 +113,11 @@ export interface ProjectBudget {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** All-time sum of CONFIRMED purchases attributed to this project_budget_id.
+   *  Populated only by listProjectBudgets / getProjectBudget; omitted on
+   *  create/update returns. Derived (no DB column). Stripped for limited_member
+   *  at the HTTP layer (aggregate project-transaction data is adult-only). */
+  spent?: number;
 }
 
 /** Iteration 10 — per-category monthly spending cap.
@@ -856,12 +861,18 @@ export interface SpendingByWeekdayEntry {
 export type InsightKind =
   | "total_spend"
   | "week_over_week"
+  | "month_over_month"
   | "top_category"
   | "top_member"
   | "busiest_weekday"
   | "purchase_count"
   | "streak_days"
   | "empty_state";
+
+/** Period selector for the spending-breakdown endpoints. `month` = the current
+ *  budget cycle (the dashboard default); `week` = the current Israeli Sun–Sat
+ *  week; `prevMonth` = the immediately-preceding budget cycle. */
+export type SpendingPeriod = "week" | "month" | "prevMonth";
 
 export interface WeeklyInsight {
   kind: InsightKind;
@@ -889,6 +900,20 @@ export interface WeeklyInsightsResponse {
    *  to avoid millisecond/timezone edge bugs around Saturday 23:59:59. */
   nextWeekStartIso: string;
   insights: WeeklyInsight[];
+}
+
+/** Monthly (budget-cycle) recap. Same deterministic server-composed shape as the
+ *  weekly Wrapped, plus a per-week-of-cycle spend trend (`weeksTrend`). Hebrew is
+ *  always server-rendered (`WeeklyInsight.headlineHe`). */
+export interface MonthlyInsightsResponse {
+  /** Inclusive YYYY-MM-DD lower bound of the budget cycle. */
+  periodStart: string;
+  /** Inclusive YYYY-MM-DD upper bound of the budget cycle. */
+  periodEnd: string;
+  insights: WeeklyInsight[];
+  /** Per-week-of-cycle spend buckets (שבוע 1..N — a cycle can span 4 or 5
+   *  weeks depending on cycleDay / month length). */
+  weeksTrend: { weekIndex: number; weekLabelHe: string; amount: number }[];
 }
 
 /** Iteration 8 — Rich ChildView with Wishlist (deterministic).

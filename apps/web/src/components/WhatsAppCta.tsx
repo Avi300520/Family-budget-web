@@ -4,11 +4,11 @@ import { MessageCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 // Pingtally is WhatsApp-first, but a brand-new WEB signup has never messaged the
-// bot — so Meta's 24h customer-service window is closed and every free-form
+// bot - so Meta's 24h customer-service window is closed and every free-form
 // message the backend sends them dies with error 131047 (2026-06-12 incident:
 // participants finished onboarding and the bot stayed silent = "the app is
 // stuck"). This CTA has the USER send the first message, which opens the window
-// from their side — no Meta template approval required.
+// from their side - no Meta template approval required.
 //
 // NEXT_PUBLIC_* is inlined at BUILD time; when the env var is unset the CTA
 // renders nothing (deploys safely before the number is configured).
@@ -35,7 +35,7 @@ export function WhatsAppCtaButton({ label = "שליחת הודעה ראשונה 
 const DISMISS_KEY = "pt-whatsapp-cta-dismissed";
 
 /**
- * Dismissible dashboard banner shown while the household has no activity yet —
+ * Dismissible dashboard banner shown while the household has no activity yet -
  * the actionable bridge for users who already skipped the onboarding completion
  * screen (the empty activity feed only *mentions* WhatsApp; nothing tells the
  * user the FIRST message has to come from them).
@@ -59,7 +59,7 @@ export function WhatsAppCtaBanner() {
     try {
       window.localStorage.setItem(DISMISS_KEY, "1");
     } catch {
-      // localStorage unavailable (private mode) — dismiss for this view only.
+      // localStorage unavailable (private mode) - dismiss for this view only.
     }
   }
 
@@ -80,7 +80,7 @@ export function WhatsAppCtaBanner() {
       <div style={{ flex: "1 1 220px", minWidth: 0 }}>
         <div style={{ fontWeight: 600 }}>עוד לא דיברתם עם הבוט?</div>
         <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-          שלחו הודעה ראשונה בוואטסאפ — ומשם רושמים הוצאות, מנהלים קניות ומתעדכנים.
+          שלחו הודעה ראשונה בוואטסאפ - ומשם רושמים הוצאות, מנהלים קניות ומתעדכנים.
         </div>
       </div>
       <a

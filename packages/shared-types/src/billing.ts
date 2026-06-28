@@ -36,11 +36,11 @@ export interface BillingPlan {
 export const TRIAL_DAYS = 20;
 
 export const PLAN_PRICEBOOK: Readonly<Record<PaidPlanCode, BillingPlan>> = {
-  couple_monthly:       { code: "couple_monthly",       tier: "couple",       interval: "monthly", priceAgorot: 2000,  currency: "ILS", childrenMax: 0 },
-  couple_yearly:        { code: "couple_yearly",        tier: "couple",       interval: "yearly",  priceAgorot: 20000, currency: "ILS", childrenMax: 0 },
-  family_small_monthly: { code: "family_small_monthly", tier: "family_small", interval: "monthly", priceAgorot: 3000,  currency: "ILS", childrenMax: 3 },
+  couple_monthly:       { code: "couple_monthly",       tier: "couple",       interval: "monthly", priceAgorot: 1990,  currency: "ILS", childrenMax: 0 },
+  couple_yearly:        { code: "couple_yearly",        tier: "couple",       interval: "yearly",  priceAgorot: 19900, currency: "ILS", childrenMax: 0 },
+  family_small_monthly: { code: "family_small_monthly", tier: "family_small", interval: "monthly", priceAgorot: 2990,  currency: "ILS", childrenMax: 3 },
   family_small_yearly:  { code: "family_small_yearly",  tier: "family_small", interval: "yearly",  priceAgorot: 29900, currency: "ILS", childrenMax: 3 },
-  family_large_monthly: { code: "family_large_monthly", tier: "family_large", interval: "monthly", priceAgorot: 4000,  currency: "ILS", childrenMax: null },
+  family_large_monthly: { code: "family_large_monthly", tier: "family_large", interval: "monthly", priceAgorot: 3990,  currency: "ILS", childrenMax: null },
   family_large_yearly:  { code: "family_large_yearly",  tier: "family_large", interval: "yearly",  priceAgorot: 39900, currency: "ILS", childrenMax: null }
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Pencil, Trash2, UserPlus, X } from "lucide-react";
+import { Check, MessageCircle, Pencil, Trash2, UserPlus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Household, HouseholdMember, HouseholdRole } from "@shopping-assistant/shared-types";
 import { ApiClientError } from "@shopping-assistant/api-client";
@@ -20,7 +20,90 @@ const ROLE_LABELS: Record<string, string> = {
   limited_member: "חבר מוגבל"
 };
 
-type MemberRow = HouseholdMember & { displayName?: string; phoneE164?: string };
+/** Chip accent per role - owner reads as the household anchor (teal). */
+const ROLE_CHIP: Record<string, string> = {
+  owner: "teal",
+  admin: "ocean",
+  adult_member: "sage",
+  limited_member: "mustard"
+};
+
+/**
+ * Role picker cards — same submitted values as the former <select> options
+ * (admin / adult_member / limited_member); only the presentation changed.
+ * `managerOnly` mirrors the old gate: assigning admin is owner/admin-only.
+ */
+type RoleOption = {
+  value: string;
+  title: string;
+  sub: string;
+  color: string;
+  managerOnly?: boolean;
+};
+
+const ROLE_OPTIONS: RoleOption[] = [
+  { value: "admin", title: "בן/בת זוג", sub: "הרשאות מלאות - רואה ומנהל הכול", color: "var(--m-mom)", managerOnly: true },
+  { value: "adult_member", title: "חבר מבוגר", sub: "רואה את התקציב ומוסיף הוצאות", color: "var(--m-teen)" },
+  { value: "limited_member", title: "ילד (מוגבל)", sub: "מעדכן ומבקש אישור - בלי לראות הכול", color: "var(--m-kid)" }
+];
+
+function RolePicker({
+  value,
+  onChange,
+  options
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: RoleOption[];
+}) {
+  return (
+    <div className="role-cards" role="group" aria-label="בחירת תפקיד">
+      {options.map((opt) => {
+        const selected = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            className="role-card"
+            aria-pressed={selected}
+            onClick={() => onChange(opt.value)}
+          >
+            <span className="avatar sm" style={{ background: opt.color }} aria-hidden />
+            <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
+              <span className="role-card__title">{opt.title}</span>
+              <span className="role-card__sub">{opt.sub}</span>
+            </span>
+            <span
+              aria-hidden
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 999,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                border: selected ? "none" : "1.5px solid var(--cream-4)",
+                background: selected ? "var(--teal)" : "transparent",
+                color: "var(--on-color)"
+              }}
+            >
+              {selected ? <Check size={14} /> : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type MemberRow = HouseholdMember & {
+  displayName?: string;
+  phoneE164?: string;
+  // Some backends surface a not-yet-active invitee's intended name/phone on the
+  // member row; fall back to displayName/phoneE164 when they're absent.
+  invitedName?: string;
+  invitedPhone?: string;
+};
 
 /**
  * Honest Hebrew error copy (2026-06-12 invite-403 incident): an auth/session
@@ -31,7 +114,7 @@ type MemberRow = HouseholdMember & { displayName?: string; phoneE164?: string };
 function describeMemberActionError(err: unknown, fallback: string): string {
   if (err instanceof ApiClientError) {
     if (err.code === "auth.csrf_invalid" || err.code === "auth.unauthorized" || err.status === 401) {
-      return "החיבור לחשבון פג. רעננו את הדף ונסו שוב — ואם זה חוזר, התחברו מחדש.";
+      return "החיבור לחשבון פג. רעננו את הדף ונסו שוב - ואם זה חוזר, התחברו מחדש.";
     }
     if (err.code === "auth.forbidden") {
       return "רק בעלים או מנהל יכולים לבצע את הפעולה הזו.";
@@ -125,6 +208,21 @@ export default function MembersPage() {
     }
   }
 
+  // Revoking a pending invite is a member-row removal (status -> removed) on the
+  // invited row; reuses the same DELETE endpoint as removeMember.
+  async function cancelInvite(m: MemberRow) {
+    if (!household) return;
+    const who = m.invitedName ?? m.displayName ?? m.invitedPhone ?? m.phoneE164 ?? "המוזמן";
+    if (!confirm(`לבטל את ההזמנה ל-${who}?`)) return;
+    setError(undefined);
+    try {
+      await api.removeMember(household.id, m.id);
+      setMembers((prev) => prev.filter((x) => x.id !== m.id));
+    } catch (err) {
+      setError(describeMemberActionError(err, "לא הצלחנו לבטל את ההזמנה."));
+    }
+  }
+
   function beginEdit(m: MemberRow) {
     setEditingId(m.id);
     setEditRole(m.role);
@@ -161,10 +259,11 @@ export default function MembersPage() {
   if (!household) return <AppShell><LoadState error={error} /></AppShell>;
 
   const activeMembers = members.filter((m) => m.status === "active");
+  const pendingInvites = members.filter((m) => m.status === "invited");
 
   return (
     <AppShell>
-      <h1 className="page-title">חברי הבית — {household.name}</h1>
+      <h1 className="page-title">חברי הבית - {household.name}</h1>
 
       <section className="panel" style={{ marginBottom: 24 }}>
         <h2>חברים פעילים</h2>
@@ -174,21 +273,27 @@ export default function MembersPage() {
             const isEditing = editingId === m.id;
             const displayName = m.displayName ?? m.phoneE164 ?? "חבר";
             return (
-              <div key={m.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--cream-3)" }}>
+              <div key={m.userId} style={{ padding: "10px 0", borderBottom: "1px solid var(--cream-3)" }}>
                 {!isEditing ? (
                   <div className="row between" style={{ alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <Avatar memberId={m.userId} displayName={m.displayName} colorKey={m.color} size="lg" />
-                      <div>
-                        <span style={{ fontWeight: 700 }}>{displayName}</span>
-                        <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.85rem" }}>{ROLE_LABELS[m.role] ?? m.role}</span>
-                        {m.phoneE164 && m.displayName && (
-                          <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.8rem" }} dir="ltr">{m.phoneE164}</span>
-                        )}
-                        {m.personalBudgetMonthly != null && (
-                          <span className="muted" style={{ marginInlineStart: 8, fontSize: "0.85rem" }}>
-                            · תקציב אישי {m.personalBudgetMonthly.toLocaleString()} ₪/חודש
-                          </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 700 }}>{displayName}</span>
+                          <span className={`chip ${ROLE_CHIP[m.role] ?? "teal"}`}>{ROLE_LABELS[m.role] ?? m.role}</span>
+                        </div>
+                        {((m.phoneE164 && m.displayName) || m.personalBudgetMonthly != null) && (
+                          <div style={{ marginTop: 2, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            {m.phoneE164 && m.displayName && (
+                              <span className="mono muted" style={{ fontSize: "0.8rem" }} dir="ltr">{m.phoneE164}</span>
+                            )}
+                            {m.personalBudgetMonthly != null && (
+                              <span className="muted" style={{ fontSize: "0.85rem" }}>
+                                תקציב אישי {m.personalBudgetMonthly.toLocaleString()} ₪/חודש
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -215,14 +320,14 @@ export default function MembersPage() {
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {canAssignRoles && (
-                        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, width: "100%" }}>
                           תפקיד
-                          <select className="input" value={editRole} onChange={(e) => setEditRole(e.target.value as HouseholdRole)}>
-                            <option value="admin">מנהל</option>
-                            <option value="adult_member">חבר מבוגר</option>
-                            <option value="limited_member">חבר מוגבל</option>
-                          </select>
-                        </label>
+                          <RolePicker
+                            value={editRole}
+                            onChange={(v) => setEditRole(v as HouseholdRole)}
+                            options={ROLE_OPTIONS}
+                          />
+                        </div>
                       )}
                       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
                         תקציב אישי חודשי (₪, ריק = ללא)
@@ -244,7 +349,7 @@ export default function MembersPage() {
                           checked={editCoManager}
                           onChange={(e) => setEditCoManager(e.target.checked)}
                         />
-                        מנהל/ת שותף/ה — גישת ניהול מלאה (הזמנת חברים, הגדרות בית ותקציבים)
+                        מנהל/ת שותף/ה - גישת ניהול מלאה (הזמנת חברים, הגדרות בית ותקציבים)
                       </label>
                     )}
                     <div style={{ display: "flex", gap: 6 }}>
@@ -263,6 +368,41 @@ export default function MembersPage() {
         </div>
       </section>
 
+      {/* Pending invites - manager-only; invitee phone is never exposed to non-managers
+          (the whole block is gated by canManage, and the backend strips phone for limited). */}
+      {canManage && pendingInvites.length > 0 && (
+        <section className="panel" style={{ marginBottom: 24 }}>
+          <h2>הזמנות שנשלחו</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+            {pendingInvites.map((m) => {
+              const name = m.invitedName ?? m.displayName ?? m.invitedPhone ?? m.phoneE164 ?? "מוזמן";
+              const phone = m.phoneE164 ?? m.invitedPhone;
+              return (
+                <div key={m.userId} className="row between" style={{ alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--cream-3)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <span className="avatar" style={{ background: "var(--cream-4)", color: "var(--text-1)" }} aria-hidden>{name.charAt(0)}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 600 }}>{name}</span>
+                        <span className="chip mustard">ממתין לאישור</span>
+                      </div>
+                      <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                        {phone && <span className="mono" dir="ltr">{phone}</span>}
+                        {phone && " · "}
+                        {ROLE_LABELS[m.role] ?? m.role}
+                      </div>
+                    </div>
+                  </div>
+                  <button className="button secondary" onClick={() => cancelInvite(m)} style={{ padding: "4px 10px" }} title="ביטול ההזמנה">
+                    ביטול
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {viewer.status === "ready" && !canManage && (
         <section className="panel">
           <p className="muted">לצפייה בלבד. ניהול חברי הבית (הזמנה, עריכה והסרה) זמין לבעלים, למנהל ולבן/בת זוג מנהל/ת.</p>
@@ -272,7 +412,10 @@ export default function MembersPage() {
       {canManage && (
       <section className="panel">
         <h2>מוסיפים בן משפחה</h2>
-        <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>נשלח לו הזמנה בוואטסאפ. הוא מצטרף בלחיצה.</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 4, marginBottom: 16, fontSize: 13, color: "var(--text-1)", background: "var(--cream-1)", padding: "10px 12px", borderRadius: 11 }}>
+          <MessageCircle size={18} color="var(--pos)" aria-hidden style={{ flexShrink: 0 }} />
+          נשלח לו הזמנה בוואטסאפ - הוא מצטרף בלחיצה, בלי סיסמה.
+        </div>
         <form className="form" onSubmit={invite}>
           <label>
             שם
@@ -302,15 +445,15 @@ export default function MembersPage() {
               </div>
             )}
           </div>
-          <label>
-            תפקיד
-            <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
-              {/* Inviting an admin mints a manager — owner/admin only. */}
-              {canAssignRoles && <option value="admin">מנהל</option>}
-              <option value="adult_member">חבר מבוגר</option>
-              <option value="limited_member">חבר מוגבל</option>
-            </select>
-          </label>
+          <div>
+            <span className="label" style={{ display: "block", marginBottom: 6 }}>תפקיד</span>
+            {/* Inviting an admin mints a manager - owner/admin only (managerOnly card hidden otherwise). */}
+            <RolePicker
+              value={inviteRole}
+              onChange={setInviteRole}
+              options={ROLE_OPTIONS.filter((o) => !o.managerOnly || canAssignRoles)}
+            />
+          </div>
           <label>
             תקציב אישי חודשי (₪, אופציונלי)
             <input

@@ -1,0 +1,3 @@
+# Playwright smoke artifacts — auth cookies + screenshots, never commit.
+e2e/fixtures/
+test-results/

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus, Send, Trash2, MapPin } from "lucide-react";
+import { Check, ChevronDown, Plus, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   Household,
@@ -10,7 +10,7 @@ import type {
 } from "@shopping-assistant/shared-types";
 import {
   SHOPPING_CATEGORIES,
-  SHOPPING_CATEGORY_FALLBACK,
+  shoppingCategoryMeta,
 } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
 import { Avatar } from "../../components/Avatar";
@@ -18,7 +18,7 @@ import { LoadState } from "../../components/LoadState";
 import { api } from "../../lib/api";
 
 // ── Visual category color mapping (Iteration 4) ──────────────────────────────
-// Every CSS variable here is already defined in tokens.css — no new hex.
+// Every CSS variable here is already defined in tokens.css - no new hex.
 const CATEGORY_COLORS: Record<ShoppingCategoryId, string> = {
   vegetables: "var(--sage)",
   bakery:     "var(--mustard)",
@@ -29,7 +29,6 @@ const CATEGORY_COLORS: Record<ShoppingCategoryId, string> = {
   household:  "var(--coral)",
 };
 
-type ViewVariant = "cards" | "list";
 type MemberInfo = { userId: string; displayName?: string; colorKey?: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,129 +53,32 @@ function groupByCategory(
     .map((meta) => ({ ...meta, items: buckets.get(meta.id) ?? [] }));
 }
 
-// ── CategoryStrip — overview of the list's categories (grouped by category, NOT a
-//    store walking-route; brand rule forbids any in-store walking-order framing) ──
-function RouteMap({ activeCategoryIds }: { activeCategoryIds: Set<ShoppingCategoryId> }) {
-  const categories = SHOPPING_CATEGORIES;
-  return (
-    <section className="card" style={{ padding: "var(--sp-5)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", marginBottom: "var(--sp-3)" }}>
-        <MapPin size={16} aria-hidden style={{ color: "var(--teal)" }} />
-        <span className="h4">לפי קטגוריות</span>
-        <span className="muted" style={{ fontSize: 12 }}>
-          הרשימה מקובצת לפי קטגוריות
-        </span>
-      </div>
-
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: "var(--sp-1)",
-          rowGap: "var(--sp-3)",
-          padding: "var(--sp-2) 0",
-          overflowX: "auto",
-        }}
-        aria-label="קטגוריות הקניות"
-      >
-        {/* the connecting line behind the dots */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            insetInlineStart: 18,
-            insetInlineEnd: 18,
-            top: 22,
-            height: 2,
-            background: "var(--cream-3)",
-            zIndex: 0,
-          }}
-        />
-
-        {categories.map((cat) => (
-          <RouteDot
-            key={cat.id}
-            icon={cat.icon}
-            label={cat.nameHe.split(/\s+/)[0]!}
-            color={CATEGORY_COLORS[cat.id]}
-            active={activeCategoryIds.has(cat.id)}
-          />
-        ))}
-      </div>
-    </section>
-  );
+// Current Hebrew month-year, e.g. "יוני 2026" - never a raw ISO string.
+function currentMonthLabel(): string {
+  return new Date().toLocaleDateString("he-IL", { month: "long", year: "numeric" });
 }
 
-function RouteDot({
-  icon,
-  label,
-  color,
-  active,
-}: {
-  icon: string;
-  label: string;
-  color: string;
-  active: boolean;
-}) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        zIndex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 6,
-        minWidth: 40,
-      }}
-    >
-      <span
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 999,
-          background: "var(--cream-2)",
-          border: `2px solid ${active ? color : "var(--cream-4)"}`,
-          display: "grid",
-          placeItems: "center",
-          fontSize: 18,
-          opacity: active ? 1 : 0.55,
-          flexShrink: 0,
-        }}
-        aria-hidden
-      >
-        {icon}
-      </span>
-      <span
-        style={{
-          fontSize: 10,
-          color: active ? "var(--text-1)" : "var(--text-3)",
-          textAlign: "center",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  );
+// Hebrew "when" label from an ISO timestamp - today / yesterday / he-IL date.
+function formatWhen(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayDiff = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
+  if (dayDiff <= 0) return "היום";
+  if (dayDiff === 1) return "אתמול";
+  return d.toLocaleDateString("he-IL", { day: "numeric", month: "long" });
 }
 
-// ── ShoppingHeader (count + variant toggle + actions) ─────────────────────────
+// ── ShoppingHeader (counts + WhatsApp send) ───────────────────────────────────
 function ShoppingHeader({
-  totalCount,
   activeCount,
-  variant,
-  setVariant,
+  boughtCount,
   onSend,
   sendStatus,
 }: {
-  totalCount: number;
   activeCount: number;
-  variant: ViewVariant;
-  setVariant: (v: ViewVariant) => void;
+  boughtCount: number;
   onSend: () => void;
   sendStatus: "idle" | "sending" | "sent";
 }) {
@@ -193,84 +95,43 @@ function ShoppingHeader({
         <div style={{ flex: 1, minWidth: 180 }}>
           <h1 className="h2" style={{ marginBottom: 4 }}>רשימת קניות</h1>
           <div className="muted" style={{ fontSize: 13 }}>
-            <span className="mono">{activeCount}</span> פעילים • <span className="mono">{totalCount}</span> פריטים סה״כ
+            <span className="mono">{activeCount}</span> לקנות · <span className="mono">{boughtCount}</span> נקנו החודש
           </div>
         </div>
 
-        {/* variant toggle */}
-        <div
-          role="tablist"
-          aria-label="תצוגה"
-          style={{
-            display: "flex",
-            padding: 3,
-            background: "var(--cream-1)",
-            borderRadius: "var(--r-3)",
-            border: "1px solid var(--cream-3)",
-            gap: 2,
-          }}
+        <button
+          type="button"
+          className="button"
+          onClick={onSend}
+          disabled={activeCount === 0 || sendStatus === "sending"}
+          style={{ minWidth: 200 }}
         >
-          {(["cards", "list"] as const).map((v) => {
-            const labels = { cards: "קלפים", list: "רשימה" } as const;
-            const isActive = variant === v;
-            return (
-              <button
-                key={v}
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => setVariant(v)}
-                className="btn sm"
-                style={{
-                  background: isActive ? "var(--cream-2)" : "transparent",
-                  border: 0,
-                  boxShadow: isActive ? "var(--elev-1)" : "none",
-                  color: isActive ? "var(--text-0)" : "var(--text-2)",
-                  fontWeight: 600,
-                }}
-                type="button"
-              >
-                {labels[v]}
-              </button>
-            );
-          })}
-        </div>
-
-        {activeCount > 0 && (
-          <button
-            type="button"
-            className="button"
-            onClick={onSend}
-            disabled={sendStatus === "sending"}
-            style={{ minWidth: 160 }}
-          >
-            <Send size={16} aria-hidden />
-            {sendStatus === "sending"
-              ? "שולח..."
-              : sendStatus === "sent"
-              ? "נשלח ✓"
-              : "שלח לוואטסאפ"}
-          </button>
-        )}
+          <Send size={16} aria-hidden />
+          {sendStatus === "sending"
+            ? "שולח..."
+            : sendStatus === "sent"
+            ? "נשלח ✓"
+            : "שליחת הרשימה לוואטסאפ"}
+        </button>
       </div>
     </section>
   );
 }
 
-// ── ItemRow — used by both cards and list view ────────────────────────────────
+// -- ItemRow: a single to-buy item (active only) -----------------------------
 function ItemRow({
   item,
   member,
   color,
-  onTogglePurchased,
+  onMarkBought,
   onDelete,
 }: {
   item: ShoppingListItem;
   member?: MemberInfo;
   color: string;
-  onTogglePurchased: () => void;
+  onMarkBought: () => void;
   onDelete: () => void;
 }) {
-  const isPurchased = item.status === "purchased";
   const name = item.normalizedName ?? item.rawText;
   return (
     <div
@@ -281,15 +142,13 @@ function ItemRow({
         alignItems: "center",
         padding: "10px var(--sp-4)",
         borderTop: "1px solid var(--cream-3)",
-        background: isPurchased ? "var(--cream-1)" : "transparent",
-        opacity: isPurchased ? 0.65 : 1,
       }}
     >
       {/* 40px tap target (touch-friendly) with the 22px visual checkbox centered inside. */}
       <button
         type="button"
-        onClick={onTogglePurchased}
-        aria-label={isPurchased ? "החזר לפעיל" : "סמן כנקנה"}
+        onClick={onMarkBought}
+        aria-label="סמן כנקנה"
         style={{
           width: 40,
           height: 40,
@@ -308,14 +167,10 @@ function ItemRow({
             width: 22,
             height: 22,
             borderRadius: 7,
-            border: `1.5px solid ${isPurchased ? color : "var(--cream-4)"}`,
-            background: isPurchased ? color : "var(--cream-2)",
-            display: "grid",
-            placeItems: "center",
+            border: "1.5px solid var(--cream-4)",
+            background: "var(--cream-2)",
           }}
-        >
-          {isPurchased && <Check size={14} color="white" strokeWidth={2.5} aria-hidden />}
-        </span>
+        />
       </button>
 
       <div style={{ minWidth: 0 }}>
@@ -323,7 +178,6 @@ function ItemRow({
           style={{
             fontSize: 14,
             fontWeight: 500,
-            textDecoration: isPurchased ? "line-through" : "none",
             color: "var(--text-0)",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -368,16 +222,16 @@ function ItemRow({
   );
 }
 
-// ── CardsView (default) ───────────────────────────────────────────────────────
-function CardsView({
+// ── To-buy: category cards ────────────────────────────────────────────────────
+function ToBuyCards({
   groups,
   memberMap,
-  onTogglePurchased,
+  onMarkBought,
   onDelete,
 }: {
   groups: ReturnType<typeof groupByCategory>;
   memberMap: Record<string, MemberInfo>;
-  onTogglePurchased: (id: string, currentStatus: ShoppingListItem["status"]) => void;
+  onMarkBought: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -390,8 +244,6 @@ function CardsView({
     >
       {groups.map((group) => {
         const color = CATEGORY_COLORS[group.id];
-        const total = group.items.length;
-        const purchased = group.items.filter((i) => i.status === "purchased").length;
         return (
           <section
             key={group.id}
@@ -426,7 +278,7 @@ function CardsView({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{group.nameHe}</div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  <span className="mono">{purchased}/{total}</span> בעגלה
+                  <span className="mono">{group.items.length}</span> פריטים
                 </div>
               </div>
             </header>
@@ -439,7 +291,7 @@ function CardsView({
                     item={item}
                     member={adder}
                     color={color}
-                    onTogglePurchased={() => onTogglePurchased(item.id, item.status)}
+                    onMarkBought={() => onMarkBought(item.id)}
                     onDelete={() => onDelete(item.id)}
                   />
                 );
@@ -452,90 +304,143 @@ function CardsView({
   );
 }
 
-// ── ListView (continuous) ─────────────────────────────────────────────────────
-function ListView({
-  groups,
-  memberMap,
-  onTogglePurchased,
-  onDelete,
+// ── Bought-this-month: collapsible recap ──────────────────────────────────────
+function BoughtSection({
+  items,
+  open,
+  onToggle,
+  onRestore,
 }: {
-  groups: ReturnType<typeof groupByCategory>;
-  memberMap: Record<string, MemberInfo>;
-  onTogglePurchased: (id: string, currentStatus: ShoppingListItem["status"]) => void;
-  onDelete: (id: string) => void;
+  items: ShoppingListItem[];
+  open: boolean;
+  onToggle: () => void;
+  onRestore: (id: string) => void;
 }) {
+  const monthLabel = currentMonthLabel();
   return (
-    <section className="card" style={{ padding: 0, overflow: "hidden" }}>
-      {groups.map((group, idx) => {
-        const color = CATEGORY_COLORS[group.id];
-        return (
-          <div key={group.id}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--sp-2)",
-                padding: "14px var(--sp-5) 10px",
-                borderTop: idx > 0 ? "1px solid var(--cream-3)" : "none",
-                background: `color-mix(in srgb, ${color} 5%, var(--cream-2))`,
-              }}
-            >
-              <span style={{ fontSize: 18 }} aria-hidden>
-                {group.icon}
-              </span>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>{group.nameHe}</span>
-              <span
-                style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 999,
-                  background: "var(--text-3)",
-                }}
-                aria-hidden
-              />
-              <span className="muted" style={{ fontSize: 12 }}>
-                <span className="mono">{group.items.length}</span> פריטים
-              </span>
-            </div>
-            {group.items.map((item) => {
-              const adder = item.createdByUserId ? memberMap[item.createdByUserId] : undefined;
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--sp-3)",
+          padding: "14px var(--sp-4)",
+          borderRadius: "var(--r-3)",
+          cursor: "pointer",
+          border: "1px solid var(--cream-3)",
+          background: "var(--cream-1)",
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 10,
+            background: "var(--sage-bg)",
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          <Check size={19} color="var(--pos)" aria-hidden />
+        </span>
+        <div style={{ flex: 1, minWidth: 0, textAlign: "start" }}>
+          <div style={{ fontWeight: 700, fontSize: 14.5 }}>נקנו החודש</div>
+          <div className="muted" style={{ fontSize: 12.5 }}>
+            <span className="mono">{items.length}</span> פריטים · {monthLabel}
+          </div>
+        </div>
+        <ChevronDown
+          size={20}
+          color="var(--text-2)"
+          aria-hidden
+          style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 160ms ease", flexShrink: 0 }}
+        />
+      </button>
+
+      {open && (
+        items.length === 0 ? (
+          <section className="card" style={{ marginTop: "var(--sp-2)", padding: "var(--sp-6) var(--sp-5)", textAlign: "center" }}>
+            <div className="muted" style={{ fontSize: 13 }}>עוד לא נקנו פריטים החודש.</div>
+          </section>
+        ) : (
+          <section className="card" style={{ marginTop: "var(--sp-2)", padding: "var(--sp-2)", overflow: "hidden" }}>
+            {items.map((item, idx) => {
+              const meta = shoppingCategoryMeta(categoryOf(item));
+              const name = item.normalizedName ?? item.rawText;
+              const when = formatWhen(item.updatedAt);
               return (
-                <ItemRow
+                <div
                   key={item.id}
-                  item={item}
-                  member={adder}
-                  color={color}
-                  onTogglePurchased={() => onTogglePurchased(item.id, item.status)}
-                  onDelete={() => onDelete(item.id)}
-                />
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--sp-2)",
+                    padding: "9px var(--sp-3)",
+                    borderTop: idx > 0 ? "1px solid var(--cream-3)" : "none",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onRestore(item.id)}
+                    aria-label="החזר לרשימה"
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 7,
+                      border: 0,
+                      background: "var(--pos)",
+                      color: "#fff",
+                      cursor: "pointer",
+                      display: "grid",
+                      placeItems: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Check size={14} aria-hidden />
+                  </button>
+                  <span
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: 13.5,
+                      color: "var(--text-2)",
+                      textDecoration: "line-through",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={name}
+                  >
+                    {name}{item.quantity != null && item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                  </span>
+                  <span className="chip" style={{ flexShrink: 0 }}>{meta.icon} {meta.nameHe}</span>
+                  {when && (
+                    <span style={{ fontSize: 11.5, color: "var(--text-3)", flexShrink: 0, whiteSpace: "nowrap" }}>
+                      {when}
+                    </span>
+                  )}
+                </div>
               );
             })}
-          </div>
-        );
-      })}
-    </section>
+          </section>
+        )
+      )}
+    </div>
   );
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
-function EmptyState() {
+// ── Empty state (no to-buy items) ─────────────────────────────────────────────
+function ToBuyEmpty() {
   return (
-    <section className="card" style={{ padding: "var(--sp-10) var(--sp-5)" }}>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "var(--sp-3)",
-          textAlign: "center",
-        }}
-      >
-        <span style={{ fontSize: 40 }} aria-hidden>🛒</span>
-        <div className="h3">הרשימה ריקה כרגע</div>
-        <div className="muted" style={{ fontSize: 13, maxWidth: 360 }}>
-          שלחו בוואטסאפ: <strong>&quot;תוסיף חלב לרשימת הקניות&quot;</strong> — או הוסיפו מהשדה למעלה.
-        </div>
-      </div>
+    <section className="card" style={{ padding: "var(--sp-8) var(--sp-5)", textAlign: "center" }}>
+      <div style={{ fontSize: 32, marginBottom: "var(--sp-2)" }} aria-hidden>🛒</div>
+      <div className="muted" style={{ fontSize: 13.5 }}>הרשימה ריקה - הכול נקנה. כל הכבוד!</div>
     </section>
   );
 }
@@ -544,11 +449,12 @@ function EmptyState() {
 export default function ShoppingListPage() {
   const [household, setHousehold] = useState<Household>();
   const [items, setItems] = useState<ShoppingListItem[]>([]);
+  const [bought, setBought] = useState<ShoppingListItem[]>([]);
   const [memberMap, setMemberMap] = useState<Record<string, MemberInfo>>({});
   const [rawText, setRawText] = useState("");
   const [error, setError] = useState<string>();
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent">("idle");
-  const [variant, setVariant] = useState<ViewVariant>("cards");
+  const [showBought, setShowBought] = useState(false);
 
   async function load() {
     try {
@@ -561,11 +467,26 @@ export default function ShoppingListPage() {
           .catch(() => ({ members: [] as Array<HouseholdMember & { displayName?: string }> })),
       ]);
       setItems(list.items);
+      setBought(list.boughtThisMonth);
       const map: Record<string, MemberInfo> = {};
       for (const m of membersRes.members) {
         map[m.userId] = { userId: m.userId, displayName: m.displayName, colorKey: m.color };
       }
       setMemberMap(map);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בטעינת הרשימה");
+    }
+  }
+
+  // Item check-off/restore/remove/add don't change the household or member roster,
+  // so refetch ONLY the list — not currentHousehold + listMembers. Avoids 3 GETs
+  // per mutation on the hot shopping path (full load() stays for initial mount).
+  async function reloadList() {
+    if (!household) return load();
+    try {
+      const list = await api.shoppingList(household.id);
+      setItems(list.items);
+      setBought(list.boughtThisMonth);
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בטעינת הרשימה");
     }
@@ -581,18 +502,22 @@ export default function ShoppingListPage() {
     if (!household || !rawText.trim()) return;
     await api.addShoppingItem(household.id, rawText.trim());
     setRawText("");
-    await load();
+    await reloadList();
   }
 
-  async function togglePurchased(id: string, currentStatus: ShoppingListItem["status"]) {
-    const next = currentStatus === "purchased" ? "active" : "purchased";
-    await api.patchShoppingItem(id, { status: next });
-    await load();
+  async function markBought(id: string) {
+    await api.patchShoppingItem(id, { status: "purchased" });
+    await reloadList();
+  }
+
+  async function restoreItem(id: string) {
+    await api.patchShoppingItem(id, { status: "active" });
+    await reloadList();
   }
 
   async function removeItem(id: string) {
     await api.patchShoppingItem(id, { status: "removed" });
-    await load();
+    await reloadList();
   }
 
   async function sendToWhatsapp() {
@@ -608,19 +533,12 @@ export default function ShoppingListPage() {
     }
   }
 
-  const visibleItems = useMemo(
-    () => items.filter((it) => it.status !== "removed"),
+  // items = ACTIVE (to-buy) only; defensively re-filter in case the store includes others.
+  const activeItems = useMemo(
+    () => items.filter((it) => it.status === "active"),
     [items]
   );
-  const activeCount = useMemo(
-    () => visibleItems.filter((it) => it.status === "active").length,
-    [visibleItems]
-  );
-  const groups = useMemo(() => groupByCategory(visibleItems), [visibleItems]);
-  const activeCategoryIds = useMemo(
-    () => new Set<ShoppingCategoryId>(groups.map((g) => g.id)),
-    [groups]
-  );
+  const groups = useMemo(() => groupByCategory(activeItems), [activeItems]);
 
   if (error) return <AppShell><LoadState error={error} /></AppShell>;
   if (!household) return <AppShell><LoadState /></AppShell>;
@@ -629,10 +547,8 @@ export default function ShoppingListPage() {
     <AppShell>
       <div style={{ display: "grid", gap: "var(--sp-4)" }}>
         <ShoppingHeader
-          totalCount={visibleItems.length}
-          activeCount={activeCount}
-          variant={variant}
-          setVariant={setVariant}
+          activeCount={activeItems.length}
+          boughtCount={bought.length}
           onSend={sendToWhatsapp}
           sendStatus={sendStatus}
         />
@@ -651,7 +567,7 @@ export default function ShoppingListPage() {
               className="input"
               style={{ flex: 1, minWidth: 200 }}
               value={rawText}
-              placeholder="למשל: חלב, פיתות, גלידה"
+              placeholder="הוסיפו פריט - למשל: חלב, פיתות, גלידה"
               onChange={(event) => setRawText(event.target.value)}
               aria-label="הוסף פריט"
             />
@@ -662,28 +578,30 @@ export default function ShoppingListPage() {
           </div>
         </form>
 
-        {visibleItems.length > 0 ? (
-          <>
-            <RouteMap activeCategoryIds={activeCategoryIds} />
-            {variant === "cards" ? (
-              <CardsView
-                groups={groups}
-                memberMap={memberMap}
-                onTogglePurchased={togglePurchased}
-                onDelete={removeItem}
-              />
-            ) : (
-              <ListView
-                groups={groups}
-                memberMap={memberMap}
-                onTogglePurchased={togglePurchased}
-                onDelete={removeItem}
-              />
-            )}
-          </>
+        {/* To-buy */}
+        <div className="row between" style={{ marginTop: "var(--sp-1)" }}>
+          <h2 className="h3">לקנות</h2>
+          <span className="chip teal">{activeItems.length} פריטים</span>
+        </div>
+
+        {activeItems.length > 0 ? (
+          <ToBuyCards
+            groups={groups}
+            memberMap={memberMap}
+            onMarkBought={markBought}
+            onDelete={removeItem}
+          />
         ) : (
-          <EmptyState />
+          <ToBuyEmpty />
         )}
+
+        {/* Bought this month (collapsed by default) */}
+        <BoughtSection
+          items={bought}
+          open={showBought}
+          onToggle={() => setShowBought((s) => !s)}
+          onRestore={restoreItem}
+        />
       </div>
     </AppShell>
   );

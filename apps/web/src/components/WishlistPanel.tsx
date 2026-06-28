@@ -1,17 +1,17 @@
 "use client";
 
 /**
- * WishlistPanel — Iteration 8 ChildView surface.
+ * WishlistPanel - Iteration 8 ChildView surface.
  *
  * A member's OWN wishlist. Self-contained: loads api.myWishlist(), supports
  * add + soft-delete of the caller's own items. It NEVER shows or targets
- * another member's items — the server only ever returns the caller's rows on
+ * another member's items - the server only ever returns the caller's rows on
  * /wishlist/me, and there is no cross-user control here by construction.
  *
  * Mark-fulfilled is intentionally absent: that is an owner/admin-only action
  * exposed on the parent /family/wishlists route, not here.
  *
- * Reuses existing primitives (.card, .input, .button, .muted, .h3) — no new
+ * Reuses existing primitives (.card, .input, .button, .muted, .h3) - no new
  * CSS tokens. All Hebrew copy is in logical order in source.
  */
 
@@ -76,7 +76,7 @@ export function WishlistPanel() {
       <div style={{ marginBottom: "var(--sp-4)" }}>
         <h3 className="h3">המשאלות שלי 🎁</h3>
         <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
-          דברים שהייתי רוצה — ההורים יראו את הרשימה.
+          דברים שהייתי רוצה - ההורים יראו את הרשימה.
         </div>
       </div>
 

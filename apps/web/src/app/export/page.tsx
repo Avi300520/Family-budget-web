@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Download, FileText } from "lucide-react";
 import { AppShell } from "../../components/AppShell";
+import { LoadState } from "../../components/LoadState";
 import { api } from "../../lib/api";
 import { apiBaseUrl } from "../../lib/apiBase";
+import { useViewer } from "../../lib/useViewer";
+import { canViewHouseholdMembers } from "../../lib/settingsView";
 
 function monthLabel(month: string): string {
   const [year, m] = month.split("-");
@@ -23,6 +27,12 @@ function prevMonths(n: number): string[] {
 }
 
 export default function ExportPage() {
+  const viewer = useViewer();
+  // Export reaches household-wide expense data, so it is gated exactly like the
+  // members roster: owner/admin/adult_member may export, limited_member may not.
+  // Client-side short-circuit on top of the backend 403 - no fetch, friendly message.
+  const canExport = canViewHouseholdMembers(viewer.caps);
+
   const [month, setMonth] = useState<string>("");
   const [householdId, setHouseholdId] = useState<string>();
   const [error, setError] = useState<string>();
@@ -30,17 +40,33 @@ export default function ExportPage() {
   const anchorRef = useRef<HTMLAnchorElement>(null);
   const months = prevMonths(12);
 
+  // Month dropdown init (role-independent) - from ?month= or the latest month.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const m = params.get("month");
     if (m && /^\d{4}-\d{2}$/.test(m)) setMonth(m);
     else if (months[0]) setMonth(months[0]);
-
-    api.me().then((me) => {
-      if (!me.household) { setError("אין לך בית פעיל."); return; }
-      setHouseholdId(me.household.id);
-    }).catch(() => setError("לא הצלחנו לטעון. נסה לרענן."));
   }, []);
+
+  // Resolve the household id only once the viewer is ready AND allowed to export.
+  // limited_member never issues the request (the friendly gate renders instead).
+  useEffect(() => {
+    if (viewer.status !== "ready" || !canExport) return;
+    let cancelled = false;
+    api
+      .me()
+      .then((me) => {
+        if (cancelled) return;
+        if (!me.household) { setError("אין לך בית פעיל."); return; }
+        setHouseholdId(me.household.id);
+      })
+      .catch(() => {
+        if (!cancelled) setError("לא הצלחנו לטעון. נסה לרענן.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewer.status, canExport]);
 
   async function handleDownload() {
     if (!householdId || !month) return;
@@ -63,6 +89,35 @@ export default function ExportPage() {
     } finally {
       setDownloading(false);
     }
+  }
+
+  // Viewer still resolving, or transient /me failure → explicit load/error state.
+  if (viewer.status === "loading") {
+    return (
+      <AppShell>
+        <LoadState />
+      </AppShell>
+    );
+  }
+  if (viewer.status === "error") {
+    return (
+      <AppShell>
+        <LoadState error="לא הצלחנו לטעון את הפרטים. נסו לרענן." />
+      </AppShell>
+    );
+  }
+
+  // limited_member: household-wide export is restricted - friendly Hebrew message,
+  // consistent with the other gated settings screens (not a raw backend 403).
+  if (!canExport) {
+    return (
+      <AppShell>
+        <h1 className="page-title">ייצוא הוצאות</h1>
+        <section className="panel">
+          <p className="muted">ייצוא נתוני משק הבית זמין לחברי הבית הבוגרים בלבד.</p>
+        </section>
+      </AppShell>
+    );
   }
 
   return (
@@ -93,12 +148,34 @@ export default function ExportPage() {
             onClick={handleDownload}
             disabled={!householdId || !month || downloading}
           >
-            {downloading ? "מוריד..." : "הורד CSV"}
+            {downloading ? "מוריד..." : (<><Download size={18} aria-hidden /> הורדת CSV</>)}
           </button>
 
-          <p className="muted" style={{ fontSize: 13 }}>
-            הקובץ כולל: תאריך, סכום, קטגוריה, תיאור, שם חבר, סוג הוצאה, שם פרויקט.
-          </p>
+          {/* What the file includes - tinted note box with header + icon */}
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 12,
+              background: "var(--cream-1)",
+              fontSize: 13,
+              color: "var(--text-1)",
+              lineHeight: 1.6,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                fontWeight: 700,
+                marginBottom: 6,
+                color: "var(--text-0)",
+              }}
+            >
+              <FileText size={16} aria-hidden /> מה כולל הקובץ
+            </div>
+            תאריך · סכום · קטגוריה · תיאור · שם החבר · סוג ההוצאה · שם הפרויקט.
+          </div>
         </div>
       )}
 
