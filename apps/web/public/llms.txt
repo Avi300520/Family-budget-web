@@ -1,0 +1,25 @@
+# Pingtally
+
+> Pingtally (also known in Hebrew as "קופה משפחתית") helps households manage
+> expenses, receipts, shopping lists and budgets from inside WhatsApp - no
+> password, no app to install, and no bank connection. Hebrew, RTL. For one
+> person, a couple, a family, or a flatshare.
+
+Pingtally does NOT connect to your bank or read credit-card transactions. You
+choose what to send (an expense, a receipt, a shopping item, or a budget). AI
+helps read receipts and categorize expenses but does not give financial advice.
+Login is via a one-time WhatsApp magic link valid for 15 minutes; the dashboard
+opens only after a verified login. Personal expenses stay personal; children can
+add items without seeing the household budget. Information is not sold.
+
+Pricing (incl. VAT, one price per account, 20-day free trial, no card to start,
+cancel anytime): Personal/Couple (up to 2 users) 19.90/mo or 199/yr; Family
+(up to 4) 29.90/mo or 299/yr; Family 4+ (5 or more) 39.90/mo or 399/yr.
+
+## Public pages
+- [Home](https://pingtally.com/): product overview, how it works, trust, pricing, FAQ
+- [Privacy Policy](https://pingtally.com/privacy)
+- [Terms of Use](https://pingtally.com/terms)
+
+## Contact
+- Email: office@pingtally.com
