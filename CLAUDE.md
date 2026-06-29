@@ -8,6 +8,46 @@
 
 ---
 
+## Public Root Landing (2026-06-29) — READ BEFORE TOUCHING `/`, `/login`, OR LANDING SEO
+
+Branch `feat/public-root-landing-pingtally` (off `main`) makes **`https://pingtally.com/`
+the public, indexable Pingtally marketing page (SSR/SSG)**, replacing the old
+`/` → `/dashboard` redirect. Implements the Claude Design owner-review package
+(`Family budget app.zip → owner-review-exports`, Revision 3). **Frontend-only; no
+backend/DB/billing/WhatsApp changes; no new deps. Not deployed — owner-gated.**
+
+**Architecture (do not relitigate):**
+- `app/page.tsx` (server) and `app/login/page.tsx` (server) both render the shared
+  `components/marketing/MarketingLanding.tsx`. `/login` canonicals to `/` and is
+  excluded from the sitemap. This **preserves the auth-guard contract**:
+  `redirectIfUnauthorized()` → `/login?next=<path>`, and the hero form reads `?next=`
+  from `window.location.search` at submit (keeps the page static-prerendered).
+- Interactive bits are client islands (`LandingNav`, `MagicLinkForm`, `PricingPlans`,
+  `LandingFaq`); everything else is server HTML. The real `api.requestMagicLink` +
+  199-country `PhoneInput` are reused (no auth rewrite).
+- Marketing CSS = `styles/marketing.css`, a `.pt-*` system with design tokens scoped
+  to `.pt-root` (deep-teal ink, AA `--text-2`) — global `tokens.css` untouched. Old
+  `.home-*` block removed from `globals.css`. Imported by `MarketingLanding` (route-scoped).
+- **Brand:** Pingtally wordmark + chat-bubble/tally mark (`PingtallyMark`). The old
+  `קופה משפחתית` brand + `ק` mark are gone; `קופה משפחתית` survives only as schema
+  `alternateName` + a natural SEO sentence.
+
+**SEO:** `app/robots.ts` (allow public, disallow all auth routes), `app/sitemap.ts`
+(`/`, `/privacy`, `/terms`), `app/manifest.ts`, `layout.tsx` metadata (`metadataBase`,
+OG 1200×630 `/og-pingtally.png`, Twitter, `theme-color #0F766E`), JSON-LD
+(Organization + WebSite + SoftwareApplication + FAQPage-12). Build: 30 routes; `/` and
+`/login` are `○ Static`; prerendered HTML carries the full body + all 29 FAQ + schema.
+
+**Copy truth:** governed by `docs/marketing/CLAIMS_ALLOWLIST.md`. The landing also
+**fixes production `/login`** (it rendered the forbidden `נזכיר לפני כל חיוב`, "10 דקות",
+unscoped `אוטומטית`). Hyphens only (noEmDash test). Prices are hardcoded in
+`PricingPlans.tsx` + `LandingJsonLd.tsx` and **must mirror the backend `PLAN_PRICEBOOK`**.
+
+**Follow-up (not this PR):** align the live WhatsApp bot to the "פינג" persona +
+first-name personalization. See `docs/marketing/landing-page-implementation.md`.
+
+---
+
 ## Architecture — Dual Repo Setup
 
 Two independent codebases, independent deployments:
