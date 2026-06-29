@@ -1,4 +1,6 @@
+import type { Metadata, Viewport } from "next";
 import { Heebo, JetBrains_Mono } from "next/font/google";
+import { SITE_URL } from "../lib/siteUrl";
 import "./globals.css";
 
 const heebo = Heebo({
@@ -17,19 +19,41 @@ const jetbrains = JetBrains_Mono({
 
 // viewport-fit=cover is required for env(safe-area-inset-*) to apply on notched
 // devices (the bottom tab bar + "עוד" sheet pad against the home indicator).
-export const viewport = {
+// viewport-fit=cover is required for env(safe-area-inset-*) to apply on notched
+// devices (the bottom tab bar + "עוד" sheet pad against the home indicator).
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover" as const
+  viewportFit: "cover",
+  themeColor: "#0F766E"
 };
 
-export const metadata = {
-  title: "Pingtally | פחות ניהול. יותר משפחה.",
-  description: "Pingtally עוזר למשפחות לנהל הוצאות, קניות, פרויקטים ובקשות מהילדים דרך וואטסאפ, עם דשבורד משפחתי פשוט וברור.",
+const TITLE = "Pingtally | ניהול הוצאות, קבלות וקניות מתוך וואטסאפ";
+const DESCRIPTION =
+  "Pingtally עוזר לעשות סדר בהוצאות, קבלות, קניות ותקציבים מתוך WhatsApp - בלי סיסמה, בלי אפליקציה ובלי חיבור לחשבון בנק. מתאים לאדם אחד, זוג, משפחה או דירת שותפים.";
+
+// Global defaults. metadataBase makes relative OG/twitter image URLs absolute.
+// No title.template (legal pages already supply their own "... | Pingtally").
+// Per-page canonical is set on the marketing routes (/, /login).
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  applicationName: "Pingtally",
   openGraph: {
-    title: "Pingtally | פחות ניהול. יותר משפחה.",
-    description: "Pingtally עוזר למשפחות לנהל הוצאות, קניות, פרויקטים ובקשות מהילדים דרך וואטסאפ, עם דשבורד משפחתי פשוט וברור.",
-    locale: "he_IL"
+    type: "website",
+    siteName: "Pingtally",
+    title: TITLE,
+    description: DESCRIPTION,
+    url: `${SITE_URL}/`,
+    locale: "he_IL",
+    images: [{ url: "/og-pingtally.png", width: 1200, height: 630, alt: "Pingtally" }]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/og-pingtally.png"]
   }
 };
 
