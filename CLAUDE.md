@@ -48,6 +48,48 @@ first-name personalization. See `docs/marketing/landing-page-implementation.md`.
 
 ---
 
+## App Redesign — Settings IA + Shell (2026-06-26) — READ BEFORE TOUCHING SETTINGS/CATEGORIES
+
+Branch `feat/app-redesign-settings-ia` (off `feat/admin-app-auth-migration`, pushed)
+delivers the **spine** of the Claude Design app redesign in
+`design_handoff_pingtally_app`: the Settings information-architecture + app-shell.
+**Frontend-only, real APIs, no fake data, no token migration** (the cream/ink tokens
+in `tokens.css` already equal the handoff's `colors_and_type.css`). Owner-chosen scope:
+"Settings IA + Shell first."
+
+**Load-bearing findings (do not relitigate):**
+- **Categories are 7, NOT 14.** The design mock shows 14 budget categories; the backend
+  cap + spend endpoints validate against **exactly 7** (`packages/validation`
+  `categoryBudgetCategorySchema` zod enum = `Purchase["category"]`:
+  supermarket, pharmacy_health, restaurants_cafes, fuel_transport, kids,
+  entertainment, other). An 8th value → 400. There are 12 *display-only* `REPORT_CATEGORIES`
+  that lossily project onto the 7. The category-budgets screen + dashboard donut are built
+  on the **real 7**. Expanding to 14 = a backend change (enum + cap storage + spend aggregation).
+- **Notifications have no per-toggle save endpoint.** Only `completeOnboarding` writes the
+  full `BaselineAlerts`. `/settings/notifications` reads real alerts and toggles locally with
+  an honest in-UI "saving coming soon" note. Minimal backend dep: `PATCH .../financial-baseline/alerts`.
+- **Nav-merge deferred on purpose.** The 6-item nav (remove `ניתוח`/`/family/pulse`, rename
+  `/insights`→"תובנות וניתוח") is COUPLED to building the merged insights+analysis screen
+  (a core-screen, next pass). Removing the nav item before the merge would orphan the
+  analysis charts. This pass only did sidebar identity-footer + desktop active-state.
+
+**What shipped (13 files):** `AppShell` (footer identity + active-state), `globals.css`
+(redesign block), `useViewer` (+displayName/householdName), new `lib/roleLabels` `lib/format`
+(`nis`) `components/NotificationsEditor`; settings hub (4 groups + banner), `settings/household`
+(read-only full-model card + wizard CTA, manager-only), `settings/members` (3 role cards),
+`settings/category-budgets` (single Save bar + ceiling-vs-income, 7 cats), `settings/notifications`
+(NEW), `settings/billing` (NEW route, re-mounts BillingClient), `receipts` (WhatsApp-only + Hebrew chips).
+
+**Verification:** typecheck + build (27 routes) + 62 unit tests green. **Authenticated**
+Playwright smoke (owner/limited/owner-empty @ 1280+375) 6/6 — no overflow, no 5xx, limited
+privacy gate confirmed (income hidden, only receipts+privacy cards). Repro harness:
+`apps/web/e2e/smoke.spec.ts` + `playwright.smoke.config.ts`; seed via scratchpad `seed.mjs`/`seed2.mjs`
+against a `STORE_PROVIDER=memory WEB_APP_URL=http://localhost:3000` backend on :4000 + web on :3000.
+**Vercel `*.vercel.app` preview can only show public pages** (cross-site cookie, PGS-017B); the
+authenticated review evidence is the local screenshots / a same-site `qa.pingtally.com` deploy.
+
+---
+
 ## Architecture — Dual Repo Setup
 
 Two independent codebases, independent deployments:

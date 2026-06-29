@@ -15,6 +15,7 @@ import { Avatar } from "./Avatar";
 const KIND_ICON: Record<WeeklyInsight["kind"], string> = {
   total_spend:      "💰",
   week_over_week:   "📊",
+  month_over_month: "📈",
   top_category:     "🛒",
   top_member:       "⭐",
   busiest_weekday:  "📅",

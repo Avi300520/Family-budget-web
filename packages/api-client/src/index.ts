@@ -19,6 +19,13 @@ import type {
   AdminReceiptView,
   AdminSupportNoteView,
   AdminWebhookEventView,
+  AdminHouseholdSearchRow,
+  AdminHousehold360,
+  AdminBillingView,
+  AdminIntegrityReport,
+  AdminOverviewCounts,
+  AdminHouseholdSearchBy,
+  AdminGrantKind,
   ProjectBudget,
   Purchase,
   Receipt,
@@ -34,6 +41,9 @@ import type {
   WishlistItem,
   WishlistItemPriority,
   OnboardingBaselineRequest,
+  SpendingPeriod,
+  MonthlyInsightsResponse,
+  BaselineAlerts,
   BillingPlan,
   BillingStatusDto,
   Entitlement,
@@ -197,7 +207,7 @@ export function createApiClient(options: ApiClientOptions) {
       displayName: string;
       householdName: string;
       monthlyBudgetAmount: number;
-      defaultCity: string;
+      defaultCity?: string;
       budgetCycleDay?: number;
       acceptTerms: true;
       acceptPrivacy: true;
@@ -215,10 +225,16 @@ export function createApiClient(options: ApiClientOptions) {
         method: "PATCH",
         body: JSON.stringify(body)
       }),
+    // Merge a PARTIAL BaselineAlerts into financial_baseline.alerts (manager-gated).
+    updateAlerts: (householdId: string, body: Partial<BaselineAlerts>) =>
+      request<{ household: Household }>(`/api/v1/households/${householdId}/financial-baseline/alerts`, {
+        method: "PATCH",
+        body: JSON.stringify(body)
+      }),
     myHouseholdRequests: (householdId: string) =>
       request<{ requests: HouseholdExpenseApproval[] }>(`/api/v1/households/${householdId}/my-requests`),
     budgetCurrent: (householdId: string) => request<BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number }>(`/api/v1/households/${householdId}/budget/current`),
-    shoppingList: (householdId: string) => request<{ list: ShoppingList; items: ShoppingListItem[] }>(`/api/v1/households/${householdId}/shopping-list`),
+    shoppingList: (householdId: string) => request<{ list: ShoppingList; items: ShoppingListItem[]; boughtThisMonth: ShoppingListItem[] }>(`/api/v1/households/${householdId}/shopping-list`),
     addShoppingItem: (householdId: string, rawText: string) =>
       request<{ item: ShoppingListItem }>(`/api/v1/households/${householdId}/shopping-list/items`, {
         method: "POST",
@@ -340,6 +356,56 @@ export function createApiClient(options: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify(reason ? { reason } : {})
       }),
+    // ── Admin V2 — Household 360 ───────────────────────────────────────────
+    // ── Household-360 calls use the /h360/* alias, NOT /api/v1/admin/households/* ──────────
+    // Cloudflare Access 302s the literal /api/v1/admin/households* path at the admin.pingtally.com
+    // edge (proven: bare-path siblings reach Vercel 200, /households/search never reaches Vercel
+    // or the backend). The same-origin BFF maps /h360/* back to the real backend /households/*
+    // path server-side (apps/admin/src/lib/adminAlias.ts). Browser paths carry no "households"/
+    // "search" token, so the edge does not challenge them. Auth/JWT forwarding is unchanged.
+    adminSearchHouseholds: (by: AdminHouseholdSearchBy, q: string, limit = 20) =>
+      request<{ households: AdminHouseholdSearchRow[] }>("/api/v1/admin/h360/find", {
+        method: "POST",
+        body: JSON.stringify({ by, q, limit })
+      }),
+    adminGetHousehold: (householdId: string) =>
+      request<AdminHousehold360>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}`),
+    adminHouseholdBilling: (householdId: string) =>
+      request<AdminBillingView>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/billing`),
+    adminHouseholdAudit: (householdId: string) =>
+      // No query string: the backend defaults limit=50 (identical to the prior default). The 360
+      // loads this eagerly, so keeping it bare-path avoids any query-string edge sensitivity.
+      request<{ audit: AdminAuditEntry[] }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/audit`),
+    adminHouseholdNotes: (householdId: string) =>
+      request<{ notes: AdminSupportNoteView[] }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/notes`),
+    adminIntegrity: () => request<AdminIntegrityReport>("/api/v1/admin/integrity"),
+    adminOverviewCounts: () => request<AdminOverviewCounts>("/api/v1/admin/overview/counts"),
+    /** Audited FULL-phone reveal (reason recorded before the value returns; value never logged). */
+    adminRevealPhone: (householdId: string, memberId: string, reason: string) =>
+      request<{ memberId: string; field: "phone"; value: string }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/reveal`, {
+        method: "POST",
+        body: JSON.stringify({ field: "phone", memberId, reason })
+      }),
+    adminGrant: (householdId: string, kind: AdminGrantKind, reason: string, endsAt?: string) =>
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/grant`, {
+        method: "POST",
+        body: JSON.stringify({ kind, reason, ...(endsAt ? { endsAt } : {}) })
+      }),
+    adminRevokeGrant: (householdId: string, correlationId: string, reason: string) =>
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/grant/${encodeURIComponent(correlationId)}/revoke`, {
+        method: "POST",
+        body: JSON.stringify({ reason })
+      }),
+    adminAddHouseholdNote: (householdId: string, body: string) =>
+      request<{ note: unknown }>("/api/v1/admin/support-notes", {
+        method: "POST",
+        body: JSON.stringify({ householdId, body })
+      }),
+    adminRepairOwner: (householdId: string, memberId: string, reason: string) =>
+      request<{ ok: true; memberId: string; role: string }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/repair-owner`, {
+        method: "POST",
+        body: JSON.stringify({ memberId, reason })
+      }),
     listMembers: (householdId: string) =>
       request<{ members: Array<HouseholdMember & { displayName?: string; phoneE164?: string }> }>(`/api/v1/households/${householdId}/members`),
     inviteMember: (householdId: string, body: { phone: string; displayName?: string; role?: string; personalBudgetMonthly?: number | null }) =>
@@ -375,15 +441,17 @@ export function createApiClient(options: ApiClientOptions) {
     // ── Iteration 5 — Activity & spending ──────────────────────────────────
     householdActivity: (householdId: string, limit = 50) =>
       request<{ entries: ActivityEntry[] }>(`/api/v1/households/${householdId}/activity?limit=${limit}`),
-    spendingByCategory: (householdId: string) =>
-      request<{ entries: SpendingByCategoryEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-category?period=current`),
-    spendingByMember: (householdId: string) =>
-      request<{ entries: SpendingByMemberEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-member?period=current`),
-    spendingByWeekday: (householdId: string) =>
-      request<{ entries: SpendingByWeekdayEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-weekday?period=current`),
+    spendingByCategory: (householdId: string, period: SpendingPeriod = "month") =>
+      request<{ entries: SpendingByCategoryEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-category?period=${period}`),
+    spendingByMember: (householdId: string, period: SpendingPeriod = "month") =>
+      request<{ entries: SpendingByMemberEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-member?period=${period}`),
+    spendingByWeekday: (householdId: string, period: SpendingPeriod = "month") =>
+      request<{ entries: SpendingByWeekdayEntry[]; periodStart: string; periodEnd: string }>(`/api/v1/households/${householdId}/spending/by-weekday?period=${period}`),
     // ── Iteration 7 — Insights / Weekly Wrapped ───────────────────────────
     weeklyInsights: (householdId: string, week: "current" | "last" = "current") =>
       request<WeeklyInsightsResponse>(`/api/v1/households/${householdId}/insights/weekly?week=${week}`),
+    monthlyInsights: (householdId: string, month: "current" | "previous" = "current") =>
+      request<MonthlyInsightsResponse>(`/api/v1/households/${householdId}/insights/monthly?month=${month}`),
     // ── Iteration 10 — Per-category budget caps ───────────────────────────
     categoryBudgets: (householdId: string) =>
       request<{ budgets: CategoryBudget[] }>(`/api/v1/households/${householdId}/category-budgets`),
@@ -398,7 +466,7 @@ export function createApiClient(options: ApiClientOptions) {
     memberActivityHeatmap: (householdId: string, days = 14) =>
       request<MemberActivityHeatmapResponse>(`/api/v1/households/${householdId}/activity/heatmap?days=${days}`),
     // ── Iteration 8 — Wishlist ─────────────────────────────────────────────
-    createWishlistItem: (body: { title: string; note?: string; priceEst?: number; priority?: WishlistItemPriority }) =>
+    createWishlistItem: (body: { title: string; note?: string; priceEst?: number; priority?: WishlistItemPriority; ownerUserId?: string }) =>
       request<{ item: WishlistItem }>("/api/v1/wishlist", {
         method: "POST",
         body: JSON.stringify(body)

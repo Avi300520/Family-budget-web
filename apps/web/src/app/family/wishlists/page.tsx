@@ -15,6 +15,7 @@
  * "נקנה" (fulfilled) or remove it.
  */
 
+import { MessageCircle, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { HouseholdMember, WishlistItem } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
@@ -29,6 +30,13 @@ export default function FamilyWishlistsPage() {
   const [members, setMembers] = useState<MemberLite[]>([]);
   const [isParent, setIsParent] = useState<boolean>();
   const [error, setError] = useState<string>();
+
+  // Manual-add (empty-state): a parent adds a wish on behalf of a child.
+  const [showAdd, setShowAdd] = useState(false);
+  const [addTitle, setAddTitle] = useState("");
+  const [addChildId, setAddChildId] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string>();
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +112,41 @@ export default function FamilyWishlistsPage() {
     }
   }
 
+  // Children eligible to own a wish (the wishlist is a limited_member surface).
+  const children = useMemo(
+    () => members.filter((m) => m.role === "limited_member"),
+    [members],
+  );
+
+  function toggleAdd() {
+    setAddError(undefined);
+    setShowAdd((prev) => {
+      const next = !prev;
+      if (next && !addChildId) setAddChildId(children[0]?.userId ?? "");
+      return next;
+    });
+  }
+
+  async function addManual() {
+    const trimmed = addTitle.trim();
+    const childId = addChildId || children[0]?.userId;
+    if (!trimmed || !childId || adding) return;
+    setAdding(true);
+    setAddError(undefined);
+    try {
+      // ownerUserId targets the child; the created item is owned by them and
+      // surfaces in their group on the next render.
+      const res = await api.createWishlistItem({ title: trimmed, ownerUserId: childId });
+      setItems((prev) => [...(prev ?? []), res.item]);
+      setAddTitle("");
+      setShowAdd(false);
+    } catch {
+      setAddError("לא הצלחנו להוסיף את המשאלה. נסו שוב.");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   return (
     <AppShell>
       <div style={{ display: "grid", gap: "var(--sp-5)", maxWidth: 720 }}>
@@ -130,20 +173,138 @@ export default function FamilyWishlistsPage() {
         ) : groups.length === 0 ? (
           <section
             className="card"
-            style={{
-              padding: "var(--sp-10) var(--sp-4)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "var(--sp-3)",
-              textAlign: "center",
-            }}
+            style={{ padding: "var(--sp-10) var(--sp-6)", textAlign: "center" }}
           >
-            <span style={{ fontSize: 36 }} aria-hidden="true">🎈</span>
-            <span style={{ fontWeight: 500, color: "var(--text-1)" }}>אין עדיין משאלות</span>
-            <span className="muted" style={{ fontSize: 13 }}>
-              כשהילדים יוסיפו משאלות, הן יופיעו כאן.
-            </span>
+            <div style={{ fontSize: 46, marginBottom: "var(--sp-3)" }} aria-hidden="true">🎈</div>
+            <div style={{ fontWeight: 700, fontSize: 19, marginBottom: "var(--sp-2)" }}>אין עדיין משאלות</div>
+            <p
+              className="muted"
+              style={{ margin: "0 auto", maxWidth: 360, fontSize: 14, lineHeight: 1.6 }}
+            >
+              {'כשהילדים ישלחו משאלה בוואטסאפ - למשל "אני רוצה אוזניות 🎧" - היא תופיע כאן, ותוכלו לאשר ולקנות.'}
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "var(--sp-3)",
+                justifyContent: "center",
+                flexWrap: "wrap",
+                marginTop: "var(--sp-5)",
+              }}
+            >
+              <a
+                className="btn primary"
+                href="/settings/members"
+                style={{ textDecoration: "none" }}
+              >
+                <MessageCircle size={18} aria-hidden />
+                הזמינו את הילדים
+              </a>
+              <button
+                type="button"
+                className="btn"
+                onClick={toggleAdd}
+                aria-expanded={showAdd}
+              >
+                <Plus size={17} aria-hidden />
+                הוספת משאלה ידנית
+              </button>
+            </div>
+
+            {showAdd && (
+              <div
+                style={{
+                  marginTop: "var(--sp-4)",
+                  display: "grid",
+                  gap: "var(--sp-3)",
+                  textAlign: "start",
+                  maxWidth: 420,
+                  marginInline: "auto",
+                  width: "100%",
+                }}
+              >
+                {children.length === 0 ? (
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    כדי להוסיף משאלה ידנית צריך קודם להוסיף ילד בהגדרות החברים.
+                  </div>
+                ) : (
+                  <>
+                    <label style={{ display: "grid", gap: "var(--sp-1)" }}>
+                      <span className="label">בשביל מי</span>
+                      <select
+                        className="select"
+                        value={addChildId}
+                        onChange={(e) => setAddChildId(e.target.value)}
+                        aria-label="בחירת ילד"
+                      >
+                        {children.map((c) => (
+                          <option key={c.userId} value={c.userId}>
+                            {c.displayName ?? "חבר משפחה"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: "grid", gap: "var(--sp-1)" }}>
+                      <span className="label">המשאלה</span>
+                      <input
+                        className="input"
+                        value={addTitle}
+                        maxLength={120}
+                        placeholder="למשל: אוזניות 🎧"
+                        onChange={(e) => setAddTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addManual();
+                        }}
+                        aria-label="כותרת המשאלה"
+                      />
+                    </label>
+                    {addError && (
+                      <div className="status error" style={{ fontSize: 13 }}>
+                        {addError}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: "var(--sp-2)", justifyContent: "flex-end" }}>
+                      <button type="button" className="btn sm ghost" onClick={() => setShowAdd(false)}>
+                        ביטול
+                      </button>
+                      <button
+                        type="button"
+                        className="btn sm primary"
+                        onClick={addManual}
+                        disabled={adding || addTitle.trim().length === 0}
+                      >
+                        {adding ? "מוסיף…" : "הוספה"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div
+              style={{
+                marginTop: "var(--sp-7)",
+                paddingTop: "var(--sp-5)",
+                borderTop: "1px solid var(--cream-3)",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: "var(--sp-4)",
+                textAlign: "start",
+              }}
+            >
+              {[
+                ["📩", "הילד שולח", "מבקש בוואטסאפ מה שהוא רוצה"],
+                ["✅", "אתם מאשרים", "רואים את הבקשה ומחליטים"],
+                ["🎁", "קונים", "מסמנים כנקנה כשהגיע"],
+              ].map(([emoji, title, sub]) => (
+                <div key={title}>
+                  <div style={{ fontSize: 22, marginBottom: "var(--sp-1)" }} aria-hidden="true">{emoji}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{title}</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.4 }}>{sub}</div>
+                </div>
+              ))}
+            </div>
           </section>
         ) : (
           <div style={{ display: "grid", gap: "var(--sp-4)" }}>

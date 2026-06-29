@@ -1,20 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Activity, BarChart3, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Settings, Sparkles } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { BarChart3, ChevronRight, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Menu, Settings, Sparkles } from "lucide-react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { api, clearClientSession } from "../lib/api";
 import { useViewer } from "../lib/useViewer";
 import { filterByRole } from "../lib/settingsView";
-import { MobileNav } from "./MobileNav";
+import { roleLabelFor } from "../lib/roleLabels";
+import { Avatar } from "./Avatar";
+
+/** Active when the current path equals the link or is nested under it (prefix match
+ *  on a path boundary), so e.g. /settings/members highlights "הגדרות". */
+function isActivePath(pathname: string | null, href: string): boolean {
+  if (!pathname) return false;
+  const base = href.split("?")[0]!;
+  return pathname === base || pathname.startsWith(base + "/");
+}
 
 interface NavLink {
   href: string;
   label: string;
-  /** Optional shorter label for the compact mobile bottom tab (falls back to label). */
-  short?: string;
   icon: typeof LayoutDashboard;
   roles: HouseholdRole[] | "all";
 }
@@ -24,38 +31,57 @@ interface NavLink {
 // /settings (2026-06-17); the dev-inbox is internal tooling, reached by URL in dev.
 const ALL_LINKS: NavLink[] = [
   { href: "/dashboard",        label: "דשבורד",        icon: LayoutDashboard, roles: "all" },
-  { href: "/shopping-list",    label: "רשימת קניות",   short: "קניות", icon: ListChecks,      roles: "all" },
-  // limited_member surface — their pending household-expense requests. Single nav
-  // source: shows in the desktop sidebar AND the mobile bottom bar for limited_member.
-  { href: "/my-requests",      label: "הבקשות שלי",    short: "בקשות", icon: ClipboardList,   roles: ["limited_member"] },
+  { href: "/shopping-list",    label: "רשימת קניות",   icon: ListChecks,      roles: "all" },
+  // limited_member surface — their pending household-expense requests.
+  { href: "/my-requests",      label: "הבקשות שלי",    icon: ClipboardList,   roles: ["limited_member"] },
   { href: "/budget",           label: "תקציב",          icon: BarChart3,       roles: ["owner", "admin", "adult_member"] },
-  // Iteration 7 — Insights / Weekly Wrapped. Privacy: same role scope as
+  // Merged Insights + Analysis (redesign §I): ONE "תובנות וניתוח" destination
+  // (/insights) with סיכום/ניתוח tabs + a period selector. The old /family/pulse
+  // now redirects here, so the nav is the canonical 6 items. Same role scope as
   // /budget (limited_member hidden client-side; server returns 403).
-  { href: "/insights",         label: "תובנות",         icon: Sparkles,        roles: ["owner", "admin", "adult_member"] },
-  // Iteration 9 — DashboardB / Family Pulse. Owner/admin/adult_member:
-  // same role scope as /budget and /insights (limited_member hidden client-side;
-  // server returns 403 on all three /family/pulse endpoints).
-  // Renamed פעילות→ניתוח (2026-06-17): this destination is the analytics/breakdown page
-  // (member & weekday spend + activity heatmap), distinct from the dashboard's
-  // "הפעילות שלנו" event feed — the shared "פעילות" label was a confusing collision.
-  { href: "/family/pulse",    label: "ניתוח",            icon: Activity,        roles: ["owner", "admin", "adult_member"] },
-  // Iteration 8 — children's wishlists (parent surface). Owner/admin ONLY:
-  // adult_member is NOT a parent for the wishlist, and the server returns 403
-  // for both adult_member and limited_member on /households/:id/wishlist.
+  { href: "/insights",         label: "תובנות וניתוח",  icon: Sparkles,        roles: ["owner", "admin", "adult_member"] },
+  // Iteration 8 — children's wishlists (parent surface). Owner/admin ONLY.
   { href: "/family/wishlists", label: "משאלות הילדים",   icon: Gift,            roles: ["owner", "admin"] },
   { href: "/settings",         label: "הגדרות",         icon: Settings,        roles: "all" }
 ];
+
+/** Gradient brand mark — coral→mustard "P" tile (design set-shell.jsx BrandMark). */
+function BrandMark() {
+  return <span className="brand-mark" aria-hidden>P</span>;
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   // Resolve the role with explicit loading/error states. Role-gated links appear
   // once the viewer is `ready`; while loading or on a transient /me failure only the
   // always-available ("all") links show — but the settings index surfaces a real
   // loader/retry rather than silently degrading (see lib/useViewer + settingsView).
-  const { role } = useViewer();
+  const { role, displayName, householdName, hasHousehold } = useViewer();
   const links = filterByRole(ALL_LINKS, role);
   const router = useRouter();
+  const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Close the mobile drawer whenever the route changes (a nav tap navigates).
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // While the drawer is open: lock body scroll and close on Escape.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [drawerOpen]);
 
   // Real logout: the backend revokes the session + clears the HttpOnly cookie (the FE
   // cannot clear it). Only on a confirmed success do we drop the local csrf and route to
@@ -74,35 +100,115 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // The sidebar body is rendered in BOTH the fixed desktop rail and the mobile
+  // drawer (one source of truth, like the design's SidebarNav). Its parent
+  // (.side-nav / .app-drawer) is the flex column that pins the footer to bottom.
+  const sidebar = (
+    <>
+      <div className="brand">
+        <BrandMark />
+        <div className="brand-text">
+          <div className="brand-name">קופה משפחתית</div>
+          <div className="brand-sub">Pingtally</div>
+        </div>
+      </div>
+      <nav className="nav-links">
+        {links.map((link) => {
+          const Icon = link.icon;
+          return (
+            <Link
+              className="nav-link"
+              href={link.href}
+              key={link.href}
+              aria-current={isActivePath(pathname, link.href) ? "page" : undefined}
+            >
+              <Icon size={18} aria-hidden />
+              <span>{link.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+      {/* Account / logout — pinned to the sidebar footer. The identity block
+          (name + role · household) is the SINGLE home for who-is-signed-in. */}
+      <div className="side-nav-footer">
+        {hasHousehold && displayName && (
+          <div className="side-id">
+            <Avatar memberId={displayName} displayName={displayName} size="sm" />
+            <div className="side-id__text">
+              <div className="side-id__name">{displayName}</div>
+              <div className="side-id__meta">
+                {[roleLabelFor(role), householdName].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+          </div>
+        )}
+        <button type="button" className="nav-link nav-logout" onClick={handleLogout} disabled={loggingOut}>
+          <LogOut size={18} aria-hidden />
+          <span>{loggingOut ? "מתנתק…" : "התנתקות"}</span>
+        </button>
+        {logoutError && <div className="nav-logout-error">ההתנתקות נכשלה, נסו שוב.</div>}
+      </div>
+    </>
+  );
+
   return (
     <div className="app-shell">
-      <aside className="side-nav">
-        <div className="brand">קופה משפחתית</div>
-        <nav className="nav-links">
-          {links.map((link) => {
-            const Icon = link.icon;
-            return (
-              <Link className="nav-link" href={link.href} key={link.href}>
-                <Icon size={18} aria-hidden />
-                <span>{link.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-        {/* Account / logout — pinned to the sidebar footer (desktop). */}
-        <div className="side-nav-footer">
-          <button type="button" className="nav-link nav-logout" onClick={handleLogout} disabled={loggingOut}>
-            <LogOut size={18} aria-hidden />
-            <span>{loggingOut ? "מתנתק…" : "התנתקות"}</span>
-          </button>
-          {logoutError && <div className="nav-logout-error">ההתנתקות נכשלה, נסו שוב.</div>}
+      {/* Desktop fixed rail (hidden ≤900px). */}
+      <aside className="side-nav">{sidebar}</aside>
+
+      {/* Mobile sticky top bar (≤900px): hamburger + centered brand. */}
+      <header className="app-topbar">
+        <button
+          type="button"
+          className="topbar-btn"
+          aria-label="פתיחת תפריט"
+          aria-expanded={drawerOpen}
+          onClick={() => setDrawerOpen(true)}
+        >
+          <Menu size={22} aria-hidden />
+        </button>
+        <div className="topbar-brand">
+          <BrandMark />
+          <span>קופה משפחתית</span>
         </div>
+        <span className="topbar-spacer" aria-hidden />
+      </header>
+
+      {/* Mobile off-canvas drawer (slides from the RTL right) + scrim. */}
+      <div
+        className={"app-drawer-scrim" + (drawerOpen ? " open" : "")}
+        onClick={() => setDrawerOpen(false)}
+        aria-hidden
+      />
+      <aside className={"app-drawer" + (drawerOpen ? " open" : "")} aria-label="תפריט" aria-hidden={!drawerOpen}>
+        {sidebar}
       </aside>
-      <main className="main">{children}</main>
-      {/* Mobile (≤820px): the sidebar is hidden via CSS; navigation is the bottom tab
-          bar + "עוד" sheet (account/logout live under חשבון), driven off the SAME
-          role-filtered `links`. */}
-      <MobileNav links={links} onLogout={handleLogout} logoutError={logoutError} loggingOut={loggingOut} />
+
+      <main className="main">
+        {/* Back-to-hub affordance on every Settings sub-screen (and the two
+            settings-only sub-pages reached from the hub: /receipts, /export).
+            Never on the /settings hub itself. One place → covers all states. */}
+        {!!pathname && (pathname.startsWith("/settings/") || pathname === "/receipts" || pathname === "/export") && (
+          <Link
+            href="/settings"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              minHeight: 44,
+              padding: "6px 4px",
+              marginBottom: "var(--sp-2)",
+              color: "var(--text-2)",
+              fontWeight: 600,
+              fontSize: 14
+            }}
+          >
+            <ChevronRight size={18} aria-hidden />
+            <span>חזרה להגדרות</span>
+          </Link>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

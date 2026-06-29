@@ -60,7 +60,7 @@ export default function BillingClient() {
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string>();
-  // A restricted load (backend 403) is distinct from a transient error — show the
+  // A restricted load (backend 403) is distinct from a transient error - show the
   // owner-managed notice, never a retry loop.
   const [restricted, setRestricted] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState<PaidPlanCode | null>(null);
@@ -115,12 +115,12 @@ export default function BillingClient() {
     try {
       const session = await api.checkoutSession(householdId, planCode);
       // Keep existing localhost/mock handling: a mock provider returns a non-real URL
-      // we must not navigate to — just acknowledge it on-page.
+      // we must not navigate to - just acknowledge it on-page.
       if (session.checkoutUrl && !session.checkoutUrl.includes("localhost") && !session.checkoutUrl.includes("mock")) {
         window.location.href = session.checkoutUrl;
         return;
       }
-      setActionError("פתיחת התשלום בסביבת בדיקה — בפרודקשן יופנו לעמוד התשלום.");
+      setActionError("פתיחת התשלום בסביבת בדיקה - בפרודקשן יופנו לעמוד התשלום.");
     } catch (err) {
       // Surface backend codes verbatim (upgrade_required / forbidden) as Hebrew copy.
       if (err instanceof ApiClientError && err.code === "billing.upgrade_required") {
@@ -180,6 +180,19 @@ export default function BillingClient() {
     .filter((p) => p.interval === interval)
     .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
   const isTrialing = billing?.effectiveStatus === "trialing";
+  // Yearly savings %, derived from the pricebook (yearly is ~ monthly*12*0.83, about 17%).
+  // Computed, never hardcoded: the first tier carrying both intervals drives the label.
+  const yearlySavingsPct = (() => {
+    for (const tier of TIER_ORDER) {
+      const m = plans.find((p) => p.interval === "monthly" && p.tier === tier);
+      const y = plans.find((p) => p.interval === "yearly" && p.tier === tier);
+      if (m && y && m.priceAgorot > 0) {
+        const pct = Math.round((1 - y.priceAgorot / (m.priceAgorot * 12)) * 100);
+        if (pct > 0) return pct;
+      }
+    }
+    return null;
+  })();
 
   return (
     <AppShell>
@@ -197,7 +210,7 @@ export default function BillingClient() {
         </div>
       )}
 
-      {/* Upgrade-required banner — driven only by backend billing.upgradeRequired */}
+      {/* Upgrade-required banner - driven only by backend billing.upgradeRequired */}
       {billing?.upgradeRequired && (
         <div className="status error" role="alert" style={{ display: "block", marginBottom: 16 }}>
           <ShieldAlert size={16} aria-hidden /> מספר הילדים בבית ({billing.childCount}) מצריך מסלול{" "}
@@ -209,9 +222,9 @@ export default function BillingClient() {
       <section className="panel" style={{ marginBottom: 20 }}>
         <h2>מסלול נוכחי</h2>
         <div className="metric">
-          {billing?.tier ? TIER_LABELS[billing.tier] : billing?.effectiveStatus === "trialing" ? "ניסיון" : "—"}
+          {billing?.tier ? TIER_LABELS[billing.tier] : billing?.effectiveStatus === "trialing" ? "ניסיון" : "-"}
         </div>
-        <div className="muted">{billing ? STATUS_LABELS[billing.effectiveStatus] : "—"}</div>
+        <div className="muted">{billing ? STATUS_LABELS[billing.effectiveStatus] : "-"}</div>
         {isTrialing && typeof billing?.trialDaysRemaining === "number" && (
           <p className="muted" style={{ marginTop: 8 }}>
             נותרו {billing.trialDaysRemaining} ימים מתוך {trialDays} בתקופת הניסיון.
@@ -240,24 +253,50 @@ export default function BillingClient() {
           aria-pressed={interval === "yearly"}
           onClick={() => setInterval("yearly")}
         >
-          שנתי
+          {yearlySavingsPct ? `שנתי · חיסכון ${yearlySavingsPct}%` : "שנתי"}
         </button>
       </div>
 
-      {/* Plan catalog */}
-      <section className="grid two">
+      {/* Plan catalog - 3-up via the responsive .grid.three primitive (collapses to 1 col on mobile) */}
+      <section className="grid three">
         {visiblePlans.map((plan) => {
           const isCurrent = billing?.planCode === plan.code;
+          // The tier the household must be on (from the backend) is the recommended card.
+          const isRecommended = billing?.requiredTier === plan.tier;
+          const isYearly = plan.interval === "yearly";
+          // Yearly cards show a monthly-equivalent headline (₪round(yearly/12)) + a yearly-billed sub-line.
+          const perMonth = isYearly ? Math.round(plan.priceAgorot / 100 / 12) : plan.priceAgorot / 100;
           return (
-            <div className="panel" key={plan.code}>
+            <div
+              className="panel"
+              key={plan.code}
+              style={
+                isRecommended
+                  ? { position: "relative", border: "2px solid var(--teal)", boxShadow: "var(--elev-2)" }
+                  : { position: "relative" }
+              }
+            >
+              {isRecommended && (
+                <span
+                  className="chip teal"
+                  style={{ position: "absolute", insetInlineStart: 16, top: -12, fontWeight: 700 }}
+                >
+                  מומלץ למשפחה שלכם
+                </span>
+              )}
               <h2>{TIER_LABELS[plan.tier]}</h2>
               <div className="metric">
-                {shekels(plan.priceAgorot)}
+                ₪{perMonth}
                 <span className="muted" style={{ fontSize: "0.6em", fontWeight: 400 }}>
                   {" "}
-                  / {plan.interval === "monthly" ? "חודש" : "שנה"}
+                  / חודש
                 </span>
               </div>
+              {isYearly && (
+                <p className="muted" style={{ color: "var(--pos)", marginTop: 0 }}>
+                  חיוב שנתי · {shekels(plan.priceAgorot)}
+                </p>
+              )}
               <p className="muted">
                 {plan.childrenMax === null
                   ? "ללא הגבלת מספר ילדים."
@@ -273,7 +312,7 @@ export default function BillingClient() {
                   onClick={() => choosePlan(plan.code)}
                 >
                   <CreditCard size={16} aria-hidden />
-                  {isCurrent ? "המסלול הנוכחי" : checkoutBusy === plan.code ? "פותח תשלום..." : "בחירת המסלול"}
+                  {isCurrent ? "המסלול שלכם" : checkoutBusy === plan.code ? "פותח תשלום..." : "בחירת המסלול"}
                 </button>
               </div>
             </div>

@@ -19,7 +19,7 @@ function formatPurchaseTime(p: Purchase): string {
     const created = new Date(p.createdAt);
     const timeStr = created.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false });
     if (purchaseIsToday) return timeStr;
-    // Not today — show short date too: "24.5  13:52"
+    // Not today - show short date too: "24.5  13:52"
     const [, month, day] = p.purchaseDate.split("-").map(Number);
     return `${day}.${month}  ${timeStr}`;
   } catch {
@@ -89,7 +89,7 @@ export default function SpendingBreakdownPage() {
         חזרה לדשבורד
       </Link>
       <h1 className="page-title">הוצאות החודש</h1>
-      <div className="muted" style={{ marginBottom: 16, fontSize: 13 }}>{fmtDate(periodStart)} – {fmtDate(periodEnd)}</div>
+      <div className="muted" style={{ marginBottom: 16, fontSize: 13 }}>{fmtDate(periodStart)} - {fmtDate(periodEnd)}</div>
 
       <section className="panel" style={{ marginBottom: 16 }}>
         <div className="row between">
