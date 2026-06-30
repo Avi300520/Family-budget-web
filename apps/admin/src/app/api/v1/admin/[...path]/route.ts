@@ -89,6 +89,17 @@ async function proxy(req: NextRequest, segments: string[]): Promise<Response> {
     authorization: `Bearer ${serviceToken}`,
     "x-admin-email": email
   };
+  // Cloudflare Access service-token (machine-to-machine) credentials, server-only. When the edge
+  // gate on api.pingtally.com/api/v1/admin/* is enabled, these let the BFF pass it while the edge
+  // rejects any request lacking them BEFORE it reaches Node. Absent (today) => headers omitted =>
+  // behaviour unchanged, so this is safe to deploy before the gate exists, and the gate can be
+  // enabled later by setting these two Vercel env vars with no code redeploy. Never sent to the browser.
+  const cfClientId = process.env.CF_ACCESS_CLIENT_ID;
+  const cfClientSecret = process.env.CF_ACCESS_CLIENT_SECRET;
+  if (cfClientId && cfClientSecret) {
+    headers["cf-access-client-id"] = cfClientId;
+    headers["cf-access-client-secret"] = cfClientSecret;
+  }
   let body: string | undefined;
   if (method === "POST") {
     body = await req.text();
