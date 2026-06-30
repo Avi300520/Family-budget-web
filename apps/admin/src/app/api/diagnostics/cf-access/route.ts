@@ -1,9 +1,11 @@
 /**
- * TEMPORARY Phase-C diagnostic (2026-06-30). Admin-session-gated by middleware (matcher guards all
- * /api/* except api/auth). Reports whether the Cloudflare Access service-token env vars are present
- * and well-formed in THIS deployment, and runs a server-side probe that hits the backend admin path
- * exactly as the BFF does — to distinguish "credentials reach the backend" from "Cloudflare edge
- * block". Returns ONLY booleans / lengths / statuses — NEVER any secret value. Remove after Phase C.
+ * TEMPORARY Phase-C diagnostic (2026-06-30). Routable path /api/diagnostics/cf-access (NOT under an
+ * underscore folder, which Next.js treats as private/non-routable). Admin-session-gated by middleware
+ * (matcher guards all /api/* except api/auth). Reports whether the Cloudflare Access service-token env
+ * vars are present and well-formed in THIS deployment, and runs a server-side probe that hits the
+ * backend admin path exactly as the BFF does — to distinguish "credentials reach the backend" from
+ * "Cloudflare edge block". Returns ONLY booleans / lengths / statuses — NEVER any secret value.
+ * Remove after Phase C.
  */
 import { NextResponse } from "next/server";
 
@@ -32,8 +34,8 @@ export async function GET() {
   // Server-side probe: hit the backend admin path the SAME way the BFF does (Bearer service token +
   // CF-Access service-token headers). A deliberately NON-allow-listed X-Admin-Email is used, so a
   // successful CF pass returns a backend 401/403 JSON error (NOT 200) and fetches no real admin data.
-  //   reachedBackend=true  -> the request passed the Cloudflare edge and Node answered (credentials OK
-  //                           for the gate; with the gate OFF this just proves the BFF->backend path)
+  //   reachedBackend=true  -> request passed the Cloudflare edge and Node answered (credentials OK for
+  //                           the gate; with the gate OFF this just proves the BFF->backend path)
   //   cfAccessBlocked=true  -> Cloudflare Access blocked it at the edge (missing/invalid CF credentials
   //                           or the service token is not in the Access policy)
   let probe: Record<string, unknown> = { ran: false };
@@ -60,7 +62,7 @@ export async function GET() {
       contentTypeIsJson: ct.includes("application/json"),
       reachedBackend,
       cfAccessBlocked
-      // body itself is NOT returned (it is a backend error JSON or a CF block page — neither is logged here)
+      // response body is NOT returned (it is a backend error JSON or a CF block page — neither is logged)
     };
   } catch {
     probe = { ran: true, error: "probe-fetch-failed" };
