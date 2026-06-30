@@ -90,6 +90,28 @@ authenticated review evidence is the local screenshots / a same-site `qa.pingtal
 
 ---
 
+## HYP Commercial Billing (2026-07-01) — IMPLEMENTED on a branch, NOT deployed, DORMANT
+
+Branch `feat/billing-hyp-2026-06-30` (both repos) implements the approved HYP Pay billing
+extend-and-swap. **FE-relevant scope is small + dormant** (billing stays behind `BILLING_ENABLED`,
+checkout 403 `billing.disabled`). Backend record:
+`Shopping assistant/docs/billing/HYP_BILLING_IMPLEMENTATION.md`.
+
+- **shared-types synced byte-identical** from backend: `BillingPlan` gains `memberMax`(2/4/12) +
+  `receiptsPerMonth`(40/70/null); `BillingStatusDto` gains `memberCount/memberMax/memberLimitReached`
+  + `receiptsPerMonth/receiptsUsed/receiptsResetAt`; `"hyp"` in the provider union;
+  `receiptScanBlocked`/`memberCapForTier`/`requiredTierForMembers`/`tierCoversMemberCount` helpers.
+- **`BillingClient.tsx`** now shows monthly receipt usage + member usage from the DTO (graceful
+  "ללא הגבלה" during trial / family_large). `PricingPlans.tsx` + `LandingJsonLd.tsx` already mirror
+  the pricebook (prices + 40/70/unlimited + the public "4+" framing) — unchanged.
+- **api-client intentionally NOT touched** — the FE-only billing methods are the documented sync
+  footgun; the new DTO fields flow through shared-types, so no api-client change was needed.
+- **Internal plan codes `couple/family_small/family_large` are UNCHANGED** (display labels only).
+- Gates: web typecheck + build green (30 routes). admin untouched. **Not merged** (merging FE main
+  auto-promotes Vercel prod + triggers the admin build — owner release gate).
+
+---
+
 ## Architecture — Dual Repo Setup
 
 Two independent codebases, independent deployments:
