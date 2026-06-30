@@ -235,6 +235,33 @@ export default function BillingClient() {
             המסלול הנדרש למשפחה שלכם: <strong>{TIER_LABELS[billing.requiredTier]}</strong>.
           </p>
         )}
+        {/* Usage: receipts (monthly window) + members vs the plan cap. During the trial both
+            are unlimited (receiptsPerMonth / memberMax are null) → shown as "ללא הגבלה". */}
+        {billing && (
+          <div style={{ marginTop: 12, display: "grid", gap: 4 }}>
+            <p className="muted">
+              צילומי קבלות החודש:{" "}
+              {billing.receiptsPerMonth === null ? (
+                <strong>ללא הגבלה</strong>
+              ) : (
+                <strong>
+                  {billing.receiptsUsed} מתוך {billing.receiptsPerMonth}
+                  {billing.receiptsResetAt
+                    ? ` · מתאפס ב-${new Date(billing.receiptsResetAt).toLocaleDateString("he-IL")}`
+                    : ""}
+                </strong>
+              )}
+            </p>
+            <p className="muted">
+              בני בית:{" "}
+              <strong>
+                {billing.memberCount}
+                {billing.memberMax === null ? "" : ` מתוך ${billing.memberMax}`}
+              </strong>
+              {billing.memberLimitReached && <span className="muted"> · הגעתם למכסת בני הבית במסלול</span>}
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Monthly / yearly toggle */}

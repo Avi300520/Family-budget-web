@@ -251,7 +251,7 @@ export interface ParsedReceipt {
 export interface Subscription {
   id: string;
   householdId: string;
-  provider: "mock" | "grow" | "payplus" | "tranzila" | "meshulam" | "stripe_future" | "manual";
+  provider: "mock" | "grow" | "payplus" | "tranzila" | "meshulam" | "hyp" | "stripe_future" | "manual";
   planCode: PlanCode;
   status: SubscriptionStatus;
   trialStartedAt?: string;

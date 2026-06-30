@@ -27,8 +27,15 @@ export interface BillingPlan {
   /** Price in agorot (integer minor units). NEVER store/compare money as float. */
   priceAgorot: number;
   currency: "ILS";
-  /** Max children (limited_member) this tier covers; null = unlimited. */
+  /** Max children (limited_member) this tier covers; null = unlimited.
+   *  Kept for the "suggested tier" UX; enforcement now switches to memberMax. */
   childrenMax: number | null;
+  /** Owner-approved cap on TOTAL active household members (owner+adult+limited).
+   *  couple 2 / family_small 4 / family_large 12 (public "4+"). Never null. */
+  memberMax: number;
+  /** Receipt scans allowed per MONTHLY usage window; null = unlimited (no product
+   *  cap — family_large). Usage resets monthly even for annual_prepaid plans. */
+  receiptsPerMonth: number | null;
 }
 
 /** 20-day free trial (was 14; product decision 2026-06-17). This constant is the
@@ -36,12 +43,12 @@ export interface BillingPlan {
 export const TRIAL_DAYS = 20;
 
 export const PLAN_PRICEBOOK: Readonly<Record<PaidPlanCode, BillingPlan>> = {
-  couple_monthly:       { code: "couple_monthly",       tier: "couple",       interval: "monthly", priceAgorot: 1990,  currency: "ILS", childrenMax: 0 },
-  couple_yearly:        { code: "couple_yearly",        tier: "couple",       interval: "yearly",  priceAgorot: 19900, currency: "ILS", childrenMax: 0 },
-  family_small_monthly: { code: "family_small_monthly", tier: "family_small", interval: "monthly", priceAgorot: 2990,  currency: "ILS", childrenMax: 3 },
-  family_small_yearly:  { code: "family_small_yearly",  tier: "family_small", interval: "yearly",  priceAgorot: 29900, currency: "ILS", childrenMax: 3 },
-  family_large_monthly: { code: "family_large_monthly", tier: "family_large", interval: "monthly", priceAgorot: 3990,  currency: "ILS", childrenMax: null },
-  family_large_yearly:  { code: "family_large_yearly",  tier: "family_large", interval: "yearly",  priceAgorot: 39900, currency: "ILS", childrenMax: null }
+  couple_monthly:       { code: "couple_monthly",       tier: "couple",       interval: "monthly", priceAgorot: 1990,  currency: "ILS", childrenMax: 0,    memberMax: 2,  receiptsPerMonth: 40 },
+  couple_yearly:        { code: "couple_yearly",        tier: "couple",       interval: "yearly",  priceAgorot: 19900, currency: "ILS", childrenMax: 0,    memberMax: 2,  receiptsPerMonth: 40 },
+  family_small_monthly: { code: "family_small_monthly", tier: "family_small", interval: "monthly", priceAgorot: 2990,  currency: "ILS", childrenMax: 3,    memberMax: 4,  receiptsPerMonth: 70 },
+  family_small_yearly:  { code: "family_small_yearly",  tier: "family_small", interval: "yearly",  priceAgorot: 29900, currency: "ILS", childrenMax: 3,    memberMax: 4,  receiptsPerMonth: 70 },
+  family_large_monthly: { code: "family_large_monthly", tier: "family_large", interval: "monthly", priceAgorot: 3990,  currency: "ILS", childrenMax: null, memberMax: 12, receiptsPerMonth: null },
+  family_large_yearly:  { code: "family_large_yearly",  tier: "family_large", interval: "yearly",  priceAgorot: 39900, currency: "ILS", childrenMax: null, memberMax: 12, receiptsPerMonth: null }
 };
 
 export const BILLING_PLANS: readonly BillingPlan[] = Object.values(PLAN_PRICEBOOK);
@@ -66,6 +73,40 @@ export function requiredTierForChildren(childCount: number): BillingTier {
 /** Does a purchased plan tier cover this child count? */
 export function tierCoversChildren(tier: BillingTier, childCount: number): boolean {
   return tierRank(tier) >= tierRank(requiredTierForChildren(childCount));
+}
+
+// ── Total active-member cap (owner-approved: couple 2 / family_small 4 / family_large 12) ──
+// The pricebook (`memberMax`) is the SINGLE source of truth so the cap can never drift
+// from the DB `plans.member_max` seed. `childrenMax` above stays for the suggested-tier UX.
+
+/** Total active-member cap for a tier, read from the pricebook (same for monthly+yearly). */
+export function memberCapForTier(tier: BillingTier): number {
+  const plan = BILLING_PLANS.find((p) => p.tier === tier);
+  return plan ? plan.memberMax : 0;
+}
+
+/** Suggested tier from total active member count. Pure, server-authoritative. */
+export function requiredTierForMembers(memberCount: number): BillingTier {
+  if (memberCount <= memberCapForTier("couple")) return "couple";
+  if (memberCount <= memberCapForTier("family_small")) return "family_small";
+  return "family_large";
+}
+
+/** Does a purchased plan tier cover this TOTAL active-member count? */
+export function tierCoversMemberCount(tier: BillingTier, memberCount: number): boolean {
+  return memberCount <= memberCapForTier(tier);
+}
+
+// ── Billing period vs usage period (two independent clocks; see plan §5) ──
+// `interval` already encodes the billing period: "monthly" = +1mo access,
+// "yearly" = annual_prepaid (+12mo access, ONE-TIME, no auto-renew in phase 1).
+// The usage period is ALWAYS monthly — an annual subscriber still resets their
+// 40/70 receipts every month (NOT 12x up front) — so it is a constant, not a field.
+export const USAGE_PERIOD_MONTHS = 1;
+
+/** Months of paid access one purchase buys: monthly = 1, yearly (annual prepaid) = 12. */
+export function billingPeriodMonths(interval: BillingInterval): number {
+  return interval === "yearly" ? 12 : 1;
 }
 
 // ── Pure billing-state math (testable; all take `nowMs` — never call Date.now here) ──
@@ -158,6 +199,25 @@ export function resolveCapabilities(
   return { serviceAllowed, reason, effectiveStatus };
 }
 
+/** Pure receipt-scan gate decision shared by MemoryStore + PostgresStore so both
+ *  enforce IDENTICALLY. Rules: enforcement off/soft NEVER block (observe-only);
+ *  trial is unconditionally unlimited; an active plan uses its receiptsPerMonth
+ *  (null = unlimited, e.g. family_large); anything else (expired/past_due/none)
+ *  blocks only in hard mode. The monthly window roll + counter live in the store. */
+export function receiptScanBlocked(args: {
+  effectiveStatus: EffectiveBillingStatus;
+  planCode: string;
+  usedValue: number;
+  enforcement: BillingEnforcementMode;
+}): { blocked: boolean; reason: "premium_inactive" | "limit" | null } {
+  if (args.enforcement !== "hard") return { blocked: false, reason: null };
+  if (args.effectiveStatus === "trialing") return { blocked: false, reason: null }; // trial = unlimited
+  if (args.effectiveStatus !== "active") return { blocked: true, reason: "premium_inactive" };
+  const limit = planForCode(args.planCode)?.receiptsPerMonth ?? null;
+  if (limit !== null && args.usedValue >= limit) return { blocked: true, reason: "limit" };
+  return { blocked: false, reason: null };
+}
+
 /** Household-facing billing status DTO (returned by GET /billing/subscription). */
 export interface BillingStatusDto {
   effectiveStatus: EffectiveBillingStatus;
@@ -171,5 +231,19 @@ export interface BillingStatusDto {
   childCount: number;
   /** True when child count exceeds the purchased tier (upgrade needed). */
   upgradeRequired: boolean;
+  // ── Member-cap usage (total active members vs the plan's memberMax) ──
+  /** Total active members (owner+adult+limited) in the household right now. */
+  memberCount: number;
+  /** Plan's total-member cap; null during trial (unlimited) or when no plan. */
+  memberMax: number | null;
+  /** True when active member count has reached/exceeded memberMax (hard-mode blocks adds). */
+  memberLimitReached: boolean;
+  // ── Receipt-cap usage (monthly window; null = unlimited / trial) ──
+  /** Receipt scans allowed this monthly window; null = unlimited (trial or family_large). */
+  receiptsPerMonth: number | null;
+  /** Receipt scans used in the current monthly window. */
+  receiptsUsed: number;
+  /** When the monthly receipt window resets (ISO); null when unmetered (trial/unlimited). */
+  receiptsResetAt: string | null;
   reason: string;
 }
