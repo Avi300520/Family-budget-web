@@ -109,6 +109,15 @@ export function billingPeriodMonths(interval: BillingInterval): number {
   return interval === "yearly" ? 12 : 1;
 }
 
+/** Advance an ISO timestamp by N calendar months (day-of-month anchored; JS Date handles
+ *  month-length + leap-year overflow). Pure — drives the monthly receipt usage window in both
+ *  stores (enforcement roll) and the status DTO (display roll), so they stay consistent. */
+export function addMonths(fromIso: string, months: number): string {
+  const d = new Date(fromIso);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString();
+}
+
 // ── Pure billing-state math (testable; all take `nowMs` — never call Date.now here) ──
 
 /** Minimal structural view of a subscription row — avoids a type cycle with index.ts. */
