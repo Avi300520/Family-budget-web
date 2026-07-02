@@ -19,6 +19,7 @@ import { LoadState } from "../../components/LoadState";
 import { api } from "../../lib/api";
 import { useViewer } from "../../lib/useViewer";
 import { canViewBilling } from "../../lib/settingsView";
+import { classifyCheckoutError } from "../../lib/billingCheckoutError";
 
 // ── Hebrew labels (warm, brief) ──────────────────────────────────────────────
 const STATUS_LABELS: Record<EffectiveBillingStatus, string> = {
@@ -134,14 +135,12 @@ export default function BillingClient() {
       }
       setActionError("פתיחת התשלום בסביבת בדיקה - בפרודקשן יופנו לעמוד התשלום.");
     } catch (err) {
-      // Surface backend codes verbatim (upgrade_required / forbidden) as Hebrew copy.
-      if (err instanceof ApiClientError && err.code === "billing.upgrade_required") {
-        setActionError("המסלול שנבחר לא מכסה את מספר הילדים בבית. בחרו מסלול גבוה יותר.");
-      } else if (err instanceof ApiClientError && (err.code === "billing.forbidden" || err.status === 403)) {
-        setRestricted(true);
-      } else {
-        setActionError(err instanceof Error ? err.message : "לא הצלחנו לפתוח את התשלום. נסו שוב.");
-      }
+      // Only a genuine role-authz failure (billing.forbidden) collapses to the owner-only view.
+      // billing.disabled (billing OFF) / billing.email_required / other errors stay inline so the
+      // plan cards + invoice-email field remain visible. (Prior bug: any 403 collapsed the page.)
+      const ui = classifyCheckoutError(err);
+      if ("restricted" in ui) setRestricted(true);
+      else setActionError(ui.message);
     } finally {
       setCheckoutBusy(null);
     }
