@@ -282,10 +282,19 @@ export function createApiClient(options: ApiClientOptions) {
         "/api/v1/billing/subscription"
       ),
     // planCode is tightened to the 6 canonical paid codes — `trial`/legacy are not purchasable.
-    checkoutSession: (householdId: string, planCode: PaidPlanCode) =>
+    checkoutSession: (householdId: string, planCode: PaidPlanCode, billingEmail?: string) =>
       request<{ checkoutUrl: string; checkoutSessionId: string }>(`/api/v1/billing/checkout-session`, {
         method: "POST",
-        body: JSON.stringify({ householdId, planCode })
+        body: JSON.stringify({ householdId, planCode, ...(billingEmail ? { billingEmail } : {}) })
+      }),
+    // Household billing email (invoice/receipt address) — owner/admin only; used to prefill the
+    // checkout invoice field. NOT identity, NOT marketing.
+    billingProfile: () =>
+      request<{ billingEmail: string | null }>(`/api/v1/billing/profile`),
+    updateBillingProfile: (householdId: string, billingEmail: string) =>
+      request<{ billingEmail: string }>(`/api/v1/billing/profile`, {
+        method: "PUT",
+        body: JSON.stringify({ householdId, billingEmail })
       }),
     changePlan: (householdId: string, planCode: PaidPlanCode) =>
       request<{ subscription: Subscription }>(`/api/v1/billing/change-plan`, {

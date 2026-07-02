@@ -65,6 +65,8 @@ export default function BillingClient() {
   const [restricted, setRestricted] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState<PaidPlanCode | null>(null);
   const [actionError, setActionError] = useState<string>();
+  // Invoice email — required before a paid checkout; prefilled from the household billing profile.
+  const [billingEmail, setBillingEmail] = useState("");
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -77,7 +79,7 @@ export default function BillingClient() {
         const current = await api.currentHousehold();
         if (cancelled) return;
         setHouseholdId(current.household.id);
-        const [statusRes, plansRes] = await Promise.allSettled([api.billingStatus(), api.billingPlans()]);
+        const [statusRes, plansRes, profileRes] = await Promise.allSettled([api.billingStatus(), api.billingPlans(), api.billingProfile()]);
         if (cancelled) return;
         if (statusRes.status === "fulfilled") {
           setBilling(statusRes.value.billing);
@@ -88,6 +90,10 @@ export default function BillingClient() {
         if (plansRes.status === "fulfilled") {
           setPlans(plansRes.value.plans);
           setTrialDays(plansRes.value.trialDays);
+        }
+        // Prefill the invoice email from the household billing profile (best-effort; owner/admin only).
+        if (profileRes.status === "fulfilled" && profileRes.value.billingEmail) {
+          setBillingEmail(profileRes.value.billingEmail);
         }
         setStatus("ready");
       } catch (err) {
@@ -110,10 +116,16 @@ export default function BillingClient() {
 
   async function choosePlan(planCode: PaidPlanCode) {
     if (!householdId || checkoutBusy) return;
+    // Invoice email is required before a paid checkout (backend re-validates + is authoritative).
+    const email = billingEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setActionError("נא להזין אימייל תקין לשליחת החשבונית לפני התשלום.");
+      return;
+    }
     setCheckoutBusy(planCode);
     setActionError(undefined);
     try {
-      const session = await api.checkoutSession(householdId, planCode);
+      const session = await api.checkoutSession(householdId, planCode, email);
       // Keep existing localhost/mock handling: a mock provider returns a non-real URL
       // we must not navigate to - just acknowledge it on-page.
       if (session.checkoutUrl && !session.checkoutUrl.includes("localhost") && !session.checkoutUrl.includes("mock")) {
@@ -241,11 +253,11 @@ export default function BillingClient() {
           <div style={{ marginTop: 12, display: "grid", gap: 4 }}>
             <p className="muted">
               צילומי קבלות החודש:{" "}
-              {billing.receiptsPerMonth === null ? (
+              {billing.receiptsPerMonth == null ? (
                 <strong>ללא הגבלה</strong>
               ) : (
                 <strong>
-                  {billing.receiptsUsed} מתוך {billing.receiptsPerMonth}
+                  {billing.receiptsUsed ?? 0} מתוך {billing.receiptsPerMonth}
                   {billing.receiptsResetAt
                     ? ` · מתאפס ב-${new Date(billing.receiptsResetAt).toLocaleDateString("he-IL")}`
                     : ""}
@@ -255,8 +267,8 @@ export default function BillingClient() {
             <p className="muted">
               בני בית:{" "}
               <strong>
-                {billing.memberCount}
-                {billing.memberMax === null ? "" : ` מתוך ${billing.memberMax}`}
+                {typeof billing.memberCount === "number" ? billing.memberCount : "-"}
+                {billing.memberMax == null ? "" : ` מתוך ${billing.memberMax}`}
               </strong>
               {billing.memberLimitReached && <span className="muted"> · הגעתם למכסת בני הבית במסלול</span>}
             </p>
@@ -282,6 +294,28 @@ export default function BillingClient() {
         >
           {yearlySavingsPct ? `שנתי · חיסכון ${yearlySavingsPct}%` : "שנתי"}
         </button>
+      </div>
+
+      {/* Invoice email — required before checkout; prefilled from the household billing profile.
+          Backend re-validates and is authoritative. Owner/admin only (page is restricted otherwise). */}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <label htmlFor="billing-email" style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
+          אימייל לשליחת חשבונית
+        </label>
+        <input
+          id="billing-email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          dir="ltr"
+          value={billingEmail}
+          onChange={(e) => setBillingEmail(e.target.value)}
+          placeholder="name@example.com"
+          style={{ width: "100%", maxWidth: 360, textAlign: "left" }}
+        />
+        <p className="muted" style={{ marginTop: 6 }}>
+          נשתמש בכתובת הזו רק לצורכי תשלום, חשבוניות ועדכוני חיוב.
+        </p>
       </div>
 
       {/* Plan catalog - 3-up via the responsive .grid.three primitive (collapses to 1 col on mobile) */}
