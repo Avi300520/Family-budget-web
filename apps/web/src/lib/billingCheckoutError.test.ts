@@ -2,7 +2,23 @@
 // Run with:  node --experimental-strip-types --test src/lib/billingCheckoutError.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyCheckoutError, isRealCheckoutRedirect } from "./billingCheckoutError.ts";
+import { classifyCheckoutError, isRealCheckoutRedirect, checkoutReturnBanner } from "./billingCheckoutError.ts";
+
+test("checkoutReturnBanner: backend 'active' wins over any ?status hint (never contradict paid truth)", () => {
+  assert.equal(checkoutReturnBanner("failed", "active"), "active");
+  assert.equal(checkoutReturnBanner("success", "active"), "active");
+  assert.equal(checkoutReturnBanner(null, "active"), "active");
+});
+
+test("checkoutReturnBanner: ?status=success but not-yet-active shows 'processing' (updating/refresh)", () => {
+  assert.equal(checkoutReturnBanner("success", "trialing"), "processing");
+  assert.equal(checkoutReturnBanner("success", undefined), "processing");
+});
+
+test("checkoutReturnBanner: ?status=failed (and not active) shows 'failed'; nothing when no hint", () => {
+  assert.equal(checkoutReturnBanner("failed", "trialing"), "failed");
+  assert.equal(checkoutReturnBanner(null, "trialing"), null);
+});
 
 test("isRealCheckoutRedirect: redirects to a real HYP page EVEN when it embeds our localhost callback param (the prod bug)", () => {
   assert.equal(isRealCheckoutRedirect("https://pay.hyp.co.il/p/?Order=sa_x&Success=http%3A%2F%2Flocalhost%3A3333%2Fapi%2Fv1%2Fbilling%2Fhyp%2Fsuccess&signature=abc"), true);

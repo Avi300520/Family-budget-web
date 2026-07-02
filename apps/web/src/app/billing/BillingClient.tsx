@@ -19,7 +19,7 @@ import { LoadState } from "../../components/LoadState";
 import { api } from "../../lib/api";
 import { useViewer } from "../../lib/useViewer";
 import { canViewBilling } from "../../lib/settingsView";
-import { classifyCheckoutError, isRealCheckoutRedirect } from "../../lib/billingCheckoutError";
+import { classifyCheckoutError, isRealCheckoutRedirect, checkoutReturnBanner } from "../../lib/billingCheckoutError";
 
 // ── Hebrew labels (warm, brief) ──────────────────────────────────────────────
 const STATUS_LABELS: Record<EffectiveBillingStatus, string> = {
@@ -210,13 +210,19 @@ export default function BillingClient() {
     <AppShell>
       <h1 className="page-title">תשלום ומסלול</h1>
 
-      {/* Return from checkout */}
-      {returnStatus === "success" && (
+      {/* Return from checkout — the BACKEND subscription status is the source of truth, NOT the
+          ?status= hint (incident 2026-07-03: approved payment showed "failed"; stale hint claimed paid). */}
+      {checkoutReturnBanner(returnStatus, billing?.effectiveStatus) === "active" && (
         <div className="status success" role="status" style={{ display: "block", marginBottom: 16 }}>
           <CheckCircle2 size={16} aria-hidden /> התשלום התקבל. תודה! המנוי שלכם פעיל.
         </div>
       )}
-      {returnStatus === "failed" && (
+      {checkoutReturnBanner(returnStatus, billing?.effectiveStatus) === "processing" && (
+        <div className="status" role="status" style={{ display: "block", marginBottom: 16 }}>
+          קיבלנו את התשלום. אנחנו מעדכנים את המנוי - רעננו את הדף בעוד רגע.
+        </div>
+      )}
+      {checkoutReturnBanner(returnStatus, billing?.effectiveStatus) === "failed" && (
         <div className="status error" role="alert" style={{ display: "block", marginBottom: 16 }}>
           התשלום לא הושלם. אפשר לנסות שוב מטה.
         </div>

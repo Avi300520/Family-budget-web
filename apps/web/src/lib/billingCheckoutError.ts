@@ -17,6 +17,21 @@ export function isRealCheckoutRedirect(url: string | undefined | null): boolean 
   return !!url && /^https?:\/\//i.test(url) && !url.includes("/dev/mock-checkout");
 }
 
+export type ReturnBanner = "active" | "processing" | "failed" | null;
+
+/** Decide the post-checkout banner from the BACKEND subscription status (the source of truth) plus
+ *  the ?status= URL hint. Incident 2026-07-03: the UI trusted ?status= alone, so an APPROVED payment
+ *  that our (then-buggy) VERIFY rejected showed "failed", and a stale ?status=success could claim
+ *  paid while still trial. Rules: if the backend says active -> "active" (paid), regardless of the
+ *  hint; else ?status=success but not-yet-active -> "processing" (updating, refresh); else
+ *  ?status=failed -> "failed"; else nothing. Never show "failed" when the subscription is active. */
+export function checkoutReturnBanner(returnStatus: string | null | undefined, effectiveStatus: string | undefined): ReturnBanner {
+  if (effectiveStatus === "active") return "active";
+  if (returnStatus === "success") return "processing";
+  if (returnStatus === "failed") return "failed";
+  return null;
+}
+
 export type CheckoutErrorUi = { restricted: true } | { message: string };
 
 function errorCode(err: unknown): string | undefined {
