@@ -58,9 +58,7 @@ export default function BillingClient() {
   // pricebook (BILLING_PLANS) so the page still renders if /plans hiccups.
   const [plans, setPlans] = useState<readonly BillingPlan[]>(BILLING_PLANS);
   const [trialDays, setTrialDays] = useState<number>(TRIAL_DAYS);
-  // Default to yearly (annual one-time, no HK). Monthly = HYP recurring (HK) and is intentionally
-  // disabled for now (no in-code cancel; needs an operational renewal process before it's offered).
-  const [interval, setInterval] = useState<BillingInterval>("yearly");
+  const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string>();
   // A restricted load (backend 403) is distinct from a transient error - show the
@@ -286,10 +284,13 @@ export default function BillingClient() {
 
       {/* Monthly / yearly toggle */}
       <div className="row" style={{ gap: 8, marginBottom: 16 }} role="group" aria-label="בחירת תדירות תשלום">
-        {/* Monthly = HYP recurring (HK); disabled until an in-app cancel/renewal process exists so it
-            cannot be selected by accident. Annual (one-time) is the only offered path for now. */}
-        <button type="button" className="button secondary" disabled aria-pressed={false} title="תשלום חודשי יתווסף בהמשך">
-          חודשי (בקרוב)
+        <button
+          type="button"
+          className={interval === "monthly" ? "button" : "button secondary"}
+          aria-pressed={interval === "monthly"}
+          onClick={() => setInterval("monthly")}
+        >
+          חודשי
         </button>
         <button
           type="button"
