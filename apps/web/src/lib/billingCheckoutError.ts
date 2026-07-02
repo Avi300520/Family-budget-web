@@ -8,6 +8,15 @@
 // invoice-email field stay visible. Matching on err.status===403 alone (the prior bug) wrongly
 // collapsed the page whenever billing was dormant, because billing.disabled is also a 403.
 
+/** True if the checkout URL is a real off-site provider payment page to redirect the browser to.
+ *  The mock/dev provider returns an ON-SITE /api/v1/dev/mock-checkout URL (not a payment page) — never
+ *  redirect there (show the test-env message). A real HYP page is https://pay.hyp.co.il/… and MAY embed
+ *  our own callback URLs as query params, so we must NOT sniff for "localhost"/"mock" substrings — that
+ *  was the prior bug (the real HYP URL embeds a localhost Success param and was wrongly rejected). */
+export function isRealCheckoutRedirect(url: string | undefined | null): boolean {
+  return !!url && /^https?:\/\//i.test(url) && !url.includes("/dev/mock-checkout");
+}
+
 export type CheckoutErrorUi = { restricted: true } | { message: string };
 
 function errorCode(err: unknown): string | undefined {

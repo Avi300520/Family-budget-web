@@ -19,7 +19,7 @@ import { LoadState } from "../../components/LoadState";
 import { api } from "../../lib/api";
 import { useViewer } from "../../lib/useViewer";
 import { canViewBilling } from "../../lib/settingsView";
-import { classifyCheckoutError } from "../../lib/billingCheckoutError";
+import { classifyCheckoutError, isRealCheckoutRedirect } from "../../lib/billingCheckoutError";
 
 // ── Hebrew labels (warm, brief) ──────────────────────────────────────────────
 const STATUS_LABELS: Record<EffectiveBillingStatus, string> = {
@@ -127,9 +127,10 @@ export default function BillingClient() {
     setActionError(undefined);
     try {
       const session = await api.checkoutSession(householdId, planCode, email);
-      // Keep existing localhost/mock handling: a mock provider returns a non-real URL
-      // we must not navigate to - just acknowledge it on-page.
-      if (session.checkoutUrl && !session.checkoutUrl.includes("localhost") && !session.checkoutUrl.includes("mock")) {
+      // Redirect to a REAL provider payment page. The dev mock returns an on-site
+      // /api/v1/dev/mock-checkout URL (not a payment page); a real HYP page is https://pay.hyp.co.il/…
+      // and may embed our own callback URLs, so we must NOT sniff for "localhost"/"mock" (prior bug).
+      if (isRealCheckoutRedirect(session.checkoutUrl)) {
         window.location.href = session.checkoutUrl;
         return;
       }
