@@ -192,6 +192,10 @@ export default function BillingClient() {
     .filter((p) => p.interval === interval)
     .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
   const isTrialing = billing?.effectiveStatus === "trialing";
+  // The active paid plan (from the pricebook, keyed by the backend planCode) — drives the
+  // interval label + the period line. Yearly is a one-time prepaid charge (no auto-renew, no HK),
+  // so its period-end is an expiry ("בתוקף עד"); monthly (HK) auto-renews ("מתחדש ב-").
+  const activePlan = billing ? plans.find((p) => p.code === billing.planCode) : undefined;
   // Yearly savings %, derived from the pricebook (yearly is ~ monthly*12*0.83, about 17%).
   // Computed, never hardcoded: the first tier carrying both intervals drives the label.
   const yearlySavingsPct = (() => {
@@ -243,6 +247,14 @@ export default function BillingClient() {
           {billing?.tier ? TIER_LABELS[billing.tier] : billing?.effectiveStatus === "trialing" ? "ניסיון" : "-"}
         </div>
         <div className="muted">{billing ? STATUS_LABELS[billing.effectiveStatus] : "-"}</div>
+        {billing?.effectiveStatus === "active" && activePlan && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            {activePlan.interval === "yearly" ? "מסלול שנתי" : "מסלול חודשי"}
+            {billing.currentPeriodEnd
+              ? ` · ${activePlan.interval === "yearly" ? "בתוקף עד" : "מתחדש ב-"}${new Date(billing.currentPeriodEnd).toLocaleDateString("he-IL")}`
+              : ""}
+          </p>
+        )}
         {isTrialing && typeof billing?.trialDaysRemaining === "number" && (
           <p className="muted" style={{ marginTop: 8 }}>
             נותרו {billing.trialDaysRemaining} ימים מתוך {trialDays} בתקופת הניסיון.
