@@ -259,6 +259,10 @@ export interface Subscription {
   currentPeriodStart?: string;
   currentPeriodEnd?: string;
   cancelAtPeriodEnd: boolean;
+  /** Provider's subscription/agreement id — for HYP this is the HK (recurring) agreement id
+   *  captured on the first approved monthly charge, needed later to cancel via HKStatus.
+   *  Optional/backend-internal; not rendered by the web/admin UI. */
+  providerSubscriptionId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -763,6 +767,10 @@ export type AnalyticsEventName =
   | "receipt_proposal_dismissed"
   | "receipt_proposal_expired"
   | "trial_limit_reached"
+  // Observe-only OCR-cost signal: a household's receipt scans in the current window passed
+  // RECEIPTS_ABUSE_CAP_MONTHLY. NEVER blocks — telemetry only (cost visibility during the
+  // unlimited-trial period). Emitted per over-cap scan so the event count = the overage.
+  | "receipt_abuse_cap_exceeded"
   | "checkout_started"
   | "subscription_activated";
 
