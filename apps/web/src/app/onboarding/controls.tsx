@@ -5,9 +5,10 @@
 // uses (tokens.css). Inline styles (as in the prototype) keep these self-contained
 // and avoid global-CSS import constraints in the app router.
 
-import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import type { FrequencyId } from "@shopping-assistant/shared-types";
 import { FREQUENCIES } from "../../lib/onboarding/model";
+import { parseMoneyInput } from "../../lib/moneyInput";
 
 const focusBorder = (on: boolean) => (on ? "var(--teal)" : "var(--cream-4)");
 
@@ -142,6 +143,16 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
 }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { if (autoFocus && ref.current) ref.current.focus(); }, [autoFocus]);
+  // Local text buffer: a mid-typing value like "89." parses to 89, and re-deriving the
+  // display from that number would erase the "." the user just typed. So we keep the raw
+  // (normalized) text and only re-sync from `value` when the parent diverges from what the
+  // buffer parses to (external prefill / reset) — during typing they track, so it's a no-op.
+  const fmt = (v: number | "") => (v === 0 || v ? String(v) : "");
+  const [text, setText] = useState<string>(() => fmt(value));
+  useEffect(() => {
+    if (parseMoneyInput(text) !== value) setText(fmt(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   const h = size === "lg" ? 58 : 48;
   const fs = size === "lg" ? 24 : 18;
   return (
@@ -155,12 +166,13 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
       }}>₪</span>
       <input
         ref={ref}
-        inputMode="numeric"
-        value={value === 0 || value ? String(value) : ""}
+        inputMode="decimal"
+        value={text}
         placeholder={placeholder}
         onChange={(e) => {
-          const digits = e.target.value.replace(/[^\d]/g, "");
-          onChange(digits ? Number(digits) : "");
+          const next = e.target.value;
+          setText(next.replace(/[^\d.]/g, "").match(/^\d*\.?\d*/)?.[0] ?? "");
+          onChange(parseMoneyInput(next));
         }}
         className="mono"
         style={{
