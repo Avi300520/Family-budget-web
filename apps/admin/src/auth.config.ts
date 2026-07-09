@@ -10,6 +10,7 @@
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import { isAllowedAdmin, recordAdminAuthEvent } from "./lib/adminAllowlist";
+import { isAdminEmailVerified } from "./lib/adminEmailVerified";
 
 export const authConfig: NextAuthConfig = {
   providers: [Google],
@@ -21,8 +22,14 @@ export const authConfig: NextAuthConfig = {
   trustHost: true,
   pages: { signIn: "/login", error: "/login" },
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, profile }) {
       const email = user?.email?.trim().toLowerCase();
+      // A verified Google identity is a PRECONDITION for admin authorization: reject an
+      // explicitly unverified email (email_verified === false) before the allowlist check.
+      if (!isAdminEmailVerified(profile)) {
+        if (email) await recordAdminAuthEvent("login_denied", email);
+        return false; // → redirected to /login?error=AccessDenied
+      }
       if (!email || !isAllowedAdmin(email)) {
         if (email) await recordAdminAuthEvent("login_denied", email);
         return false; // → redirected to /login?error=AccessDenied
