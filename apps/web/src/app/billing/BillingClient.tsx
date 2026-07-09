@@ -35,7 +35,7 @@ const STATUS_LABELS: Record<EffectiveBillingStatus, string> = {
 
 const TIER_LABELS: Record<BillingTier, string> = {
   couple: "זוג",
-  family_small: "משפחה עד 3 ילדים",
+  family_small: "משפחה עד 4 בני משפחה",
   family_large: "משפחה 4+ ילדים"
 };
 
@@ -381,7 +381,10 @@ export default function BillingClient() {
                   ? "ללא הגבלת מספר ילדים."
                   : plan.childrenMax === 0
                     ? "ללא ילדים."
-                    : `עד ${plan.childrenMax} ילדים.`}
+                    // family_small: framed by total household members (memberMax), not child
+                    // count — G-BILLING-COPY. This branch fires only for family_small (couple
+                    // hits the ===0 branch, family_large the ===null branch).
+                    : `עד ${plan.memberMax} בני משפחה.`}
               </p>
               <div className="row">
                 <button
