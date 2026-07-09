@@ -52,3 +52,40 @@ export function routeAfterConsume(hasHousehold: boolean, next: string | null | u
 export function requiresOnboarding(household: unknown): boolean {
   return !household;
 }
+
+/**
+ * Entry-page session probe (WP-P1-FE / P1). The marketing "/" and "/login" pages check
+ * `/me` on mount; if a valid session already exists, send the visitor into the app instead
+ * of re-showing the magic-link form (the P1 "authenticated at /dashboard but re-prompted at
+ * the root" symptom). Any failure (401 / network) is swallowed — an unauthenticated visitor
+ * just stays on the marketing page. Pure orchestration (takes the probe + navigator as args)
+ * so it is unit-testable with no React / api-client import. Returns whether it redirected.
+ */
+export async function redirectIfAuthed(
+  probe: () => Promise<unknown>,
+  replace: (href: string) => void,
+  dashboard = "/dashboard"
+): Promise<boolean> {
+  try {
+    await probe();
+    replace(dashboard);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Bootstrap error policy for the onboarding wizard (WP-P1-FE / NF-M17). The wizard resolves
+ * the user via `/me` on mount. A genuine 401 means "not logged in" → go to /login. But a
+ * TRANSIENT network failure (fetch throws a TypeError with no `status`) or a 5xx must NOT
+ * bounce the user to login — that discards their authenticated context on a blip. We
+ * duck-type the ApiClientError shape (`status === 401`) so this stays import-free.
+ */
+export function bootstrapErrorAction(err: unknown): "login" | "retry" {
+  const status =
+    err && typeof err === "object" && "status" in err
+      ? (err as { status?: unknown }).status
+      : undefined;
+  return status === 401 ? "login" : "retry";
+}

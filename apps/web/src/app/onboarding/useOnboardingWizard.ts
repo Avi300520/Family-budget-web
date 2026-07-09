@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { isHouseholdManager } from "../../lib/settingsView";
+import { bootstrapErrorAction } from "../../lib/authRouting";
 import {
   createDefaultState, computeTotals, validateStep, buildOnboardingPayload,
   buildStateFromBaseline, suggestedManagedBudget, loadDraft, saveDraft, clearDraft,
@@ -100,9 +101,16 @@ export function useOnboardingWizard(): WizardController {
         } else if (me.user.displayName) {
           setState((s) => ({ ...s, displayName: me.user.displayName ?? "" }));
         }
-      } catch {
-        // Not authenticated (or transient) — send to login; the consume flow returns here.
-        router.replace("/login");
+      } catch (err) {
+        if (cancelled) return;
+        // WP-P1-FE / NF-M17: only a genuine 401 means "not logged in" → /login. A transient
+        // network failure or a 5xx must NOT bounce the user to login (that discards their
+        // authenticated context on a blip) — surface a retry message and stay put instead.
+        if (bootstrapErrorAction(err) === "login") {
+          router.replace("/login");
+          return;
+        }
+        setError("אירעה שגיאת רשת. רעננו את הדף ונסו שוב.");
         return;
       } finally {
         if (!cancelled) setReady(true);

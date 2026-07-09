@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { MarketingLanding } from "../components/marketing/MarketingLanding";
+import { SessionRedirect } from "../components/auth/SessionRedirect";
 
 // Public marketing root. Server component: the full landing body renders as
 // static HTML (crawlable, no client-render wall). Authenticated users reach the
@@ -11,5 +12,10 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
-  return <MarketingLanding />;
+  return (
+    <>
+      <SessionRedirect />
+      <MarketingLanding />
+    </>
+  );
 }

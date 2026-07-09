@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { MarketingLanding } from "../../components/marketing/MarketingLanding";
+import { SessionRedirect } from "../../components/auth/SessionRedirect";
 
 // /login stays a valid entry point and renders the SAME marketing landing as /.
 // This preserves the auth-guard contract exactly: redirectIfUnauthorized() sends
@@ -11,5 +12,10 @@ export const metadata: Metadata = {
 };
 
 export default function LoginPage() {
-  return <MarketingLanding />;
+  return (
+    <>
+      <SessionRedirect />
+      <MarketingLanding />
+    </>
+  );
 }

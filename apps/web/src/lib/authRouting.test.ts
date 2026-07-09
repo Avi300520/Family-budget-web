@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { routeAfterConsume, requiresOnboarding, safeNextPath } from "./authRouting.ts";
+import { routeAfterConsume, requiresOnboarding, safeNextPath, redirectIfAuthed, bootstrapErrorAction } from "./authRouting.ts";
 
 // ── Required test 1 — consume, no household, next=/dashboard → /onboarding ──────
 test("consume: no household + next=/dashboard redirects to /onboarding", () => {
@@ -70,4 +70,36 @@ test("safeNextPath: safe same-origin relative path passes through", () => {
   assert.equal(safeNextPath("/dashboard"), "/dashboard");
   assert.equal(safeNextPath("/onboarding"), "/onboarding");
   assert.equal(safeNextPath("/join?token=abc"), "/join?token=abc");
+});
+
+// ── WP-P1-FE: entry-page session probe + wizard 401-vs-network policy ──
+
+test("redirectIfAuthed sends an authenticated visitor to /dashboard", async () => {
+  const calls: string[] = [];
+  const redirected = await redirectIfAuthed(async () => ({ user: { id: "u1" } }), (h) => calls.push(h));
+  assert.equal(redirected, true);
+  assert.deepEqual(calls, ["/dashboard"]);
+});
+
+test("redirectIfAuthed does NOT redirect when the session probe fails (401 or network)", async () => {
+  const calls: string[] = [];
+  const r401 = await redirectIfAuthed(
+    async () => { throw Object.assign(new Error("unauth"), { status: 401 }); },
+    (h) => calls.push(h)
+  );
+  const rNet = await redirectIfAuthed(
+    async () => { throw new TypeError("fetch failed"); },
+    (h) => calls.push(h)
+  );
+  assert.equal(r401, false);
+  assert.equal(rNet, false);
+  assert.deepEqual(calls, []); // stays on the marketing page
+});
+
+test("bootstrapErrorAction: 401 -> login; transient network / 5xx / unknown -> retry (no bounce)", () => {
+  assert.equal(bootstrapErrorAction(Object.assign(new Error("x"), { status: 401 })), "login");
+  assert.equal(bootstrapErrorAction(new TypeError("fetch failed")), "retry"); // network blip
+  assert.equal(bootstrapErrorAction(Object.assign(new Error("x"), { status: 503 })), "retry"); // server blip
+  assert.equal(bootstrapErrorAction(undefined), "retry");
+  assert.equal(bootstrapErrorAction({}), "retry");
 });
