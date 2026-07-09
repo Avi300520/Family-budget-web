@@ -359,9 +359,9 @@ export function autoSplitSubBudgets(pool: number): Partial<Record<SubBudgetCatId
   return out;
 }
 
-// ── localStorage draft (user-scoped, TTL, no PII/secrets beyond typed fields) ────
+// ── localStorage draft (user-scoped, short TTL, finances/names redacted before write) ──
 const DRAFT_PREFIX = "pingtally_onb_draft_v1";
-const DRAFT_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours (was 14 days) — PII-minimized draft
 
 export function draftKey(userId: string): string {
   return `${DRAFT_PREFIX}:${userId}`;
@@ -373,10 +373,33 @@ interface DraftEnvelope {
   state: WizardState;
 }
 
+/**
+ * PII minimization (NF-M23 / WP-DRAFT-PRIVACY). The autosaved onboarding draft must NOT
+ * persist the household's finances or names in plaintext localStorage. Strip income, the
+ * managed budget, every fixed-expense amount, the sub-budget amounts, and the display /
+ * household / city names before writing. Structural progress (step position, counts,
+ * toggles, expense labels/frequencies) is kept so a resumed draft restores position; the
+ * sensitive numbers and names are simply re-entered.
+ */
+export function redactDraftForStorage(state: WizardState): WizardState {
+  return {
+    ...state,
+    income: "",
+    managedBudget: "",
+    displayName: "",
+    householdName: "",
+    city: "",
+    subBudgets: {},
+    // Guard: a corrupt/stale in-flight draft can carry a non-array `fixed`; pass it through
+    // untouched so redaction never throws (loadDraft's coerceDraftState repairs it on read).
+    fixed: Array.isArray(state.fixed) ? state.fixed.map((f) => ({ ...f, amount: "" })) : state.fixed,
+  };
+}
+
 export function saveDraft(userId: string, state: WizardState, now: number): void {
   if (typeof window === "undefined") return;
   try {
-    const env: DraftEnvelope = { savedAt: now, userId, state };
+    const env: DraftEnvelope = { savedAt: now, userId, state: redactDraftForStorage(state) };
     window.localStorage.setItem(draftKey(userId), JSON.stringify(env));
   } catch {
     /* quota / unavailable — drafts are best-effort */

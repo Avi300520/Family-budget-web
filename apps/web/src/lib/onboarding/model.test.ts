@@ -18,6 +18,8 @@ import {
   loadDraft,
   clearDraft,
   coerceDraftState,
+  redactDraftForStorage,
+  DRAFT_TTL_MS,
   humanizeOnboardingError,
   buildStateFromBaseline,
   type WizardState,
@@ -170,13 +172,16 @@ test("draft: user-scoped save/load round-trips; expired + wrong-user are ignored
     }
   };
   const s = createDefaultState();
-  s.displayName = "אבי";
+  s.alerts = { ...s.alerts, weekly: true }; // non-sensitive structural progress — survives redaction
+  s.displayName = "אבי";                    // sensitive — must NOT round-trip (WP-DRAFT-PRIVACY)
   const now = 1_000_000;
   saveDraft("user-1", s, now);
-  assert.equal(loadDraft("user-1", now)?.displayName, "אבי");
+  const loaded = loadDraft("user-1", now);
+  assert.equal(loaded?.alerts.weekly, true); // structural draft restored
+  assert.equal(loaded?.displayName, "");     // name redacted, never persisted
   // different user → null
   assert.equal(loadDraft("user-2", now), null);
-  // expired (> 14d) → null + purged
+  // expired (> TTL) → null + purged
   assert.equal(loadDraft("user-1", now + 15 * 24 * 60 * 60 * 1000), null);
   saveDraft("user-1", s, now);
   clearDraft("user-1");
@@ -352,4 +357,48 @@ test("buildStateFromBaseline: a corrupt/partial baseline never throws and uses d
 test("buildStateFromBaseline: undefined source returns clean defaults", () => {
   const s = buildStateFromBaseline(undefined);
   assert.deepEqual(s, createDefaultState());
+});
+
+// ── WP-DRAFT-PRIVACY (NF-M23): finances/names must not sit in plaintext localStorage ──
+
+test("redactDraftForStorage strips income, budget, sub-budgets, and names", () => {
+  const state: WizardState = {
+    ...createDefaultState(),
+    income: 12345, managedBudget: 6789,
+    displayName: "דנה", householdName: "בית כהן", city: "חיפה",
+    subBudgets: { groceries: 500 } as WizardState["subBudgets"],
+    fixed: [fixed({ label: "שכירות", amount: 4200 })]
+  };
+  const red = redactDraftForStorage(state);
+  assert.equal(red.income, "");
+  assert.equal(red.managedBudget, "");
+  assert.equal(red.displayName, "");
+  assert.equal(red.householdName, "");
+  assert.equal(red.city, "");
+  assert.deepEqual(red.subBudgets, {});
+  assert.equal(red.fixed[0]!.amount, "");
+  assert.equal(red.fixed[0]!.label, "שכירות"); // structural progress kept for resume
+});
+
+test("saveDraft does NOT persist income / budget-amount / household name to localStorage", () => {
+  withWindow(() => {
+    const state: WizardState = {
+      ...createDefaultState(),
+      income: 918273, managedBudget: 6789,
+      displayName: "דנה", householdName: "בית כהן משפחתי", city: "חיפה",
+      fixed: [fixed({ label: "שכירות", amount: 424242 })]
+    };
+    saveDraft("u1", state, 1000);
+    const raw = (globalThis as unknown as { window: { localStorage: { getItem: (k: string) => string | null } } })
+      .window.localStorage.getItem("pingtally_onb_draft_v1:u1") ?? "";
+    assert.ok(raw.length > 0, "draft was written");
+    assert.ok(!raw.includes("918273"), "income must not be persisted");
+    assert.ok(!raw.includes("424242"), "fixed-expense amount must not be persisted");
+    assert.ok(!raw.includes("בית כהן משפחתי"), "household name must not be persisted");
+    assert.ok(raw.includes("שכירות"), "expense label kept so resume still restores position");
+  });
+});
+
+test("DRAFT_TTL_MS is at most 24h (was 14 days)", () => {
+  assert.ok(DRAFT_TTL_MS <= 24 * 60 * 60 * 1000, `TTL ${DRAFT_TTL_MS}ms exceeds 24h`);
 });
