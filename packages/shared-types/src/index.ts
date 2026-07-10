@@ -263,8 +263,32 @@ export interface Subscription {
    *  captured on the first approved monthly charge, needed later to cancel via HKStatus.
    *  Optional/backend-internal; not rendered by the web/admin UI. */
   providerSubscriptionId?: string;
+  /** When the owner/admin requested cancellation (in-app). Set alongside cancelAtPeriodEnd=true;
+   *  access continues until currentPeriodEnd. */
+  cancelRequestedAt?: string;
+  /** When the provider side actually confirmed the recurring charge is stopped — for HYP, when the
+   *  HK terminate (HKStatus NewStat=1) returned CCode=0. Immediate for annual/mock (nothing recurring
+   *  to stop). If cancelAtPeriodEnd=true but this is unset, the HK terminate did NOT confirm → an open
+   *  billing_reconciliation_queue row exists and the HKId must be cancelled in the HYP portal. */
+  cancelConfirmedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One row of the billing reconciliation queue (migration 0034) — a durable, admin-visible work item
+ *  for a strand / stranded charge / orphaned recurring HK / failed HYP sync. Detail carries masked
+ *  context only (never raw secrets/PAN). */
+export interface BillingReconciliationItem {
+  id: string;
+  householdId: string;
+  kind: "orphaned_hk" | "strand" | "stranded_charge" | "failed_sync";
+  hkId?: string;
+  checkoutOrder?: string;
+  detail: Record<string, unknown>;
+  status: "open" | "resolved";
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
 }
 
 export interface Entitlement {

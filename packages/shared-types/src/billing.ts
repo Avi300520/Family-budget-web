@@ -126,6 +126,9 @@ export interface BillingStateInput {
   planCode: string;
   trialEndsAt?: string;
   currentPeriodEnd?: string;
+  /** True once the household asked to cancel (access continues to currentPeriodEnd, then ends).
+   *  Distinguishes a cancelling-but-still-paid sub from a lapsed one at period end. */
+  cancelAtPeriodEnd?: boolean;
 }
 
 export type EffectiveBillingStatus =
@@ -152,7 +155,11 @@ export function computeEffectiveStatus(sub: BillingStateInput | undefined | null
     }
     case "active": {
       const ends = sub.currentPeriodEnd ? Date.parse(sub.currentPeriodEnd) : NaN;
-      return !Number.isNaN(ends) && ends <= nowMs ? "past_due" : "active";
+      if (Number.isNaN(ends) || ends > nowMs) return "active";
+      // Period elapsed. A sub the user asked to cancel ends as `cancelled` (no renewal was intended);
+      // otherwise it is `past_due` (renewal expected/awaited). The stored row stays 'active' either way
+      // — this lazy read-time flip means no cron is needed to end access at the paid period boundary.
+      return sub.cancelAtPeriodEnd ? "cancelled" : "past_due";
     }
     case "past_due": return "past_due";
     case "cancelled": return "cancelled";
