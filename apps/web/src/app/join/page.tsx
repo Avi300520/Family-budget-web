@@ -12,7 +12,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner: "בעלים",
   admin: "מנהל",
   adult_member: "חבר מבוגר",
-  limited_member: "חבר מוגבל"
+  limited_member: "בן/בת בית"
 };
 
 type Phase = "loading" | "auth" | "link_sent" | "preview" | "joining" | "done" | "error";

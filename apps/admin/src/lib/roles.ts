@@ -26,7 +26,7 @@ export function roleDisplay(role: string, opts?: { isCoManager?: boolean; status
         ? { label: "מנהל שותף", help: "מבוגר עם הרשאות ניהול רחבות בבית, אך לא משנה בעלות או בילינג אם המדיניות מגבילה זאת." }
         : { label: "מבוגר", help: "חבר בית רגיל עם גישה לפי הרשאות." };
     case "limited_member":
-      return { label: "ילד / בן משפחה מוגבל", help: "גישה מצומצמת. יכול להעלות קבלות לפי המדיניות, אך לא רואה נתונים רגישים או ניהול בית." };
+      return { label: "בן/בת בית", help: "גישה מצומצמת. יכול להעלות קבלות לפי המדיניות, אך לא רואה נתונים רגישים או ניהול בית." };
     default:
       return { label: role, help: "" };
   }

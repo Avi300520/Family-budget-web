@@ -17,7 +17,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner: "בעלים",
   admin: "מנהל",
   adult_member: "חבר מבוגר",
-  limited_member: "חבר מוגבל"
+  limited_member: "בן/בת בית"
 };
 
 /** Chip accent per role - owner reads as the household anchor (teal). */
@@ -44,7 +44,7 @@ type RoleOption = {
 const ROLE_OPTIONS: RoleOption[] = [
   { value: "admin", title: "בן/בת זוג", sub: "הרשאות מלאות - רואה ומנהל הכול", color: "var(--m-mom)", managerOnly: true },
   { value: "adult_member", title: "חבר מבוגר", sub: "רואה את התקציב ומוסיף הוצאות", color: "var(--m-teen)" },
-  { value: "limited_member", title: "ילד (מוגבל)", sub: "מעדכן ומבקש אישור - בלי לראות הכול", color: "var(--m-kid)" }
+  { value: "limited_member", title: "בן/בת בית", sub: "מעדכן ומבקש אישור - בלי לראות הכול", color: "var(--m-kid)" }
 ];
 
 function RolePicker({
