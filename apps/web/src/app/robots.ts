@@ -22,6 +22,7 @@ export default function robots(): MetadataRoute.Robots {
         "/join",
         "/budget",
         "/auth",
+        "/l",
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
