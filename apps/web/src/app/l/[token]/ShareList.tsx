@@ -136,6 +136,22 @@ export function ShareList({ token }: { token: string }) {
     it.outOfStock ? act(it.id, "restock", (x) => ({ ...x, outOfStock: false }))
                   : act(it.id, "missing", (x) => ({ ...x, outOfStock: true }));
 
+  // BATCH-DD — explicit "I'm done shopping" (closes out any items still on the list and, when
+  // the backend feature is armed, nudges the amount in WhatsApp). Best-effort: the endpoint 404s
+  // when the feature is dormant — we just refetch; the "done" state below is derived from the list.
+  const [finishing, setFinishing] = useState(false);
+  const finish = useCallback(() => {
+    if (finishing) return;
+    setFinishing(true);
+    (async () => {
+      try {
+        await fetch(`${base}/l/${token}/complete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      } catch { /* best-effort — the poll + list truth reconcile the view */ }
+      await fetchList();
+      setFinishing(false);
+    })();
+  }, [base, token, fetchList, finishing]);
+
   const active = useMemo(() => items.filter((i) => i.status === "active"), [items]);
   const bought = useMemo(() => items.filter((i) => i.status === "purchased"), [items]);
   const groups = useMemo(() => {
@@ -163,6 +179,13 @@ export function ShareList({ token }: { token: string }) {
           <button style={S.toastBtn} onClick={() => { const f = failed; setFailed(null); act(f.id, f.action, f.optimistic); }}>
             נסו שוב
           </button>
+        </div>
+      )}
+
+      {active.length === 0 && bought.length > 0 && (
+        <div style={S.doneBanner}>
+          <div style={S.doneTitle}>🎉 כל הכבוד, סיימתם את הקנייה!</div>
+          <div style={S.doneSub}>שלחו לבוט בוואטסאפ את הסכום ששילמתם ונוסיף אותו לתקציב.</div>
         </div>
       )}
 
@@ -204,6 +227,14 @@ export function ShareList({ token }: { token: string }) {
       )}
 
       {active.length === 0 && bought.length === 0 && <Centered>הרשימה ריקה.</Centered>}
+
+      {active.length > 0 && (
+        <div style={S.footer}>
+          <button style={S.finishBtn} onClick={finish} disabled={finishing} aria-label="סיימתי את הקנייה">
+            {finishing ? "מסיים…" : "סיימתי את הקנייה ✓"}
+          </button>
+        </div>
+      )}
     </main>
   );
 }
@@ -234,5 +265,10 @@ const S: Record<string, React.CSSProperties> = {
   nameDone: { fontSize: 15, color: "var(--text-2, #7A8390)", textDecoration: "line-through" },
   toast: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, margin: "0 0 12px", padding: "10px 14px", background: "#FDECEC", border: "1px solid #F3C0C0", borderRadius: 12, color: "#8A1C1C", fontWeight: 600 },
   toastBtn: { flexShrink: 0, padding: "6px 12px", borderRadius: 10, border: "none", background: "#8A1C1C", color: "#fff", fontWeight: 700, cursor: "pointer" },
+  doneBanner: { margin: "0 0 14px", padding: "14px 16px", background: "#E7F6EE", border: "1px solid #BFE6CE", borderRadius: 14, textAlign: "center" },
+  doneTitle: { fontSize: 17, fontWeight: 800, color: "var(--pos, #2A8C5A)" },
+  doneSub: { marginTop: 4, fontSize: 14, lineHeight: 1.4, color: "var(--text-1, #45505F)" },
+  footer: { position: "sticky", bottom: 0, marginTop: 8, padding: "10px 0 calc(6px + env(safe-area-inset-bottom))", background: "linear-gradient(to top, var(--cream-0, #FBF8F1) 70%, transparent)" },
+  finishBtn: { width: "100%", minHeight: 52, borderRadius: 14, border: "none", background: "var(--teal, #0F766E)", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer" },
   centered: { minHeight: "70dvh", display: "grid", placeItems: "center", padding: 24, textAlign: "center", color: "var(--text-2, #7A8390)", fontSize: 16, lineHeight: 1.5 },
 };
