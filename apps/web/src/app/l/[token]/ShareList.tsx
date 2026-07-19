@@ -22,8 +22,11 @@ type ShareItem = {
   category: ShoppingCategoryId;
   status: "active" | "purchased" | "removed";
   outOfStock: boolean;
+  // BATCH-FF: how many of `quantity` were taken so far (null = not partially set). Drives the
+  // "bought X of Y" stepper; survives a poll refetch because it's part of the server projection.
+  quantityBought: number | null;
 };
-type ShareAction = "bought" | "missing" | "restock" | "unbought";
+type ShareAction = "bought" | "missing" | "restock" | "unbought" | "partial";
 type Phase = "loading" | "ready" | "invalid" | "error";
 
 const POLL_BASE_MS = 3000;
@@ -33,6 +36,9 @@ export function ShareList({ token }: { token: string }) {
   const base = apiBaseUrl();
   const [items, setItems] = useState<ShareItem[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
+  // BATCH-FF: the trip has been completed (server completion_fired_at set) → the list is LOCKED:
+  // rendered read-only, polling stops, no write is sent. Derived from the GET response only.
+  const [completed, setCompleted] = useState(false);
   const [failed, setFailed] = useState<{ id: string; action: ShareAction; optimistic: (it: ShareItem) => ShareItem } | null>(null);
   // Items with an in-flight local mutation — a poll refetch keeps the LOCAL copy for these
   // (R12: never blind-replace an un-acked tap). A ref so the poll closure reads the live set.
@@ -52,8 +58,9 @@ export function ShareList({ token }: { token: string }) {
       const res = await fetch(`${base}/l/${token}`, { cache: "no-store" });
       if (res.status === 404) return "invalid";
       if (!res.ok) return "error";
-      const body = (await res.json()) as { version: number; items: ShareItem[] };
+      const body = (await res.json()) as { version: number; items: ShareItem[]; completed?: boolean };
       versionRef.current = body.version;
+      setCompleted(body.completed === true);
       mergeServer(body.items);
       return "ok";
     } catch {
@@ -74,7 +81,7 @@ export function ShareList({ token }: { token: string }) {
   // Version poll — recursive setTimeout for per-tick jitter, paused on a hidden tab, plus an
   // immediate check when the tab becomes visible again.
   useEffect(() => {
-    if (phase !== "ready") return;
+    if (phase !== "ready" || completed) return; // BATCH-FF: a locked (completed) list never changes
     let timer: ReturnType<typeof setTimeout>;
     let alive = true;
 
@@ -101,9 +108,9 @@ export function ShareList({ token }: { token: string }) {
     document.addEventListener("visibilitychange", onVisible);
     timer = setTimeout(tick, jitter());
     return () => { alive = false; clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [phase, base, token, fetchList]);
+  }, [phase, completed, base, token, fetchList]);
 
-  const act = useCallback((id: string, action: ShareAction, optimistic: (it: ShareItem) => ShareItem) => {
+  const act = useCallback((id: string, action: ShareAction, optimistic: (it: ShareItem) => ShareItem, quantityBought?: number) => {
     setFailed((f) => (f?.id === id ? null : f));
     setItems((prev) => prev.map((it) => (it.id === id ? optimistic(it) : it)));
     pendingRef.current.add(id);
@@ -114,7 +121,7 @@ export function ShareList({ token }: { token: string }) {
         const res = await fetch(`${base}/l/${token}/items/${id}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
+          body: JSON.stringify(quantityBought === undefined ? { action } : { action, quantityBought }),
         });
         ok = res.ok;
       } catch { ok = false; }
@@ -130,11 +137,21 @@ export function ShareList({ token }: { token: string }) {
     })();
   }, [base, token, fetchList]);
 
-  const buy = (it: ShareItem) => act(it.id, "bought", (x) => ({ ...x, status: "purchased", outOfStock: false }));
-  const undo = (it: ShareItem) => act(it.id, "unbought", (x) => ({ ...x, status: "active" }));
+  const buy = (it: ShareItem) => act(it.id, "bought", (x) => ({ ...x, status: "purchased", outOfStock: false, quantityBought: null }));
+  const undo = (it: ShareItem) => act(it.id, "unbought", (x) => ({ ...x, status: "active", quantityBought: null }));
   const toggleMissing = (it: ShareItem) =>
     it.outOfStock ? act(it.id, "restock", (x) => ({ ...x, outOfStock: false }))
-                  : act(it.id, "missing", (x) => ({ ...x, outOfStock: true }));
+                  : act(it.id, "missing", (x) => ({ ...x, outOfStock: true, quantityBought: null }));
+
+  // BATCH-FF — partial "bought X of Y" stepper (multi-qty items only). One control drives all
+  // three ends: 0 → back to untouched (unbought), full Y → bought (sinks to נקנה), 0<X<Y →
+  // partial (stays active; the shortfall carries to next trip at completion). Clamped to [0, Y].
+  const setPartial = (it: ShareItem, next: number) => {
+    const v = Math.max(0, Math.min(next, it.quantity));
+    if (v === 0) return act(it.id, "unbought", (x) => ({ ...x, status: "active", quantityBought: null }));
+    if (v >= it.quantity) return buy(it);
+    act(it.id, "partial", (x) => ({ ...x, status: "active", outOfStock: false, quantityBought: v }), v);
+  };
 
   // BATCH-DD — explicit "I'm done shopping" (closes out any items still on the list and, when
   // the backend feature is armed, nudges the amount in WhatsApp). Best-effort: the endpoint 404s
@@ -166,6 +183,54 @@ export function ShareList({ token }: { token: string }) {
   if (phase === "invalid") return <Centered>הקישור לרשימה אינו תקף או שפג תוקפו. בקשו קישור חדש מהבוט בוואטסאפ.</Centered>;
   if (phase === "error") return <Centered>לא הצלחנו לטעון את הרשימה. בדקו את החיבור ונסו שוב.</Centered>;
 
+  // BATCH-FF — LOCKED (completed) view: read-only, no toggle / no missing / no finish button, so
+  // a stale page can't un-check after the trip closed (the server also no-ops writes). Keep the
+  // celebration; the kept-back (still-active) items show what carried to next time.
+  if (completed) {
+    return (
+      <main style={S.page}>
+        <header style={S.header}>
+          <div style={S.title}>🛒 רשימת קניות</div>
+          <div style={S.remain}>נסגר</div>
+        </header>
+
+        <div style={S.doneBanner}>
+          <div style={S.doneTitle}>🎉 כל הכבוד, סיימתם את הקנייה!</div>
+          <div style={S.doneSub}>שלחו לבוט בוואטסאפ את הסכום ששילמתם ונוסיף אותו לתקציב.</div>
+        </div>
+
+        {active.length > 0 && (
+          <section style={S.section}>
+            <div style={S.catHead}>נשאר לפעם הבאה ({active.length})</div>
+            {active.map((it) => (
+              <div key={it.id} style={{ ...S.row, ...S.lockedRow }}>
+                <span style={S.name}>
+                  {it.name}
+                  {it.quantity > 1 ? <span style={S.qty}> ×{it.quantity}</span> : null}
+                  {it.outOfStock ? <span style={S.badge}>חסר במלאי</span> : null}
+                </span>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {bought.length > 0 && (
+          <section style={S.section}>
+            <div style={S.catHead}>✅ נקנה ({bought.length})</div>
+            {bought.map((it) => (
+              <div key={it.id} style={{ ...S.row, ...S.boughtRow, ...S.lockedRow, cursor: "default" }}>
+                <span style={S.checkboxDone} aria-hidden>✓</span>
+                <span style={S.nameDone}>{it.name}{it.quantity > 1 ? ` ×${it.quantity}` : ""}</span>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <div style={S.closedNotice}>הרשימה נסגרה. לרשימה חדשה שלחו לבוט &quot;תביא רשימה&quot;.</div>
+      </main>
+    );
+  }
+
   return (
     <main style={S.page}>
       <header style={S.header}>
@@ -193,22 +258,35 @@ export function ShareList({ token }: { token: string }) {
         <section key={g.id} style={S.section}>
           <div style={S.catHead}>{g.icon} {g.nameHe}</div>
           {g.items.map((it) => (
-            <div key={it.id} style={S.row}>
-              <button style={S.buyTap} onClick={() => buy(it)} aria-label={`סמן ${it.name} כנקנה`}>
-                <span style={S.checkbox} aria-hidden />
-                <span style={S.name}>
-                  {it.name}
-                  {it.quantity > 1 ? <span style={S.qty}> ×{it.quantity}</span> : null}
-                  {it.outOfStock ? <span style={S.badge}>חסר במלאי</span> : null}
-                </span>
-              </button>
-              <button
-                style={{ ...S.missBtn, ...(it.outOfStock ? S.missBtnOn : null) }}
-                onClick={() => toggleMissing(it)}
-                aria-pressed={it.outOfStock}
-              >
-                חסר
-              </button>
+            <div key={it.id} style={S.itemBlock}>
+              <div style={S.row}>
+                <button style={S.buyTap} onClick={() => buy(it)} aria-label={`סמן ${it.name} כנקנה`}>
+                  <span style={S.checkbox} aria-hidden />
+                  <span style={S.name}>
+                    {it.name}
+                    {it.quantity > 1 ? <span style={S.qty}> ×{it.quantity}</span> : null}
+                    {it.quantityBought != null ? <span style={S.partialBadge}>{it.quantityBought}/{it.quantity}</span> : null}
+                    {it.outOfStock ? <span style={S.badge}>חסר במלאי</span> : null}
+                  </span>
+                </button>
+                <button
+                  style={{ ...S.missBtn, ...(it.outOfStock ? S.missBtnOn : null) }}
+                  onClick={() => toggleMissing(it)}
+                  aria-pressed={it.outOfStock}
+                >
+                  חסר
+                </button>
+              </div>
+              {/* BATCH-FF — partial "how many did you take?" stepper, multi-qty items only. The
+                  main tap above still means "bought all" (fast path); this records X of Y. */}
+              {it.quantity > 1 && (
+                <div style={S.stepRow}>
+                  <span style={S.stepLabel}>כמה לקחתם?</span>
+                  <button style={S.stepBtn} onClick={() => setPartial(it, (it.quantityBought ?? 0) - 1)} aria-label={`הפחת כמות של ${it.name}`}>−</button>
+                  <span style={S.stepCount} aria-live="polite">{it.quantityBought ?? 0} / {it.quantity}</span>
+                  <button style={S.stepBtn} onClick={() => setPartial(it, (it.quantityBought ?? 0) + 1)} aria-label={`הוסף כמות של ${it.name}`}>+</button>
+                </div>
+              )}
             </div>
           ))}
         </section>
@@ -252,7 +330,16 @@ const S: Record<string, React.CSSProperties> = {
   remain: { fontSize: 15, fontWeight: 700, color: "var(--teal, #0F766E)" },
   section: { marginBottom: 14 },
   catHead: { fontSize: 13, fontWeight: 700, color: "var(--text-2, #7A8390)", padding: "6px 4px" },
-  row: { display: "flex", alignItems: "stretch", gap: 8, marginBottom: 8, width: "100%" },
+  itemBlock: { marginBottom: 8 },
+  row: { display: "flex", alignItems: "stretch", gap: 8, width: "100%" },
+  lockedRow: { marginBottom: 8, opacity: 0.85 },
+  // BATCH-FF partial stepper — a compact secondary control under a multi-qty row.
+  stepRow: { display: "flex", alignItems: "center", gap: 10, padding: "4px 14px 0", justifyContent: "flex-start" },
+  stepLabel: { fontSize: 12.5, fontWeight: 600, color: "var(--text-2, #7A8390)" },
+  stepBtn: { width: 34, height: 34, borderRadius: 10, border: "1px solid var(--cream-3, #ECE5D5)", background: "var(--cream-2, #FFF)", color: "var(--text-1, #45505F)", fontSize: 20, fontWeight: 800, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
+  stepCount: { minWidth: 44, textAlign: "center", fontSize: 14, fontWeight: 700, color: "var(--text-1, #45505F)", fontVariantNumeric: "tabular-nums" },
+  partialBadge: { marginInlineStart: 8, fontSize: 11, fontWeight: 800, color: "var(--teal, #0F766E)", background: "#DCF2EE", borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" },
+  closedNotice: { margin: "6px 0 0", padding: "12px 14px", background: "var(--cream-2, #FFF)", border: "1px dashed var(--cream-3, #ECE5D5)", borderRadius: 12, textAlign: "center", fontSize: 14, lineHeight: 1.5, color: "var(--text-2, #7A8390)" },
   buyTap: { flex: 1, display: "flex", alignItems: "center", gap: 12, minHeight: 54, padding: "0 14px", textAlign: "start", background: "var(--cream-2, #FFF)", border: "1px solid var(--cream-3, #ECE5D5)", borderRadius: 14, cursor: "pointer", font: "inherit", color: "inherit" },
   checkbox: { flexShrink: 0, width: 22, height: 22, borderRadius: 7, border: "2px solid var(--cream-3, #ECE5D5)" },
   name: { fontSize: 16, fontWeight: 600, lineHeight: 1.25 },
@@ -260,7 +347,7 @@ const S: Record<string, React.CSSProperties> = {
   badge: { marginInlineStart: 8, fontSize: 11, fontWeight: 700, color: "#9A5B00", background: "#FBE7C6", borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" },
   missBtn: { flexShrink: 0, minWidth: 60, minHeight: 54, borderRadius: 14, border: "1px solid var(--cream-3, #ECE5D5)", background: "var(--cream-2, #FFF)", color: "var(--text-2, #7A8390)", fontWeight: 700, cursor: "pointer" },
   missBtnOn: { background: "#FBE7C6", borderColor: "#F0D48A", color: "#9A5B00" },
-  boughtRow: { minHeight: 48, alignItems: "center", gap: 12, padding: "0 14px", background: "transparent", border: "1px solid transparent", borderRadius: 14, cursor: "pointer", width: "100%", textAlign: "start", font: "inherit", color: "inherit" },
+  boughtRow: { minHeight: 48, marginBottom: 8, alignItems: "center", gap: 12, padding: "0 14px", background: "transparent", border: "1px solid transparent", borderRadius: 14, cursor: "pointer", width: "100%", textAlign: "start", font: "inherit", color: "inherit" },
   checkboxDone: { flexShrink: 0, width: 22, height: 22, borderRadius: 7, background: "var(--pos, #2A8C5A)", color: "#fff", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 800 },
   nameDone: { fontSize: 15, color: "var(--text-2, #7A8390)", textDecoration: "line-through" },
   toast: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, margin: "0 0 12px", padding: "10px 14px", background: "#FDECEC", border: "1px solid #F3C0C0", borderRadius: 12, color: "#8A1C1C", fontWeight: 600 },
