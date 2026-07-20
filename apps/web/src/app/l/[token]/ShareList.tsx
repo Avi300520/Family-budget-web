@@ -225,7 +225,7 @@ export function ShareList({ token }: { token: string }) {
             <h2 style={S.catHead}>נשאר לפעם הבאה ({active.length})</h2>
             <ul role="list" style={S.list}>
               {active.map((it) => (
-                <li key={it.id} style={{ ...S.row, ...S.lockedRow }}>
+                <li key={it.id} role="listitem" style={{ ...S.row, ...S.lockedRow }}>
                   <span style={S.name}>
                     {it.name}
                     {it.quantity > 1 ? <Qty n={it.quantity} style={S.qty} /> : null}
@@ -242,7 +242,7 @@ export function ShareList({ token }: { token: string }) {
             <h2 style={S.catHead}><span aria-hidden>✅</span> נקנה ({bought.length})</h2>
             <ul role="list" style={S.list}>
               {bought.map((it) => (
-                <li key={it.id} style={{ ...S.row, ...S.boughtRow, ...S.lockedRow, cursor: "default" }}>
+                <li key={it.id} role="listitem" style={{ ...S.row, ...S.boughtRow, ...S.lockedRow, cursor: "default" }}>
                   <span style={S.checkboxDone} aria-hidden>✓</span>
                   <span style={S.nameDone}>{it.name}{it.quantity > 1 ? <Qty n={it.quantity} /> : null}</span>
                 </li>
@@ -435,10 +435,15 @@ const S: Record<string, React.CSSProperties> = {
   section: { marginBottom: 14 },
   catHead: { margin: 0, fontSize: 13, fontWeight: 700, color: "var(--text-2, #59626E)", padding: "6px 4px" },
   // <ul role="list"> reset — the list semantics are for AT only, the box must not move.
+  // NB: rows built on S.row carry an explicit role="listitem"; display:flex drops the
+  // implicit listitem role in WebKit, which would make role="list" announce 0 items.
   list: { listStyle: "none", margin: 0, padding: 0 },
   itemBlock: { marginBottom: 8 },
   row: { display: "flex", alignItems: "stretch", gap: 8, width: "100%" },
-  lockedRow: { marginBottom: 8, opacity: 0.85 },
+  // a11y 1.4.3: no opacity here. Dimming the row diluted text against --cream-0
+  // (nameDone 5.83 -> 4.16, the "חסר במלאי" badge 5.05 -> 3.81). The locked state
+  // is already carried by the banner, the closed notice and the strike-through.
+  lockedRow: { marginBottom: 8 },
   // BATCH-FF partial stepper — a compact secondary control under a multi-qty row.
   stepRow: { display: "flex", alignItems: "center", gap: 10, padding: "4px 14px 0", justifyContent: "flex-start" },
   stepLabel: { fontSize: 12.5, fontWeight: 600, color: "var(--text-2, #59626E)" },
@@ -452,7 +457,9 @@ const S: Record<string, React.CSSProperties> = {
   qty: { color: "var(--text-2, #59626E)", fontWeight: 700 },
   badge: { marginInlineStart: 8, fontSize: 11, fontWeight: 700, color: "#8F5400", background: "#FBE7C6", borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" },
   missBtn: { flexShrink: 0, minWidth: 60, minHeight: 54, borderRadius: 14, border: "1px solid var(--field-border, #9C8E6B)", background: "var(--cream-2, #FFF)", color: "var(--text-2, #59626E)", fontWeight: 700, cursor: "pointer" },
-  missBtnOn: { background: "#FBE7C6", borderColor: "#F0D48A", color: "#8F5400" },
+  // a11y 1.4.11: the old borderColor #F0D48A was 1.45:1 on the card - below the 3:1
+  // UI-boundary floor for the PRESSED state. Inherit missBtn's --field-border (3.23:1).
+  missBtnOn: { background: "#FBE7C6", color: "#8F5400" },
   boughtRow: { minHeight: 48, marginBottom: 8, alignItems: "center", gap: 12, padding: "0 14px", background: "transparent", border: "1px solid transparent", borderRadius: 14, cursor: "pointer", width: "100%", textAlign: "start", font: "inherit", color: "inherit" },
   checkboxDone: { flexShrink: 0, width: 22, height: 22, borderRadius: 7, background: "var(--pos, #1B6B43)", color: "#fff", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 800 },
   nameDone: { fontSize: 15, color: "var(--text-2, #59626E)", textDecoration: "line-through" },

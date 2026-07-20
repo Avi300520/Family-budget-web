@@ -95,7 +95,13 @@ export default [
       // audit itself prescribes `<ul role="list">` (P1-7) and flags the semantics loss
       // (P2-11). We use the rule's own documented allowance option instead of a
       // blanket disable, so every OTHER redundant role is still an error.
-      "jsx-a11y/no-redundant-roles": ["error", { ul: ["list"] }],
+      //
+      // `<li role="listitem">` is the SAME defect one level down, and is needed for the
+      // same reason: a WebKit `<li>` whose computed display is not `list-item` (ours are
+      // `display:flex` rows) loses its implicit `listitem` role, so the parent
+      // `<ul role="list">` announces "list, 0 items" while the rows are visibly there.
+      // Applied only where a flex row is used as a list item (/l locked view).
+      "jsx-a11y/no-redundant-roles": ["error", { ul: ["list"], li: ["listitem"] }],
 
       // --- TRIAGED: `no-autofocus` is OFF, deliberately. ---------------------------
       // Hits: apps/web/src/app/onboarding/steps.tsx (the money field of the income and

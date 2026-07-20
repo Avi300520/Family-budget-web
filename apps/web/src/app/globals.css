@@ -208,6 +208,10 @@ html[data-a11y-contrast="on"] {
 html[data-a11y-contrast="on"] .pt-root {
   --text-1: #000000;
   --text-2: #000000;
+  /* marketing.css redefines --text-3 (#706B63) inside .pt-root, so the :root
+     override above does NOT reach the landing. Without this line high-contrast
+     is a no-op for muted text on / and /login. See CLAUDE.md (.pt-root trap). */
+  --text-3: #000000;
   --cream-0: #FFFFFF;
   --cream-1: #FFFFFF;
   --cream-3: #6B6B6B;
