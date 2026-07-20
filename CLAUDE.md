@@ -10,9 +10,31 @@
 
 ## Accessibility — WCAG 2.0 AA / IS 5568 (BATCH-GH, 2026-07-20) — READ BEFORE TOUCHING TOKENS, FOCUS, OR ANY PUBLIC ROUTE
 
-Branch `batch-gh/accessibility-wcag-aa` (off `main` `f2bf0c5`, commit `f7976a1`) makes the **public**
-web surface honestly WCAG 2.0 AA conformant so an Israeli accessibility statement (הצהרת נגישות,
-תקנה 35) can be published truthfully. **Frontend-only. NOT deployed — owner release gate.**
+Branch `batch-gh/accessibility-wcag-aa` (off `main` `f2bf0c5`, commits `f7976a1` + `7cdbf2f`) makes
+the **public** web surface honestly WCAG 2.0 AA conformant so an Israeli accessibility statement
+(הצהרת נגישות, תקנה 35) can be published truthfully. **Frontend-only.**
+
+**DEPLOYED to production 2026-07-20** — merged to `main` (ff to `7cdbf2f`), Vercel prod
+`dpl_CCXd8yKbWUQNm9d8gXzZ2LrK23M6`. **Rollback = re-point the prod alias to
+`dpl_7mVdz2q8Vb5TiMrvFMqxNUGEor2a`** (`f2bf0c5`, the last pre-a11y prod build); one action, no
+backend/DB/flag to undo. The owner reviewed on live prod rather than qa because
+**`qa.pingtally.com` no longer exists** — it was decommissioned 2026-06-30 and is NXDOMAIN at
+Cloudflare with no Vercel domain, so a `*.vercel.app` preview is CORS-blocked by the API
+(verified: prod + qa origins get `Access-Control-Allow-Origin`, `*.vercel.app` gets none).
+The backend still allow-lists the qa origin, so restoring qa is 2 owner dashboard actions
+(CF CNAME + Vercel add-domain) if a staged review env is ever wanted again.
+
+Verified live with `getComputedStyle` in real Chromium: the two contrast defects that had been
+in production are fixed — CTA links **1.75 → 5.47:1**, trust intro **1.71 → 12.90:1**.
+
+**`7cdbf2f` fixed 4 defects found in the remediation itself** by cross-checking the diff against
+the handoff checklist (all in-scope public routes, all measured not read): `/l` locked view
+`opacity:.85` diluted text to **4.16:1** / **3.81:1** (1.4.3); the pressed `חסר` border was
+**1.45:1** (1.4.11); the two flex `<li>` lost their implicit `listitem` role in WebKit so
+`<ul role="list">` announced 0 items (1.3.1); and `html[data-a11y-contrast=on] .pt-root` omitted
+`--text-3`, making high-contrast a **no-op on `/` and `/login`** (the `.pt-root` trap below, again).
+**Lesson: `opacity` on a row is a contrast bug — it composites text toward the background. Never
+dim a container that holds text that is already near the AA floor.**
 Gap report: `Shopping assistant/docs/audit/2026-07-06/ACCESSIBILITY_AUDIT.md`.
 Auditor handoff: `.../ACCESSIBILITY_HANDOFF_CHECKLIST.md`. Ledger: `.../TASK_INDEX.md` BATCH-GH.
 
@@ -65,7 +87,18 @@ check that the menu launcher does not obscure the sticky CTAs on `/l` and `/onbo
 human/legal item in audit §9 (named coordinator, freshly authored statement text, no publication
 before the certified מורשה נגישות review closes). Automated coverage is also **state-limited**:
 with no backend, `/join`, `/auth/consume` and `/l/[token]` scan only their error states and
-`/onboarding` only its shell.
+`/onboarding` only its shell. **Deploying did NOT close any of these** — the statement still must
+not be published until the מורשה נגישות signs off.
+
+**Auditor deliverable:** `ACCESSIBILITY_HANDOFF_CHECKLIST.md` (backend repo, branch
+`batch-gh/accessibility-docs`, commit `9f34c31`) now carries **Appendix A** — all **216** itemized
+changes mapped to WCAG criteria, 140 Done / 76 needs-auditor — plus **Appendix B** (the 4 defects
+above) and **Appendix C** (corrections: the "form-control borders" claim is *partial* by route —
+Stepper/ChipSelect/OptionCards/DayChips still `--cream-4` **1.49:1**, though **1.4.11 is WCAG 2.1,
+so that is NOT a 2.0 AA gap**; the a11y menu's own palette measured for the first time, all pass,
+reset-hover **4.76:1** is the tightest ratio in the interface; and the honest limits of
+`pnpm a11y` — it never opens the menu, so every alternate palette is unscanned, and `incomplete`
+results are never detailed and never fail the run).
 
 ---
 
