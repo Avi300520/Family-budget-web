@@ -79,6 +79,150 @@ button {
   cursor: pointer;
 }
 
+/* =============================================================================
+   ACCESSIBILITY — WCAG 2.0 AA / IS 5568  (BATCH-GH)
+   Global, UNSCOPED rules. Before this, the only design-owned focus ring lived
+   in `.pt-root` (marketing.css:77), so every other page — /l, /join,
+   /onboarding, /auth/consume, /privacy, /terms — fell back to the UA default
+   outline on teal/cream custom-coloured controls, and the phone fields removed
+   it outright. Everything below is deliberately un-scoped so a new page is
+   accessible by default rather than by remembering to opt in.
+   ============================================================================= */
+
+/* ── 2.4.7 Focus Visible + 1.4.11 Non-text Contrast ───────────────────────────
+   3px so the ring survives the 2px translucent borders on cards/buttons; 2px
+   offset so on a filled (teal) control the gap lands on the page background,
+   keeping the ring readable against BOTH surfaces. `outline` (not box-shadow)
+   because it is not clipped by overflow:hidden ancestors and it survives
+   forced-colors/Windows High Contrast.
+
+   NOTE: no `border-radius` here. An earlier revision set one alongside the
+   outline, which mutated the FOCUSED ELEMENT's own geometry rather than the
+   ring's — `.btn` (12px), `.avatar`/`.chip` (999px pills) and the round
+   accessibility launcher all snapped to 4px corners on Tab. The outline already
+   follows the element's own radius in every current browser. */
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Dark surfaces: --teal is only 2.67:1 on --ink-0, below the 3:1 floor. The
+   cream variant is 12.85:1. Covers the fixed sidebar rail, the mobile
+   off-canvas drawer and the teal settings banner. */
+.side-nav :focus-visible,
+.app-drawer :focus-visible,
+.settings-banner :focus-visible {
+  outline-color: var(--focus-ring-on-dark);
+}
+
+/* ── Visually-hidden text (accessible names / live-region copy) ─────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Skip link (site-wide; targets the page's <main id="main">) ─────────────── */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  inset-inline-start: 12px;
+  z-index: 200;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  background: var(--teal);
+  color: var(--on-color);
+  border-radius: var(--r-2);
+  font-weight: 700;
+  padding: 0;
+}
+.skip-link:focus {
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  padding: 10px 16px;
+}
+
+/* ── Accessibility menu preferences ───────────────────────────────────────────
+   Set as data-attributes on <html> by components/a11y/AccessibilityMenu.tsx and
+   persisted in localStorage. Font scaling uses `zoom` on <html> (set inline by
+   the same component) rather than a root font-size: this codebase sizes
+   everything in px (audit P2-13), so a rem-based scale would move nothing.
+   ponytail: `zoom` is the one-property answer that actually works on a px
+   codebase and reflows correctly. Ceiling — Firefox only shipped `zoom` in 126;
+   older browsers simply get no scaling and every other control still works. */
+html[data-a11y-links="on"] a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+html[data-a11y-font="on"] body,
+html[data-a11y-font="on"] .pt-root {
+  font-family: Arial, Verdana, "Segoe UI", sans-serif;
+  letter-spacing: 0.01em;
+  word-spacing: 0.05em;
+}
+
+/* Stop-motion: the same intent as the existing prefers-reduced-motion blocks
+   (marketing.css:204/216/343, onboarding.module.css:136), made user-selectable
+   for people whose OS setting is off or unavailable. */
+html[data-a11y-motion="off"] *,
+html[data-a11y-motion="off"] *::before,
+html[data-a11y-motion="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* High contrast: push the neutral text ramp to maximum and harden every
+   boundary. Deliberately NOT a colour inversion or a filter — those are the
+   heuristic overlay behaviours that break RTL Hebrew layouts (audit §6). */
+html[data-a11y-contrast="on"] {
+  --text-1: #000000;
+  --text-2: #000000;
+  --text-3: #000000;
+  --cream-0: #FFFFFF;
+  --cream-1: #FFFFFF;
+  --cream-3: #6B6B6B;
+  --cream-4: #3D3D3D;
+  --field-border: #000000;
+  --teal: #05564F;
+  --teal-dark: #05564F;
+  --on-ink-1: #FFFFFF;
+  --on-ink-2: #FFFFFF;
+}
+html[data-a11y-contrast="on"] .pt-root {
+  --text-1: #000000;
+  --text-2: #000000;
+  --cream-0: #FFFFFF;
+  --cream-1: #FFFFFF;
+  --cream-3: #6B6B6B;
+  --cream-4: #3D3D3D;
+  --teal: #05564F;
+  --teal-dark: #05564F;
+}
+html[data-a11y-contrast="on"] .card,
+html[data-a11y-contrast="on"] .panel,
+html[data-a11y-contrast="on"] .section,
+html[data-a11y-contrast="on"] .login-box,
+html[data-a11y-contrast="on"] .item-card {
+  border-color: var(--text-0);
+}
+
 /* -----------------------------------------------------------------------------
    Legacy classes (rebuilt iteration-by-iteration)
    -------------------------------------------------------------------------- */
@@ -259,7 +403,9 @@ button {
 .textarea,
 .select {
   width: 100%;
-  border: 1.5px solid var(--line);
+  /* 1.4.11 — the boundary is the only thing identifying this control against the
+     page (its white fill vs --cream-0 is 1.06:1). --line/--cream-3 was 1.25:1. */
+  border: 1.5px solid var(--field-border);
   border-radius: 10px;
   padding: 11px 12px;
   background: var(--surface);
@@ -382,7 +528,7 @@ button {
   height: 50px;
   padding: 0 14px;
   border-radius: var(--r-3);
-  border: 1.5px solid var(--cream-4);
+  border: 1.5px solid var(--field-border);
   background: var(--cream-2);
   color: var(--text-0);
   font-family: var(--font-mono);
@@ -401,7 +547,7 @@ button {
   padding-inline-start: 12px;
   padding-inline-end: 30px;
   border-radius: var(--r-3);
-  border: 1.5px solid var(--cream-4);
+  border: 1.5px solid var(--field-border);
   background: var(--cream-2);
   color: var(--text-0);
   font-size: 14px;
@@ -409,14 +555,18 @@ button {
   appearance: none;
   -webkit-appearance: none;
   text-overflow: ellipsis;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237A8390' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2359626E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: left 10px center;
   transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
+/* 2.4.7 — this rule used to set `outline: none` and replace it with a
+   --teal-bg glow that is only ~1.1:1 against white, i.e. no usable indicator.
+   The outline is no longer suppressed: the global :focus-visible ring above
+   applies (class+pseudo specificity would otherwise beat it), and the border /
+   glow stay purely as the aesthetic treatment on top. */
 .phone-field__num:focus,
 .phone-field__cc:focus {
-  outline: none;
   border-color: var(--teal);
   box-shadow: 0 0 0 3px var(--teal-bg);
 }

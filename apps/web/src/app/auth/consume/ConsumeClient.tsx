@@ -53,26 +53,34 @@ export default function ConsumeClient() {
   if (!token) {
     return (
       <div className="login-page">
-        <div className="login-box status error">חסר token. בקשו קישור חדש מעמוד הכניסה.</div>
+        <main id="main" className="login-box status error">
+          <h1 className="sr-only">כניסה</h1>
+          <div role="alert">חסר token. בקשו קישור חדש מעמוד הכניסה.</div>
+        </main>
       </div>
     );
   }
 
   return (
     <div className="login-page">
-      <div className="login-box" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center", textAlign: "center" }}>
-        <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>כמעט בפנים 👋</div>
+      <main id="main" className="login-box" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center", textAlign: "center" }}>
+        {/* h1 carries the original inline style + margin:0 so the rendered pixels
+            are unchanged (a styled <div> was the only page title before). */}
+        <h1 style={{ fontWeight: 700, fontSize: "1.1rem", margin: 0 }}>כמעט בפנים <span aria-hidden>👋</span></h1>
         <div className="muted">לחצו כדי להיכנס לקופה המשפחתית.</div>
-        <button className="button" onClick={confirmLogin} disabled={working} style={{ minWidth: 160 }}>
+        <button className="button" type="button" onClick={confirmLogin} disabled={working} style={{ minWidth: 160 }}>
           {working ? "מתחברים..." : "כניסה"}
         </button>
-        {error && <div className="status error">{error}</div>}
+        {/* Disabling the button on submit drops focus, so the label change alone
+            is never announced - this persistent live region carries the state. */}
+        <span className="sr-only" role="status">{working ? "מתחברים..." : ""}</span>
+        {error && <div className="status error" role="alert">{error}</div>}
         {error && (
           <a href="/login" className="muted" style={{ fontSize: "0.9rem" }}>
             לעמוד הכניסה
           </a>
         )}
-      </div>
+      </main>
     </div>
   );
 }

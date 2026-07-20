@@ -25,12 +25,16 @@ import { LandingJsonLd } from "./LandingJsonLd";
 const WA = "var(--wa)";
 
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
+// a11y (P2-3, WCAG 1.1.1): every lucide icon on this page sits BESIDE its own
+// text label, so it is decorative and carries aria-hidden. No icon here is the
+// sole content of a control (the nav burger is the only such case and keeps its
+// aria-label - see LandingNav).
 const HERO_CHIPS = [
-  { icon: <MessageCircle size={15} color={WA} />, label: "כניסה בוואטסאפ, בלי סיסמה" },
-  { icon: <ShieldCheck size={15} />, label: "כניסה מאובטחת וחיבור מוצפן" },
-  { icon: <Tag size={15} />, label: "המידע לא נמכר לאף אחד" },
-  { icon: <CreditCard size={15} />, label: "בלי כרטיס אשראי כדי להתחיל" },
-  { icon: <Landmark size={15} />, label: "בלי לחבר חשבון בנק" },
+  { icon: <MessageCircle size={15} color={WA} aria-hidden="true" />, label: "כניסה בוואטסאפ, בלי סיסמה" },
+  { icon: <ShieldCheck size={15} aria-hidden="true" />, label: "כניסה מאובטחת וחיבור מוצפן" },
+  { icon: <Tag size={15} aria-hidden="true" />, label: "המידע לא נמכר לאף אחד" },
+  { icon: <CreditCard size={15} aria-hidden="true" />, label: "בלי כרטיס אשראי כדי להתחיל" },
+  { icon: <Landmark size={15} aria-hidden="true" />, label: "בלי לחבר חשבון בנק" },
 ];
 
 function Hero() {
@@ -40,7 +44,7 @@ function Hero() {
       <div className="pt-wrap pt-hero__grid">
         <div className="pt-hero__text">
           <span className="pt-hero__badge">
-            <Sparkles size={15} /> 20 יום חינם · בלי אשראי להתחלה
+            <Sparkles size={15} aria-hidden="true" /> 20 יום חינם · בלי אשראי להתחלה
           </span>
           <h1>
             לדעת לאן הכסף הולך,
@@ -72,12 +76,12 @@ function Hero() {
 
 /* ── Outcomes ─────────────────────────────────────────────────────────────── */
 const OUTCOMES = [
-  { icon: <Wallet size={24} />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "רואים לאן הכסף הולך", body: "כל הוצאה נכנסת לקטגוריה הנכונה ומצטברת לתמונה אחת ברורה של החודש - בלי לנחש ובלי טבלאות." },
-  { icon: <Camera size={24} />, color: "var(--plum)", bg: "var(--plum-bg)", title: "סוף לבלאגן בקבלות", body: "מצלמים קבלה ושולחים, ה-AI עוזר לקרוא ולסווג ואתם מאשרים בקצרה. הקבלה נשמרת יחד עם ההוצאה." },
-  { icon: <ShoppingCart size={24} />, color: "var(--mustard-dark)", bg: "var(--mustard-bg)", title: "רשימת קניות אחת, מסודרת", body: "כל בני הבית מוסיפים פריטים, וכשהולכים לסופר מקבלים רשימה מסודרת לפי קטגוריות." },
-  { icon: <TrendingUp size={24} />, color: "var(--coral-dark)", bg: "var(--coral-bg)", title: "לתפוס חריגות בזמן", body: "פינג עוזר לראות חריגות לפני סוף החודש, כשעוד אפשר להגיב." },
-  { icon: <Target size={24} />, color: "var(--ocean)", bg: "var(--ocean-bg)", title: "תקציבים צדדיים, בנפרד", body: "חופשה, שיפוץ או בר מצווה - אפשר לנהל תקציב נפרד לכל פרויקט, בלי לערבב עם השוטף." },
-  { icon: <Users size={24} />, color: "var(--berry)", bg: "var(--berry-bg)", title: "כשיש ילדים בבית", body: "ילדים מוסיפים הוצאות ומנהלים קצבה אישית, בלי לראות את תקציב הבית הכללי." },
+  { icon: <Wallet size={24} aria-hidden="true" />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "רואים לאן הכסף הולך", body: "כל הוצאה נכנסת לקטגוריה הנכונה ומצטברת לתמונה אחת ברורה של החודש - בלי לנחש ובלי טבלאות." },
+  { icon: <Camera size={24} aria-hidden="true" />, color: "var(--plum)", bg: "var(--plum-bg)", title: "סוף לבלאגן בקבלות", body: "מצלמים קבלה ושולחים, ה-AI עוזר לקרוא ולסווג ואתם מאשרים בקצרה. הקבלה נשמרת יחד עם ההוצאה." },
+  { icon: <ShoppingCart size={24} aria-hidden="true" />, color: "var(--mustard-dark)", bg: "var(--mustard-bg)", title: "רשימת קניות אחת, מסודרת", body: "כל בני הבית מוסיפים פריטים, וכשהולכים לסופר מקבלים רשימה מסודרת לפי קטגוריות." },
+  { icon: <TrendingUp size={24} aria-hidden="true" />, color: "var(--coral-dark)", bg: "var(--coral-bg)", title: "לתפוס חריגות בזמן", body: "פינג עוזר לראות חריגות לפני סוף החודש, כשעוד אפשר להגיב." },
+  { icon: <Target size={24} aria-hidden="true" />, color: "var(--ocean)", bg: "var(--ocean-bg)", title: "תקציבים צדדיים, בנפרד", body: "חופשה, שיפוץ או בר מצווה - אפשר לנהל תקציב נפרד לכל פרויקט, בלי לערבב עם השוטף." },
+  { icon: <Users size={24} aria-hidden="true" />, color: "var(--berry)", bg: "var(--berry-bg)", title: "כשיש ילדים בבית", body: "ילדים מוסיפים הוצאות ומנהלים קצבה אישית, בלי לראות את תקציב הבית הכללי." },
 ];
 
 function Outcomes() {
@@ -88,17 +92,21 @@ function Outcomes() {
           <span className="pt-eyebrow">מה זה פותר</span>
           <h2>סוף לכאוס של הוצאות, קבלות וקניות</h2>
         </div>
-        <div className="pt-outcomes">
+        {/* a11y (P2-5, WCAG 1.3.1): card groups are real lists. `role="list"` is
+            kept explicitly because the container is display:grid, which drops
+            list semantics in Safari/VoiceOver. UA list defaults are neutralised
+            in marketing.css, so the rendering is unchanged. */}
+        <ul className="pt-outcomes" role="list">
           {OUTCOMES.map((o) => (
-            <article className="pt-outcome" key={o.title}>
+            <li className="pt-outcome" key={o.title}>
               <span className="pt-outcome__ic" style={{ background: o.bg, color: o.color }}>
                 {o.icon}
               </span>
               <h3>{o.title}</h3>
               <p>{o.body}</p>
-            </article>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );
@@ -106,9 +114,9 @@ function Outcomes() {
 
 /* ── How it works ─────────────────────────────────────────────────────────── */
 const STEPS = [
-  { n: "1", icon: <MessageCircle size={20} color={WA} />, title: "שולחים בוואטסאפ", body: "הוצאה, קבלה או פריט לרשימה - בכתב או בצילום, בצ'אט שכבר פתוח אצלכם." },
-  { n: "2", icon: <Sparkles size={20} />, title: "פינג מסדר", body: "מזהה את הסכום, הקטגוריה ומי שלח, ומסדר את זה במקום הנכון." },
-  { n: "3", icon: <Home size={20} />, title: "מקבלים תמונת מצב", body: "התובנות מגיעות לוואטסאפ. לדשבורד נכנסים כשרוצים מבט רחב יותר על החודש, הקטגוריות והפרויקטים." },
+  { n: "1", icon: <MessageCircle size={20} color={WA} aria-hidden="true" />, title: "שולחים בוואטסאפ", body: "הוצאה, קבלה או פריט לרשימה - בכתב או בצילום, בצ'אט שכבר פתוח אצלכם." },
+  { n: "2", icon: <Sparkles size={20} aria-hidden="true" />, title: "פינג מסדר", body: "מזהה את הסכום, הקטגוריה ומי שלח, ומסדר את זה במקום הנכון." },
+  { n: "3", icon: <Home size={20} aria-hidden="true" />, title: "מקבלים תמונת מצב", body: "התובנות מגיעות לוואטסאפ. לדשבורד נכנסים כשרוצים מבט רחב יותר על החודש, הקטגוריות והפרויקטים." },
 ];
 
 function HowItWorks() {
@@ -119,18 +127,18 @@ function HowItWorks() {
           <span className="pt-eyebrow">איך זה עובד</span>
           <h2>שלושה צעדים, בלי ללמוד כלי חדש</h2>
         </div>
-        <div className="pt-steps">
+        <ul className="pt-steps" role="list">
           {STEPS.map((s) => (
-            <article className="pt-step" key={s.n}>
+            <li className="pt-step" key={s.n}>
               <div className="pt-step__top">
                 <span className="pt-step__num mono">{s.n}</span>
                 <span className="pt-step__ic">{s.icon}</span>
               </div>
               <h3>{s.title}</h3>
               <p>{s.body}</p>
-            </article>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );
@@ -138,9 +146,9 @@ function HowItWorks() {
 
 /* ── Why WhatsApp ─────────────────────────────────────────────────────────── */
 const WHY = [
-  { icon: <MessageCircle size={16} />, title: "בלי אפליקציה חדשה", body: "לא צריך להוריד, להירשם וללמוד עוד כלי. הכל קורה בוואטסאפ." },
-  { icon: <Users size={16} />, title: "במקום שבו מתאמים ממילא", body: "המשפחה כבר מתכתבת שם על קניות והוצאות - אז גם הסדר נשאר שם." },
-  { icon: <Send size={16} />, title: "פעולה קטנה, לא פרויקט", body: "הודעה אחת קצרה, ולא עוד מטלה שמצטברת לסוף החודש." },
+  { icon: <MessageCircle size={16} aria-hidden="true" />, title: "בלי אפליקציה חדשה", body: "לא צריך להוריד, להירשם וללמוד עוד כלי. הכל קורה בוואטסאפ." },
+  { icon: <Users size={16} aria-hidden="true" />, title: "במקום שבו מתאמים ממילא", body: "המשפחה כבר מתכתבת שם על קניות והוצאות - אז גם הסדר נשאר שם." },
+  { icon: <Send size={16} aria-hidden="true" />, title: "פעולה קטנה, לא פרויקט", body: "הודעה אחת קצרה, ולא עוד מטלה שמצטברת לסוף החודש." },
 ];
 
 function WhyWhatsApp() {
@@ -152,16 +160,21 @@ function WhyWhatsApp() {
           <h2 style={{ fontSize: "clamp(26px,3vw,36px)", marginTop: 14 }}>
             התקציב לא צריך להיות עוד משימה
           </h2>
-          <div className="pt-why__list">
+          <ul className="pt-why__list" role="list">
             {WHY.map((w) => (
-              <div className="pt-why__item" key={w.title}>
+              <li className="pt-why__item" key={w.title}>
                 <span className="ic">{w.icon}</span>
                 <p>
-                  <b>{w.title}</b> - {w.body}
+                  {/* a11y (P2-5): this is a RUN-IN heading inside the paragraph.
+                      A real <h3> cannot live inside <p> (the HTML parser would
+                      close the <p> and break hydration), and lifting it out
+                      would reflow the line. role="heading" + aria-level gives
+                      the identical semantics with zero pixel change. */}
+                  <b role="heading" aria-level={3}>{w.title}</b> - {w.body}
                 </p>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
         <figure className="pt-why__quote" style={{ margin: 0 }}>
           <div className="q">שתי שניות בוואטסאפ עכשיו, הרבה פחות בלאגן בסוף החודש.</div>
@@ -208,14 +221,14 @@ function Comparison() {
 
 /* ── Trust (dark, before pricing) ─────────────────────────────────────────── */
 const TRUST = [
-  { icon: <KeyRound size={18} />, title: "כניסה בוואטסאפ, בלי סיסמה", body: "קישור כניסה חד-פעמי בוואטסאפ, בלי עוד סיסמה לזכור." },
-  { icon: <Lock size={18} />, title: "הדשבורד נפתח רק אחרי כניסה מאומתת", body: "הגישה למידע דורשת כניסה מאומתת." },
-  { icon: <Eye size={18} />, title: "כל אחד רואה רק את מה שמותר לו", body: "ההרשאות נקבעות לכל בן בית." },
-  { icon: <User size={18} />, title: "הוצאות אישיות נשארות אישיות", body: "מה שמסומן אישי לא מופיע בתמונה המשותפת." },
-  { icon: <Users size={18} />, title: "ילדים מוסיפים, בלי לראות את התקציב", body: "הם משתתפים בלי לראות את תקציב הבית הכללי." },
-  { icon: <ShieldCheck size={18} />, title: "כניסה מאובטחת וחיבור מוצפן", body: "התקשורת ביניכם לבין השירות מוצפנת, והגישה לדשבורד דורשת כניסה מאומתת." },
-  { icon: <Sparkles size={18} />, title: "AI עוזר, אבל לא מייעץ", body: "ה-AI עוזר לקרוא קבלות ולסווג הוצאות, ולא נותן ייעוץ פיננסי." },
-  { icon: <Tag size={18} />, title: "המידע לא נמכר לאף אחד", body: "המידע משמש כדי לתת לכם את השירות, לא להימכר." },
+  { icon: <KeyRound size={18} aria-hidden="true" />, title: "כניסה בוואטסאפ, בלי סיסמה", body: "קישור כניסה חד-פעמי בוואטסאפ, בלי עוד סיסמה לזכור." },
+  { icon: <Lock size={18} aria-hidden="true" />, title: "הדשבורד נפתח רק אחרי כניסה מאומתת", body: "הגישה למידע דורשת כניסה מאומתת." },
+  { icon: <Eye size={18} aria-hidden="true" />, title: "כל אחד רואה רק את מה שמותר לו", body: "ההרשאות נקבעות לכל בן בית." },
+  { icon: <User size={18} aria-hidden="true" />, title: "הוצאות אישיות נשארות אישיות", body: "מה שמסומן אישי לא מופיע בתמונה המשותפת." },
+  { icon: <Users size={18} aria-hidden="true" />, title: "ילדים מוסיפים, בלי לראות את התקציב", body: "הם משתתפים בלי לראות את תקציב הבית הכללי." },
+  { icon: <ShieldCheck size={18} aria-hidden="true" />, title: "כניסה מאובטחת וחיבור מוצפן", body: "התקשורת ביניכם לבין השירות מוצפנת, והגישה לדשבורד דורשת כניסה מאומתת." },
+  { icon: <Sparkles size={18} aria-hidden="true" />, title: "AI עוזר, אבל לא מייעץ", body: "ה-AI עוזר לקרוא קבלות ולסווג הוצאות, ולא נותן ייעוץ פיננסי." },
+  { icon: <Tag size={18} aria-hidden="true" />, title: "המידע לא נמכר לאף אחד", body: "המידע משמש כדי לתת לכם את השירות, לא להימכר." },
 ];
 
 function Trust() {
@@ -229,17 +242,17 @@ function Trust() {
             הנה איך אנחנו שומרים על המידע שלכם, ולמה אתם בשליטה על מה שנכנס פנימה.
           </p>
         </div>
-        <div className="pt-trust__grid">
+        <ul className="pt-trust__grid" role="list">
           {TRUST.map((t) => (
-            <div className="pt-trust__item" key={t.title}>
+            <li className="pt-trust__item" key={t.title}>
               <span className="ic">{t.icon}</span>
               <div>
-                <b>{t.title}</b>
+                <h3>{t.title}</h3>
                 <p>{t.body}</p>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
         <div className="pt-trust__foot">
           <span>אפשר לבקש מחיקת חשבון בכל עת</span>
           <span>·</span>
@@ -255,12 +268,12 @@ function Trust() {
 
 /* ── Audience strip ───────────────────────────────────────────────────────── */
 const AUDIENCE = [
-  { icon: <User size={20} />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "אדם אחד", body: "לעקוב לבד אחרי ההוצאות והקבלות." },
-  { icon: <Users size={20} />, color: "var(--coral-dark)", bg: "var(--coral-bg)", title: "זוג", body: "לנהל יחד את ההוצאות המשותפות." },
-  { icon: <Home size={20} />, color: "var(--mustard-dark)", bg: "var(--mustard-bg)", title: "משפחה", body: "כל בני הבית באותו מקום." },
-  { icon: <Users size={20} />, color: "var(--plum)", bg: "var(--plum-bg)", title: "הורים וילדים", body: "ילדים מוסיפים ולומדים לנהל כסף." },
-  { icon: <Users size={20} />, color: "var(--ocean)", bg: "var(--ocean-bg)", title: "דירת שותפים", body: "להתחלק בהוצאות הבית בלי בלאגן." },
-  { icon: <Folder size={20} />, color: "var(--berry)", bg: "var(--berry-bg)", title: "כל מסגרת משותפת", body: "כל קבוצה שרוצה לדעת לאן הכסף הולך." },
+  { icon: <User size={20} aria-hidden="true" />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "אדם אחד", body: "לעקוב לבד אחרי ההוצאות והקבלות." },
+  { icon: <Users size={20} aria-hidden="true" />, color: "var(--coral-dark)", bg: "var(--coral-bg)", title: "זוג", body: "לנהל יחד את ההוצאות המשותפות." },
+  { icon: <Home size={20} aria-hidden="true" />, color: "var(--mustard-dark)", bg: "var(--mustard-bg)", title: "משפחה", body: "כל בני הבית באותו מקום." },
+  { icon: <Users size={20} aria-hidden="true" />, color: "var(--plum)", bg: "var(--plum-bg)", title: "הורים וילדים", body: "ילדים מוסיפים ולומדים לנהל כסף." },
+  { icon: <Users size={20} aria-hidden="true" />, color: "var(--ocean)", bg: "var(--ocean-bg)", title: "דירת שותפים", body: "להתחלק בהוצאות הבית בלי בלאגן." },
+  { icon: <Folder size={20} aria-hidden="true" />, color: "var(--berry)", bg: "var(--berry-bg)", title: "כל מסגרת משותפת", body: "כל קבוצה שרוצה לדעת לאן הכסף הולך." },
 ];
 
 function Audience() {
@@ -272,19 +285,19 @@ function Audience() {
           <h2>מתאים לכל בית - ולכל אחד</h2>
           <p>מתאים ליחיד, זוג, משפחה או דירת שותפים.</p>
         </div>
-        <div className="pt-who-strip">
+        <ul className="pt-who-strip" role="list">
           {AUDIENCE.map((a) => (
-            <div className="pt-who-seg" key={a.title}>
+            <li className="pt-who-seg" key={a.title}>
               <span className="ic" style={{ background: a.bg, color: a.color }}>
                 {a.icon}
               </span>
               <div>
-                <b>{a.title}</b>
+                <h3>{a.title}</h3>
                 <p>{a.body}</p>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );
@@ -292,13 +305,13 @@ function Audience() {
 
 /* ── What you get + insights ──────────────────────────────────────────────── */
 const GET = [
-  { icon: <Wallet size={18} />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "הוצאות בהודעה", body: "כותבים סכום, וזה נכנס לקטגוריה." },
-  { icon: <Camera size={18} />, color: "var(--plum)", bg: "var(--plum-bg)", title: "צילום קבלות", body: "מצלמים, וה-AI עוזר לקרוא ולסווג." },
-  { icon: <ShoppingCart size={18} />, color: "var(--mustard-dark)", bg: "var(--mustard-bg)", title: "רשימת קניות", body: "כל הבית מוסיף, מסודר לפי קטגוריות." },
-  { icon: <Target size={18} />, color: "var(--coral-dark)", bg: "var(--coral-bg)", title: "תקציבי פרויקטים", body: "תקציב נפרד לכל פרויקט." },
-  { icon: <Users size={18} />, color: "var(--ocean)", bg: "var(--ocean-bg)", title: "הרשאות לבני בית", body: "מי רואה מה, ומי יכול מה." },
-  { icon: <Sparkles size={18} />, color: "var(--berry)", bg: "var(--berry-bg)", title: "סיכום שבועי", body: "תמונת מצב קצרה פעם בשבוע." },
-  { icon: <Activity size={18} />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "דשבורד לעומק", body: "מבט רחב על החודש והקטגוריות." },
+  { icon: <Wallet size={18} aria-hidden="true" />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "הוצאות בהודעה", body: "כותבים סכום, וזה נכנס לקטגוריה." },
+  { icon: <Camera size={18} aria-hidden="true" />, color: "var(--plum)", bg: "var(--plum-bg)", title: "צילום קבלות", body: "מצלמים, וה-AI עוזר לקרוא ולסווג." },
+  { icon: <ShoppingCart size={18} aria-hidden="true" />, color: "var(--mustard-dark)", bg: "var(--mustard-bg)", title: "רשימת קניות", body: "כל הבית מוסיף, מסודר לפי קטגוריות." },
+  { icon: <Target size={18} aria-hidden="true" />, color: "var(--coral-dark)", bg: "var(--coral-bg)", title: "תקציבי פרויקטים", body: "תקציב נפרד לכל פרויקט." },
+  { icon: <Users size={18} aria-hidden="true" />, color: "var(--ocean)", bg: "var(--ocean-bg)", title: "הרשאות לבני בית", body: "מי רואה מה, ומי יכול מה." },
+  { icon: <Sparkles size={18} aria-hidden="true" />, color: "var(--berry)", bg: "var(--berry-bg)", title: "סיכום שבועי", body: "תמונת מצב קצרה פעם בשבוע." },
+  { icon: <Activity size={18} aria-hidden="true" />, color: "var(--teal-dark)", bg: "var(--teal-bg)", title: "דשבורד לעומק", body: "מבט רחב על החודש והקטגוריות." },
 ];
 
 const INSIGHTS = [
@@ -316,23 +329,23 @@ function WhatYouGet() {
           <h2>כלי ניהול אמיתי שחי בוואטסאפ</h2>
         </div>
         <div className="pt-get-panel">
-          <div className="pt-get-list">
+          <ul className="pt-get-list" role="list">
             {GET.map((g) => (
-              <div className="pt-get-row" key={g.title}>
+              <li className="pt-get-row" key={g.title}>
                 <span className="ic" style={{ background: g.bg, color: g.color }}>
                   {g.icon}
                 </span>
                 <div>
-                  <b>{g.title}</b>
+                  <h3>{g.title}</h3>
                   <p>{g.body}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
           <aside className="pt-insights">
             <div className="pt-insights__head">
               <span className="ic">
-                <TrendingUp size={18} />
+                <TrendingUp size={18} aria-hidden="true" />
               </span>
               <div>
                 <b>תובנות שמראות שינוי</b>
@@ -346,7 +359,7 @@ function WhatYouGet() {
                   <span>{ins.sub}</span>
                 </div>
                 <span className={`pt-insight__tag ${ins.down ? "is-down" : "is-flag"}`}>
-                  {ins.down ? <TrendingDown size={13} /> : <Sparkles size={13} />}
+                  {ins.down ? <TrendingDown size={13} aria-hidden="true" /> : <Sparkles size={13} aria-hidden="true" />}
                   <span className="mono">{ins.tag}</span>
                 </span>
               </div>
@@ -387,13 +400,13 @@ function FinalCta() {
             <p>קישור כניסה אחד בוואטסאפ, וכל הבית בפנים.</p>
             <div className="pt-final__chips">
               <span>
-                <MessageCircle size={14} /> כניסה בוואטסאפ
+                <MessageCircle size={14} aria-hidden="true" /> כניסה בוואטסאפ
               </span>
               <span>
-                <KeyRound size={14} /> בלי סיסמה
+                <KeyRound size={14} aria-hidden="true" /> בלי סיסמה
               </span>
               <span>
-                <CreditCard size={14} /> בלי כרטיס אשראי להתחלה
+                <CreditCard size={14} aria-hidden="true" /> בלי כרטיס אשראי להתחלה
               </span>
             </div>
           </div>
@@ -444,11 +457,12 @@ function Footer() {
 export function MarketingLanding() {
   return (
     <div className="pt-root">
-      <a href="#start" className="pt-skip">
-        דילוג לטופס ההרשמה
-      </a>
+      {/* a11y: two skip links, in Tab order. The site-wide `.skip-link` in the root
+          layout is Tab 1 and targets `#main`; this one is Tab 2 and preserves the
+          landing's original shortcut straight to the signup form at `#start`. */}
+      <a className="skip-link" href="#start">דילוג לטופס ההרשמה</a>
       <LandingNav />
-      <main>
+      <main id="main">
         <Hero />
         <Outcomes />
         <HowItWorks />

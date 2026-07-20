@@ -38,7 +38,13 @@ export default function OnboardingPage() {
   if (!wizard.ready) {
     return (
       <div className="login-page">
-        <p className="muted">טוען…</p>
+        <main id="main">
+          {/* Live region wraps (not replaces) the heading so the h1 keeps its
+              heading role; inline resets keep the pixels identical to the <p>. */}
+          <div role="status">
+            <h1 className="muted" style={{ margin: 0, fontSize: "inherit", fontWeight: "inherit" }}>טוען…</h1>
+          </div>
+        </main>
       </div>
     );
   }
@@ -48,8 +54,8 @@ export default function OnboardingPage() {
     const hasWhatsAppCta = Boolean(botWhatsAppLink());
     return (
       <div className="login-page">
-        <section className="login-box" style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>🏠</div>
+        <main id="main" className="login-box" style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}><span aria-hidden>🏠</span></div>
           <h1 className="page-title" style={{ marginBottom: 8 }}>הבית מוכן!</h1>
           {hasWhatsAppCta ? (
             <p className="muted" style={{ marginBottom: 22 }}>
@@ -71,7 +77,7 @@ export default function OnboardingPage() {
               לדשבורד
             </Link>
           </div>
-        </section>
+        </main>
       </div>
     );
   }
@@ -103,7 +109,7 @@ export default function OnboardingPage() {
         </div>
       </header>
 
-      <main className={styles.scroll}>
+      <main id="main" className={styles.scroll}>
         <div className={`${styles.content} ${styles.contentInner}`}>
           <h1 className={styles.stepHeading}>{meta.title}</h1>
           {meta.sub && <p className={styles.stepSub}>{meta.sub}</p>}
@@ -113,8 +119,8 @@ export default function OnboardingPage() {
 
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
-          {wizard.error && <div className="status error" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.error}</div>}
-          <div className={styles.footerRow}>
+          {wizard.error && <div className="status error" role="alert" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.error}</div>}
+          <div className={`${styles.footerRow} a11y-sticky-cta`}>
             {wizard.stepIndex > 1 ? (
               <button type="button" className="button secondary" onClick={wizard.back} disabled={wizard.working}>חזרה</button>
             ) : <span />}
@@ -126,6 +132,9 @@ export default function OnboardingPage() {
               {wizard.working ? "שומר…" : wizard.primaryLabel}
             </button>
           </div>
+          {/* Saving disables every footer button, so focus is dropped and the
+              label change alone is never announced. */}
+          <span className="sr-only" role="status">{wizard.working ? "שומר…" : ""}</span>
         </div>
       </footer>
     </div>

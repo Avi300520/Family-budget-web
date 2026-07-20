@@ -16,14 +16,33 @@
   --ink-1: #2A3441;
   --ink-2: #3A4452;
 
-  /* Text -------------------------------------------------------------------- */
+  /* Text --------------------------------------------------------------------
+     BATCH-GH (WCAG 2.0 AA / IS 5568): every one of these is used ONLY as a
+     `color:` — never a border, never a background — so the AA fix is the token
+     value itself rather than a re-point of ~45 call sites. Recomputed ratios
+     (WCAG relative luminance) against every surface they actually land on:
+
+       token      on #FFF   on --cream-0   on --cream-1   on --cream-3
+       --text-0    15.82        14.92          13.92          12.61
+       --text-1     7.56         7.13           6.65           6.02
+       --text-2     6.18         5.83           5.44           4.93
+     AA-normal needs 4.5:1. --text-2 was #7A8390 (3.83) and --text-3 #B3B7BD
+     (2.01) — both failed as body/label text on every non-marketing page.
+     --text-2 adopts the value the design already blessed for the marketing
+     scope (`.pt-root` in marketing.css), so this is not a new design decision.
+
+     ponytail: --text-3 aliases --text-2. The neutral ramp has room for exactly
+     three AA text steps, not four — any 4th step light enough to read as
+     "extra muted" lands under 4.5:1. Kept as an alias (not deleted) so the 8
+     existing call sites + the tokens.ts mirror keep working untouched.
+     -------------------------------------------------------------------------- */
   --text-0: #1A2330;
   --text-1: #4B5563;
-  --text-2: #7A8390;
-  --text-3: #B3B7BD;
+  --text-2: #59626E;
+  --text-3: var(--text-2);
   --on-ink-0: #F5F0E4;
   --on-ink-1: #B8BFC7;
-  --on-ink-2: #7A8390;
+  --on-ink-2: #949DAA;  /* was #7A8390 = 3.81 on --ink-0; now 5.33 (sidebar meta text) */
 
   /* Brand accents ----------------------------------------------------------- */
   --teal:        #0F766E;
@@ -56,12 +75,20 @@
   --ocean-soft:  #C4D5DF;
   --ocean-bg:    #E4ECF1;
 
-  /* Functional -------------------------------------------------------------- */
-  --pos:    #2A8C5A;
+  /* Functional --------------------------------------------------------------
+     BATCH-GH: --pos and --warn are used as CHIP/STATUS TEXT on their own tinted
+     backgrounds (.status, .chip.sage, .chip.mustard) and as body text (the /l
+     "סיימתם את הקנייה" title). Recomputed on the surfaces they land on:
+       --pos  #2A8C5A -> #1B6B43 : white 4.20->6.50 · --pos-bg 3.54->5.48 · /l done-banner 3.76->5.82
+       --warn #C8801C -> #8A6410 : white 3.20->5.37 · --warn-bg 2.71->4.54
+       --neg  #B23A48 unchanged  : white 5.85 · --neg-bg 4.54  (already AA)
+     Both also serve as fills (progress-fill, the /l done checkbox, chart
+     segments) — darkening only raises contrast there, never lowers it. -------- */
+  --pos:    #1B6B43;
   --pos-bg: #E1EFE6;
   --neg:    #B23A48;
   --neg-bg: #F5DDE0;
-  --warn:   #C8801C;
+  --warn:   #8A6410;
   --warn-bg:#FAEAD1;
 
   /* Semantic neutrals
@@ -69,6 +96,22 @@
   --on-color:        #FFFFFF;  /* text/icon that sits on a brand-colored surface */
   --scroll-hover:    #C9BFA5;  /* scrollbar thumb hover (between cream-3 and cream-4) */
   --breakpoint-md:   820px;    /* single source for compact-layout breakpoint */
+
+  /* Accessibility (BATCH-GH) -------------------------------------------------
+     --field-border  WCAG 1.4.11 (non-text contrast, 3:1): the boundary of a
+       form control is the ONLY thing that identifies it here — the control's
+       white fill is indistinguishable from the cream page (1.06:1). The
+       decorative --cream-3/-4 lines used for cards are 1.25/1.49 and stay as
+       they are (a card outline is not a control boundary); form controls get
+       this token instead. #9C8E6B = 3.23 on white, 3.05 on --cream-0.
+     --focus-ring / --focus-ring-on-dark  WCAG 2.4.7 + 1.4.11 (3:1). --teal is
+       5.47 on white / 5.16 on --cream-0 / 4.81 on --cream-1, but only 2.67 on
+       the --ink-0 sidebar, so dark surfaces get the cream variant (12.85).
+       On a teal button the 2px outline-offset puts the ring's inner gap on the
+       page background (--cream-0 vs --teal = 5.16), so it stays visible. ----- */
+  --field-border:      #9C8E6B;
+  --focus-ring:        var(--teal);
+  --focus-ring-on-dark: var(--on-ink-0);
 
   /* Family member colors (used by `members.ts` deterministic hash) ---------- */
   --m-mom:   #D97757;  /* coral */

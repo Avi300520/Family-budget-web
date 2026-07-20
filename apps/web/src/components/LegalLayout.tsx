@@ -43,7 +43,11 @@ export function LegalLayout({
         </div>
       </header>
 
-      <article className="legal-body">{children}</article>
+      {/* a11y (P1-5, WCAG 1.3.1): the legal body IS the page's primary content, so
+          it is the <main> landmark. `id="main"` is the site-wide skip-link target.
+          The former <article> wrapper carried no extra semantics here; .legal-body
+          keeps every descendant style rule, so the rendered pixels are unchanged. */}
+      <main id="main" className="legal-body">{children}</main>
 
       <footer className="legal-foot">
         <Link href="/privacy">מדיניות פרטיות</Link>

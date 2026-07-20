@@ -22,14 +22,22 @@
   --ink-0: #11231F; --ink-1: #173029; --ink-2: #25433B;
 
   /* Text - all meet AA on cream and white */
-  --text-0: #15211C; --text-1: #3C474A; --text-2: #59626E; --text-3: #97928A;
+  /* a11y (BATCH-GH, 1.4.3): --text-3 was #97928A = 3.09:1 on white / 2.67:1 on
+     --cream-1, failing as body text. This scope REDEFINES the token, so the global
+     tokens.css alias never reaches it. #706B63 = 5.29 / 4.98 / 4.57. */
+  --text-0: #15211C; --text-1: #3C474A; --text-2: #59626E; --text-3: #706B63;
   --on-dark-0: #F6F1E6; --on-dark-1: #DCE7E1;
 
   /* Brand */
   --teal: #0F766E; --teal-dark: #0B5C56; --teal-deep: #0A4A45;
   --teal-bg: #E7F1EE; --teal-soft: #CADFDA; --teal-line: #BBD6D0;
   --coral: #D97757; --coral-dark: #B85F42; --coral-bg: #FBEBE2;
-  --mustard: #D4A23A; --mustard-dark: #9A6F12; --mustard-bg: #FAF0D7;
+  /* a11y (P2-6, WCAG 1.4.3): --mustard-dark was #9A6F12, which is only 3.98:1 on
+     --mustard-bg #FAF0D7 - and it is used as 13px bold TEXT in .pt-hero__badge,
+     i.e. normal text needing 4.5:1. #8A6410 = 4.73:1 on --mustard-bg,
+     5.37:1 on white, 5.06:1 on --cream-0, 4.64:1 on --cream-1. Its only other
+     uses are icon glyphs on --mustard-bg (3:1 floor), which also improve. */
+  --mustard: #D4A23A; --mustard-dark: #8A6410; --mustard-bg: #FAF0D7;
   --plum: #6B5294; --plum-bg: #ECE6F4;
   --ocean: #2F6680; --ocean-bg: #E2ECF1;
   --berry: #A33B5B; --berry-bg: #F6E2E8;
@@ -38,7 +46,9 @@
   /* functional */
   --pos: #1F7A4D; --pos-bg: #E1EFE6;
   --neg: #A52F3C; --neg-bg: #F6DEE1;
-  --warn: #9A6F12; --warn-bg: #FAF0D7;
+  /* Same failing pair as --mustard-dark above: .pt-form__banner.is-warn puts
+     --warn (14px) on --warn-bg. 3.98:1 -> 4.73:1. Matches the global --warn. */
+  --warn: #8A6410; --warn-bg: #FAF0D7;
 
   /* spacing (4px) */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
@@ -71,19 +81,55 @@
   color: var(--text-0); margin: 0; line-height: 1.12; letter-spacing: -0.02em; font-weight: 800;
 }
 .pt-root p { margin: 0; }
-.pt-root a { color: inherit; text-decoration: none; }
+/* BATCH-GH 1.4.3 — this reset used to be `.pt-root a` (specificity 0,1,1), which
+   OUTRANKED the single-class button rules below (`.pt-btn--primary` etc, 0,1,0).
+   Every CTA rendered as an <a class="pt-btn pt-btn--primary"> (LandingNav.tsx:40,
+   PricingPlans.tsx:55 and :112) therefore inherited --text-1 #3C474A onto the
+   --teal #0F766E fill = 1.75:1, against a 4.5:1 requirement. A pre-existing
+   production defect, invisible to source reading — it only shows in the cascade.
+   `:where()` contributes zero specificity, so the reset still applies by default
+   but now loses to any rule that actually sets a colour. Verified safe: every
+   other anchor rule in this file (.pt-form__legal a, .pt-trust__foot a,
+   .pt-footer__links a, .pt-footer__contact a, .pt-mobile-menu nav a) is already
+   0,1,1 or higher and is unaffected. */
+.pt-root :where(a) { color: inherit; text-decoration: none; }
 .pt-root img, .pt-root svg { display: block; }
 .pt-root .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.pt-root :focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; border-radius: 4px; }
+/* `border-radius` removed: it mutated the FOCUSED ELEMENT's own geometry (pills
+   and the 12px .pt-btn snapped to 4px on Tab). The outline already follows the
+   element's own radius. */
+.pt-root :focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+/* Dark sections need the cream ring — --teal on --ink-0 #11231F is 1.9:1, far
+   under the 3:1 non-text floor. */
+.pt-trust :focus-visible,
+.pt-why__quote :focus-visible,
+.pt-insights :focus-visible,
+.pt-final :focus-visible { outline-color: var(--on-dark-0); }
 /* anchor-jump offset for the sticky nav, scoped to landing targets */
 .pt-root section[id], .pt-root [data-anchor] { scroll-margin-top: calc(var(--nav-h) + 16px); }
 
-.pt-skip {
-  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
-  clip-path: inset(50%); white-space: nowrap; top: 8px; inset-inline-start: 12px; z-index: 200;
-  background: var(--teal); color: #fff; padding: 0; border-radius: var(--r-2); font-weight: 700;
-}
-.pt-skip:focus { width: auto; height: auto; overflow: visible; clip: auto; clip-path: none; padding: 10px 16px; }
+/* The landing's local `.pt-skip` rule was removed together with its anchor: the
+   site-wide `.skip-link` (globals.css) now serves every page and targets #main. */
+
+/* a11y (P2-5): card groups are now <ul role="list"> + <li>. This neutralises the
+   UA list defaults (disc marker, 1em block margin, 40px inline padding) so the
+   grids render exactly as the former <div>s did. Deliberately SINGLE-class
+   specificity and placed BEFORE the per-component rules, so each component's
+   own `margin-top` still wins while the UA margin-bottom stays zeroed. */
+.pt-outcomes,
+.pt-steps,
+.pt-why__list,
+.pt-trust__grid,
+.pt-who-strip,
+.pt-get-list { list-style: none; padding: 0; margin: 0; }
+
+/* Card titles converted from <b>/<div> to <h3> keep their exact type: the
+   `.pt-root h1..h4` rule would otherwise impose weight 800, line-height 1.12
+   and letter-spacing -0.02em on them. */
+.pt-root .pt-trust__item h3,
+.pt-root .pt-who-seg h3,
+.pt-root .pt-get-row h3,
+.pt-root .pt-price__name { line-height: 1.6; letter-spacing: normal; }
 
 .pt-wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding-inline: 28px; }
 
@@ -256,11 +302,17 @@
 .pt-trust .pt-eyebrow { color: #8FD6C4; }
 .pt-trust .pt-eyebrow::before { background: #8FD6C4; }
 .pt-trust h2 { color: #fff; }
-.pt-trust__intro { color: var(--on-dark-1); font-size: 18px; line-height: 1.6; margin-top: 16px; max-width: 56ch; }
+/* BATCH-GH 1.4.3 — this is `<p class="pt-trust__intro">` nested inside
+   `<div class="pt-shead">` (MarketingLanding.tsx), so `.pt-shead p` (0,1,1) beat
+   this rule (0,1,0) and the 18px lead of the whole trust section rendered
+   --text-1 #3C474A on the dark --ink-0 #11231F = 1.71:1 instead of the intended
+   --on-dark-1 12.90:1. Another pre-existing cascade defect. `.pt-root` prefix
+   raises this to 0,2,0 so it wins. */
+.pt-root .pt-trust__intro { color: var(--on-dark-1); font-size: 18px; line-height: 1.6; margin-top: 16px; max-width: 56ch; }
 .pt-trust__grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px 28px; margin-top: 44px; }
 .pt-trust__item { display: flex; gap: 14px; align-items: flex-start; padding: 18px; border-radius: var(--r-3); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); }
 .pt-trust__item .ic { width: 38px; height: 38px; border-radius: var(--r-2); background: rgba(143,214,196,.16); color: #A7E8D2; display: grid; place-items: center; flex-shrink: 0; }
-.pt-trust__item b { display: block; color: #fff; font-size: 16px; font-weight: 700; }
+.pt-trust__item h3 { display: block; color: #fff; font-size: 16px; font-weight: 700; }
 .pt-trust__item p { color: var(--on-dark-1); font-size: 14.5px; margin-top: 3px; line-height: 1.5; }
 .pt-trust__foot { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; color: var(--on-dark-1); font-size: 14.5px; }
 .pt-trust__foot a { color: #A7E8D2; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
@@ -269,7 +321,7 @@
 .pt-who-strip { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5px; background: var(--cream-3); border: 1.5px solid var(--cream-3); border-radius: var(--r-4); overflow: hidden; box-shadow: var(--elev-1); margin-top: 44px; }
 .pt-who-seg { background: var(--cream-2); padding: 24px; display: flex; gap: 14px; align-items: flex-start; }
 .pt-who-seg .ic { width: 42px; height: 42px; border-radius: var(--r-3); display: grid; place-items: center; flex-shrink: 0; }
-.pt-who-seg b { display: block; font-size: 16px; color: var(--text-0); font-weight: 800; }
+.pt-who-seg h3 { display: block; font-size: 16px; color: var(--text-0); font-weight: 800; }
 .pt-who-seg p { font-size: 14px; color: var(--text-1); margin-top: 5px; line-height: 1.5; }
 
 /* ---------- WHAT YOU GET + INSIGHTS ---------- */
@@ -277,7 +329,7 @@
 .pt-get-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .pt-get-row { display: flex; gap: 12px; align-items: flex-start; background: var(--cream-2); border: 1.5px solid var(--cream-3); border-radius: var(--r-3); padding: 16px; }
 .pt-get-row .ic { width: 38px; height: 38px; border-radius: var(--r-2); display: grid; place-items: center; flex-shrink: 0; }
-.pt-get-row b { display: block; font-size: 15px; color: var(--text-0); font-weight: 700; }
+.pt-get-row h3 { display: block; font-size: 15px; color: var(--text-0); font-weight: 700; }
 .pt-get-row p { font-size: 13px; color: var(--text-1); margin-top: 3px; line-height: 1.45; }
 .pt-insights { background: var(--ink-0); color: var(--on-dark-0); border-radius: var(--r-4); padding: 22px; box-shadow: var(--elev-2); }
 .pt-insights__head { display: flex; gap: 12px; align-items: flex-start; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,.12); }

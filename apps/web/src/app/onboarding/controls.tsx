@@ -5,16 +5,21 @@
 // uses (tokens.css). Inline styles (as in the prototype) keep these self-contained
 // and avoid global-CSS import constraints in the app router.
 
-import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import type { FrequencyId } from "@shopping-assistant/shared-types";
 import { FREQUENCIES } from "../../lib/onboarding/model";
 import { parseMoneyInput } from "../../lib/moneyInput";
 
-const focusBorder = (on: boolean) => (on ? "var(--teal)" : "var(--cream-4)");
+// --field-border is the AA (1.4.11) control boundary introduced for
+// .input/.textarea/.select in globals.css; MoneyInput is a hand-rolled text
+// field, so it opts into the same token instead of the lighter --cream-4 line.
+const focusBorder = (on: boolean) => (on ? "var(--teal)" : "var(--field-border)");
 
 // ── Stepper (− value +) ────────────────────────────────────────────────────────
-export function Stepper({ value, onChange, min = 0, max = 12, suffix }: {
+export function Stepper({ value, onChange, min = 0, max = 12, suffix, label }: {
   value: number; onChange: (v: number) => void; min?: number; max?: number; suffix?: string;
+  /** Visible field label, so the two icon-only buttons get distinct names. */
+  label?: string;
 }) {
   const set = (v: number) => onChange(Math.max(min, Math.min(max, v)));
   const btn: CSSProperties = {
@@ -22,14 +27,18 @@ export function Stepper({ value, onChange, min = 0, max = 12, suffix }: {
     background: "var(--cream-2)", color: "var(--text-0)", fontSize: 20, fontWeight: 600,
     display: "grid", placeItems: "center", cursor: "pointer", lineHeight: 1, userSelect: "none"
   };
+  const less = label ? `פחות ${label}` : "פחות";
+  const more = label ? `עוד ${label}` : "עוד";
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
-      <button type="button" style={{ ...btn, opacity: value <= min ? 0.4 : 1 }} onClick={() => set(value - 1)} aria-label="פחות">−</button>
-      <div style={{ minWidth: 48, textAlign: "center" }}>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }} role="group" aria-label={label}>
+      <button type="button" style={{ ...btn, opacity: value <= min ? 0.4 : 1 }} onClick={() => set(value - 1)} aria-label={less}>−</button>
+      {/* The count is the only feedback for the two buttons, so it is a live
+          region - otherwise pressing +/- announces nothing. */}
+      <div style={{ minWidth: 48, textAlign: "center" }} aria-live="polite" aria-atomic>
         <span className="mono" style={{ fontSize: 22, fontWeight: 700 }}>{value}</span>
         {suffix && <span style={{ fontSize: 13, color: "var(--text-2)", marginInlineStart: 4 }}>{suffix}</span>}
       </div>
-      <button type="button" style={{ ...btn, opacity: value >= max ? 0.4 : 1 }} onClick={() => set(value + 1)} aria-label="עוד">+</button>
+      <button type="button" style={{ ...btn, opacity: value >= max ? 0.4 : 1 }} onClick={() => set(value + 1)} aria-label={more}>+</button>
     </div>
   );
 }
@@ -63,9 +72,9 @@ export function ChipSelect({ options, value, onChange, multi = false }: {
             background: on ? "var(--teal-bg)" : "var(--cream-2)",
             color: on ? "var(--teal-dark)" : "var(--text-1)"
           }}>
-            {emoji && <span style={{ fontSize: 16 }}>{emoji}</span>}
+            {emoji && <span aria-hidden style={{ fontSize: 16 }}>{emoji}</span>}
             {lab}
-            {multi && on && <span style={{ fontSize: 13 }}>✓</span>}
+            {multi && on && <span aria-hidden style={{ fontSize: 13 }}>✓</span>}
           </button>
         );
       })}
@@ -93,8 +102,9 @@ export function OptionCards({ options, value, onChange, cols = 2 }: {
             display: "flex", flexDirection: "column", gap: 6
           }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 26 }}>{o.emoji}</span>
-              <span style={{
+              <span aria-hidden style={{ fontSize: 26 }}>{o.emoji}</span>
+              {/* Selection is already conveyed by aria-pressed; the tick is decorative. */}
+              <span aria-hidden style={{
                 width: 22, height: 22, borderRadius: 999, flexShrink: 0,
                 border: on ? "none" : "1.5px solid var(--cream-4)",
                 background: on ? "var(--teal)" : "transparent",
@@ -124,6 +134,13 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
 }
 
 // ── MiniToggle — inline label + small switch ───────────────────────────────────
+// The wrapper is a <label>. `button` IS a labelable element in the HTML Standard,
+// and a <label>'s activation behaviour forwards a click to its labelled control —
+// so the text is a real, larger click target for the 46x28 switch. (An earlier
+// revision changed this to <span> on the incorrect premise that a <label> cannot
+// label a <button>; that silently removed the target while cursor:pointer kept
+// advertising it.) The visible text is NOT aria-hidden: it matches Toggle's
+// aria-label exactly, so 2.5.3 Label in Name holds either way.
 export function MiniToggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
     <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "var(--text-1)" }}>
@@ -134,12 +151,14 @@ export function MiniToggle({ label, on, onChange }: { label: string; on: boolean
 }
 
 // ── MoneyInput (₪ prefixed, mono, LTR digits) ──────────────────────────────────
-export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = false, size = "md" }: {
+export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = false, size = "md", ariaLabel }: {
   value: number | "";
   onChange: (v: number | "") => void;
   placeholder?: string;
   autoFocus?: boolean;
   size?: "md" | "lg";
+  /** Accessible name - the field's visible label. A placeholder is NOT a label. */
+  ariaLabel?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { if (autoFocus && ref.current) ref.current.focus(); }, [autoFocus]);
@@ -167,6 +186,7 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
       <input
         ref={ref}
         inputMode="decimal"
+        aria-label={ariaLabel}
         value={text}
         placeholder={placeholder}
         onChange={(e) => {
@@ -178,8 +198,10 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
         style={{
           width: "100%", height: h, paddingInlineStart: 34, paddingInlineEnd: 14,
           fontSize: fs, fontWeight: 700, direction: "ltr", textAlign: "end",
-          borderRadius: 14, border: "1.5px solid var(--cream-4)", background: "var(--cream-2)",
-          color: "var(--text-0)", outline: "none"
+          borderRadius: 14, border: `1.5px solid ${focusBorder(false)}`, background: "var(--cream-2)",
+          color: "var(--text-0)"
+          // NB: no `outline: none` - that suppressed the global :focus-visible
+          // ring (2.4.7). The onFocus border swap below is an extra cue only.
         }}
         onFocus={(e) => { e.target.style.borderColor = focusBorder(true); }}
         onBlur={(e) => { e.target.style.borderColor = focusBorder(false); }}
@@ -196,7 +218,7 @@ export function DayChips({ value, onChange }: { value: number | null; onChange: 
       {quick.map((d) => {
         const on = value === d;
         return (
-          <button type="button" key={d} onClick={() => onChange(d)} style={{
+          <button type="button" key={d} onClick={() => onChange(d)} aria-pressed={on} style={{
             minWidth: 44, height: 40, padding: "0 12px", borderRadius: 12, cursor: "pointer",
             border: on ? "1.5px solid var(--teal)" : "1.5px solid var(--cream-4)",
             background: on ? "var(--teal-bg)" : "var(--cream-2)",
@@ -212,7 +234,7 @@ export function DayChips({ value, onChange }: { value: number | null; onChange: 
 // ── FreqPick — frequency segmented control ─────────────────────────────────────
 export function FreqPick({ value, onChange }: { value: FrequencyId; onChange: (v: FrequencyId) => void }) {
   return (
-    <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 6, background: "var(--cream-1)", padding: 4, borderRadius: 12 }}>
+    <div role="group" aria-label="תדירות" style={{ display: "inline-flex", flexWrap: "wrap", gap: 6, background: "var(--cream-1)", padding: 4, borderRadius: 12 }}>
       {FREQUENCIES.map((f) => {
         const on = value === f.id;
         return (
@@ -229,26 +251,38 @@ export function FreqPick({ value, onChange }: { value: FrequencyId; onChange: (v
 }
 
 // ── Field — label + helper wrapper ─────────────────────────────────────────────
+// The label/hint are styled <div>s, not a <label htmlFor> (the children are often
+// composite controls, not a single input). They are therefore wired to the
+// controls as a named group, so a screen reader announces the field name and its
+// hint on entry (1.3.1). Single inputs additionally carry their own aria-label.
 export function Field({ label, hint, children, style }: {
   label?: string; hint?: string; children: ReactNode; style?: CSSProperties;
 }) {
+  const uid = useId();
+  const labelId = `${uid}-label`;
+  const hintId = `${uid}-hint`;
   return (
     <div style={style}>
-      {label && <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-0)", marginBottom: hint ? 4 : 8 }}>{label}</div>}
-      {hint && <div style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 12, lineHeight: 1.5 }}>{hint}</div>}
-      {children}
+      {label && <div id={labelId} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-0)", marginBottom: hint ? 4 : 8 }}>{label}</div>}
+      {hint && <div id={hintId} style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 12, lineHeight: 1.5 }}>{hint}</div>}
+      {label ? (
+        <div role="group" aria-labelledby={labelId} aria-describedby={hint ? hintId : undefined}>{children}</div>
+      ) : children}
     </div>
   );
 }
 
 // ── TextInput — plain RTL text field (reuses the site .input class) ────────────
-export function TextInput({ value, onChange, placeholder, autoComplete }: {
+export function TextInput({ value, onChange, placeholder, autoComplete, ariaLabel }: {
   value: string; onChange: (v: string) => void; placeholder?: string; autoComplete?: string;
+  /** Accessible name - the field's visible label. A placeholder is NOT a label. */
+  ariaLabel?: string;
 }) {
   return (
     <input
       className="input"
       value={value}
+      aria-label={ariaLabel}
       placeholder={placeholder}
       autoComplete={autoComplete}
       onChange={(e) => onChange(e.target.value)}

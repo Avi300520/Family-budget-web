@@ -7,6 +7,9 @@
 import { PingtallyMark } from "./PingtallyMark";
 
 const WA_GREEN = "#25D366";
+// a11y (BATCH-GH, 1.4.3): the brand green is 1.98:1 on white, so it can tint a
+// decorative dot but never carry text. 10.5px copy uses the deep variant (5.42:1).
+const WA_GREEN_TEXT = "#0E7A40";
 
 function DashboardCard() {
   const cats = [
@@ -97,7 +100,7 @@ function PhoneCard() {
           <div style={{ width: 30, height: 30, borderRadius: 999, background: "var(--teal)", display: "grid", placeItems: "center", color: "#FFF", fontWeight: 800, fontSize: 14 }}>פ</div>
           <div style={{ lineHeight: 1.2 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: "#000" }}>פינג</div>
-            <div style={{ fontSize: 10.5, color: WA_GREEN }}>מקליד…</div>
+            <div style={{ fontSize: 10.5, color: WA_GREEN_TEXT }}>מקליד…</div>
           </div>
         </div>
         <div style={{ padding: "11px 9px 13px", backgroundImage: "radial-gradient(circle at 10% 20%, rgba(255,255,255,0.4) 1px, transparent 1px), radial-gradient(circle at 80% 50%, rgba(0,0,0,0.04) 1px, transparent 1px)", backgroundSize: "50px 50px, 70px 70px" }}>
@@ -129,7 +132,14 @@ function PhoneCard() {
 
 export function HeroVisual() {
   return (
-    <div style={{ width: "100%", paddingTop: 8 }}>
+    // a11y (P2-4, WCAG 1.1.1): this whole block is a DECORATIVE illustration of
+    // the product. Its numbers (5,240 / 8,000 / 2,760), category rows and chat
+    // bubbles are fictional marketing mocks, so exposing them would read to a
+    // screen-reader user as if they were that user's real financial data. The
+    // hero's <h1> + lead paragraph already carry the equivalent information in
+    // text. Nothing inside is focusable (no a/button/input/tabindex), so
+    // aria-hidden here cannot hide an interactive element.
+    <div style={{ width: "100%", paddingTop: 8 }} aria-hidden="true">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 22, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 280px", minWidth: 240, maxWidth: 340, position: "relative" }}>
           <div style={{ position: "absolute", top: -13, insetInlineEnd: 14, zIndex: 3, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, background: "var(--ink-0)", color: "var(--on-dark-0)", fontSize: 11, fontWeight: 600, padding: "6px 12px", borderRadius: 999, boxShadow: "var(--elev-2)" }}>

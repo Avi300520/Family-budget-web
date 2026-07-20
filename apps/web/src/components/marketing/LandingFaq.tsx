@@ -51,7 +51,16 @@ export function LandingFaq() {
 
   return (
     <div className="pt-faq-wrap">
-      <div className="pt-faq-cats" role="tablist" aria-label="קטגוריות שאלות נפוצות">
+      {/* a11y (P2-10, WCAG 4.1.2): the tablist renders as a vertical rail in the
+          primary (>=980px) layout, so it declares aria-orientation="vertical".
+          The key handler accepts BOTH axes (ArrowUp/Down and RTL-correct
+          ArrowLeft/Right), so the narrow-viewport horizontal layout stays fully
+          operable either way. */}
+      <div
+        className="pt-faq-cats"
+        role="tablist"
+        aria-label="קטגוריות שאלות נפוצות"
+      >
         {FAQ_CATEGORIES.map((c, i) => {
           const count = FAQ_ITEMS.filter((it) => it.category === c.id).length;
           const selected = c.id === cat;

@@ -45,7 +45,7 @@ export function PricingPlans() {
         <div className="pt-price-trial">
           <div className="pt-price-trial__l">
             <span className="pt-price-trial__ic">
-              <Sparkles size={24} />
+              <Sparkles size={24} aria-hidden="true" />
             </span>
             <div>
               <b>20 יום חינם, בלי כרטיס אשראי כדי להתחיל</b>
@@ -72,7 +72,11 @@ export function PricingPlans() {
           {TIERS.map((t) => (
             <div key={t.name} className={`pt-price${t.featured ? " pt-price--feat" : ""}`}>
               {t.featured && <div className="pt-price__flag">הכי נפוץ</div>}
-              <div className="pt-price__name">{t.name}</div>
+              {/* a11y (BEYOND-AUDIT, WCAG 1.3.1): the tier name is the card's
+                  heading; it was a styled <div>. Section heading is <h2>, so
+                  <h3> is the correct level. marketing.css carries the exact
+                  same type over to the h3. */}
+              <h3 className="pt-price__name">{t.name}</h3>
               <div className="pt-price__who">{t.who}</div>
               <div className="pt-price__amt">
                 <span className="cur">₪</span>
@@ -82,22 +86,22 @@ export function PricingPlans() {
               <div className="pt-price__sub">
                 {yearly ? `בערך ₪${(Number(t.yr) / 12).toFixed(1)} לחודש` : "חיוב חודשי, בלי התחייבות"}
               </div>
-              <ul className="pt-price__list">
+              <ul role="list" className="pt-price__list">
                 <li>
                   <span className="ic">
-                    <Check size={16} />
+                    <Check size={16} aria-hidden="true" />
                   </span>
                   כל היכולות, לכל בני הבית
                 </li>
                 <li>
                   <span className="ic">
-                    <Check size={16} />
+                    <Check size={16} aria-hidden="true" />
                   </span>
                   {t.limit}
                 </li>
                 <li>
                   <span className="ic">
-                    <Check size={16} />
+                    <Check size={16} aria-hidden="true" />
                   </span>
                   אפשר לבטל בכל רגע
                 </li>

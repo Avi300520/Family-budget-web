@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Heebo, JetBrains_Mono } from "next/font/google";
 import { SITE_URL } from "../lib/siteUrl";
+import A11yBar from "../components/a11y/A11yBar";
 import "./globals.css";
 
 const heebo = Heebo({
@@ -60,7 +61,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl" className={`${heebo.variable} ${jetbrains.variable}`}>
-      <body>{children}</body>
+      <body>
+        {/* Skip link + accessibility menu. First child of <body> so the skip
+            link is the first focusable element in the document (BATCH-GH). */}
+        <A11yBar />
+        {children}
+      </body>
     </html>
   );
 }

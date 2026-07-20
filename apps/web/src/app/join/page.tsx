@@ -108,13 +108,16 @@ function JoinPageInner() {
   // ── Static states ──────────────────────────────────────────────────────────
 
   if (phase === "loading") {
-    return <div className="login-page"><div className="login-box">טוען...</div></div>;
+    return <div className="login-page"><main id="main" className="login-box"><h1 className="sr-only">הצטרפות לבית</h1><span role="status">טוען...</span></main></div>;
   }
 
   if (phase === "error") {
     return (
       <div className="login-page">
-        <div className="login-box status error">{error}</div>
+        <main id="main" className="login-box status error">
+          <h1 className="sr-only">הצטרפות לבית</h1>
+          <div role="alert">{error}</div>
+        </main>
       </div>
     );
   }
@@ -122,11 +125,15 @@ function JoinPageInner() {
   if (phase === "done") {
     return (
       <div className="login-page">
-        <div className="login-box" style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "2rem", marginBottom: 8 }}>✓</div>
-          <div style={{ fontWeight: 600 }}>הצטרפת בהצלחה!</div>
-          <div className="muted" style={{ marginTop: 4 }}>עובר לדשבורד...</div>
-        </div>
+        <main id="main" className="login-box" style={{ textAlign: "center" }}>
+          {/* The whole page swaps and focus is lost, so the terminal state is a
+              live region; the title becomes the page's h1 (styled identically). */}
+          <div role="status">
+            <div style={{ fontSize: "2rem", marginBottom: 8 }}><span aria-hidden>✓</span></div>
+            <h1 style={{ fontWeight: 600, fontSize: "inherit", margin: 0 }}>הצטרפת בהצלחה!</h1>
+            <div className="muted" style={{ marginTop: 4 }}>עובר לדשבורד...</div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -150,7 +157,7 @@ function JoinPageInner() {
   if (phase === "auth") {
     return (
       <div className="login-page">
-        <section className="login-box">
+        <main id="main" className="login-box">
           <h1 className="page-title">הצטרפות לבית</h1>
           {householdCard}
           <p className="muted" style={{ marginBottom: 14 }}>הזן את מספר הטלפון שלך כדי לקבל קישור כניסה:</p>
@@ -163,13 +170,14 @@ function JoinPageInner() {
               phone={phone}
               onPhoneChange={(v) => { setPhone(v); setError(undefined); }}
               invalid={Boolean(error)}
+              describedById={error ? "join-phone-error" : undefined}
             />
             <button className="button" type="submit" disabled={!phone.trim()}>
               שלח קישור כניסה
             </button>
           </form>
-          {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
-        </section>
+          {error && <div id="join-phone-error" className="status error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
+        </main>
       </div>
     );
   }
@@ -179,13 +187,13 @@ function JoinPageInner() {
   if (phase === "link_sent") {
     return (
       <div className="login-page">
-        <section className="login-box" style={{ textAlign: "center" }}>
+        <main id="main" className="login-box" style={{ textAlign: "center" }}>
           <h1 className="page-title">בדוק את ה-WhatsApp שלך</h1>
           {householdCard}
-          <div style={{ fontSize: "2.5rem", margin: "12px 0" }}>📲</div>
-          <p>שלחנו לך קישור כניסה ב-WhatsApp.</p>
+          <div style={{ fontSize: "2.5rem", margin: "12px 0" }}><span aria-hidden>📲</span></div>
+          <p role="status">שלחנו לך קישור כניסה ב-WhatsApp.</p>
           <p className="muted" style={{ marginTop: 6 }}>לחיצה על הקישור תחזיר אותך לכאן אוטומטית.</p>
-        </section>
+        </main>
       </div>
     );
   }
@@ -199,15 +207,20 @@ function JoinPageInner() {
     const greetingName = currentUser?.displayName ?? invite?.invitedName;
     return (
       <div className="login-page">
-        <section className="login-box">
+        <main id="main" className="login-box">
           <h1 className="page-title">הצטרפות לבית</h1>
           {householdCard}
           {greetingName && (
             <p className="muted" style={{ textAlign: "center", marginBottom: 12 }}>
-              שלום {greetingName} 👋
+              שלום {greetingName} <span aria-hidden>👋</span>
             </p>
           )}
-          <div className="form">
+          {/* A real <form> so Enter submits (3.2.2); join() itself is unchanged. */}
+          <form
+            className="form"
+            noValidate
+            onSubmit={(e) => { e.preventDefault(); void join(); }}
+          >
             {needsName && (
               <label>
                 השם שלך (יוצג לשאר חברי הבית)
@@ -222,15 +235,18 @@ function JoinPageInner() {
             )}
             <button
               className="button"
+              type="submit"
               style={{ width: "100%" }}
               disabled={phase === "joining" || (needsName && !displayName.trim())}
-              onClick={join}
             >
               {phase === "joining" ? "מצטרף..." : "הצטרף לבית"}
             </button>
-          </div>
-          {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
-        </section>
+          </form>
+          {/* The button is disabled while joining, so focus is dropped and its own
+              label change is never announced - this live region carries it. */}
+          <span className="sr-only" role="status">{phase === "joining" ? "מצטרף..." : ""}</span>
+          {error && <div className="status error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
+        </main>
       </div>
     );
   }
@@ -242,7 +258,7 @@ function JoinPageInner() {
 // whenever useSearchParams() is used during static generation.
 export default function JoinPage() {
   return (
-    <Suspense fallback={<div className="login-page"><div className="login-box">טוען...</div></div>}>
+    <Suspense fallback={<div className="login-page"><main id="main" className="login-box"><h1 className="sr-only">הצטרפות לבית</h1><span role="status">טוען...</span></main></div>}>
       <JoinPageInner />
     </Suspense>
   );

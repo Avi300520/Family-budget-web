@@ -18,6 +18,13 @@ interface PhoneInputProps {
   disabled?: boolean;
   /** Mark the field invalid for assistive tech + error styling. */
   invalid?: boolean;
+  /**
+   * id of an external element (usually the error text) that describes the phone
+   * field, wired as `aria-describedby` so a screen reader reads the error while
+   * the field has focus (WCAG 3.3.1). Pass `undefined` when there is no such
+   * element - a dangling idref announces nothing.
+   */
+  describedById?: string;
 }
 
 /**
@@ -38,6 +45,7 @@ export function PhoneInput({
   autoComplete = "tel-national",
   disabled = false,
   invalid = false,
+  describedById,
 }: PhoneInputProps) {
   return (
     <div className="phone-field">
@@ -52,6 +60,7 @@ export function PhoneInput({
         autoComplete={autoComplete}
         aria-label={phoneAriaLabel}
         aria-invalid={invalid || undefined}
+        aria-describedby={describedById}
         disabled={disabled}
         onChange={(e) => onPhoneChange(e.target.value)}
       />

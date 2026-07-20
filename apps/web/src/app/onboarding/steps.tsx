@@ -68,27 +68,27 @@ export function ProfileStep({ state, set }: StepProps) {
       </Field>
 
       <Field label="השם שלך">
-        <TextInput value={state.displayName} onChange={(v) => set({ displayName: v })} placeholder="השם שלך" autoComplete="given-name" />
+        <TextInput value={state.displayName} onChange={(v) => set({ displayName: v })} placeholder="השם שלך" autoComplete="given-name" ariaLabel="השם שלך" />
       </Field>
       <Field label="שם הבית">
-        <TextInput value={state.householdName} onChange={(v) => set({ householdName: v })} placeholder="למשל: משפחת לוי" />
+        <TextInput value={state.householdName} onChange={(v) => set({ householdName: v })} placeholder="למשל: משפחת לוי" ariaLabel="שם הבית" />
       </Field>
       {precise && (
         <Field label="עיר / אזור" hint="אופציונלי - עוזר להשוואות בעתיד">
-          <TextInput value={state.city} onChange={(v) => set({ city: v })} placeholder="העיר או השכונה שלך" />
+          <TextInput value={state.city} onChange={(v) => set({ city: v })} placeholder="העיר או השכונה שלך" ariaLabel="עיר / אזור" />
         </Field>
       )}
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <Field label="מבוגרים">
-          <Stepper value={state.adults} onChange={(v) => set({ adults: v })} min={1} max={12} />
+          <Stepper value={state.adults} onChange={(v) => set({ adults: v })} min={1} max={12} label="מבוגרים" />
         </Field>
         <Field label="ילדים">
-          <Stepper value={state.kids} onChange={(v) => set({ kids: v })} min={0} max={12} />
+          <Stepper value={state.kids} onChange={(v) => set({ kids: v })} min={0} max={12} label="ילדים" />
         </Field>
         {precise && (
           <Field label="רכבים">
-            <Stepper value={state.cars} onChange={(v) => set({ cars: v })} min={0} max={6} />
+            <Stepper value={state.cars} onChange={(v) => set({ cars: v })} min={0} max={6} label="רכבים" />
           </Field>
         )}
       </div>
@@ -140,7 +140,7 @@ export function CycleStep({ state, set }: StepProps) {
             <DayChips value={state.creditDay} onChange={(v) => set({ creditDay: v })} />
           </Field>
           <Field label="מספר מקורות הכנסה">
-            <Stepper value={state.incomeCount} onChange={(v) => set({ incomeCount: v })} min={1} max={6} />
+            <Stepper value={state.incomeCount} onChange={(v) => set({ incomeCount: v })} min={1} max={6} label="מספר מקורות הכנסה" />
           </Field>
         </>
       )}
@@ -163,11 +163,11 @@ export function IncomeStep({ state, set }: StepProps) {
       />
       {state.budgetMode === "income" ? (
         <Field label="הכנסה חודשית נטו (משק הבית)" hint="לא חובה - נעזר בזה כדי להציע תקציב לניהול. הסכום נשאר אצלכם.">
-          <MoneyInput size="lg" value={state.income} onChange={(v) => set({ income: v })} placeholder="24,000" autoFocus />
+          <MoneyInput size="lg" value={state.income} onChange={(v) => set({ income: v })} placeholder="24,000" autoFocus ariaLabel="הכנסה חודשית נטו (משק הבית)" />
         </Field>
       ) : (
         <Field label="תקציב חודשי לניהול" hint="הסכום שתרצו לנהל מדי חודש.">
-          <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder="10,000" autoFocus />
+          <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder="10,000" autoFocus ariaLabel="תקציב חודשי לניהול" />
         </Field>
       )}
     </div>
@@ -185,11 +185,12 @@ function FixedExpenseCard({ item, onPatch, onRemove, precise }: {
   return (
     <div style={{ background: "var(--cream-2)", border: "1.5px solid var(--cream-4)", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 22 }}>{item.emoji}</span>
+        <span aria-hidden style={{ fontSize: 22 }}>{item.emoji}</span>
         {item.isCustom ? (
           <input
             className="input"
             value={item.label}
+            aria-label="שם ההוצאה"
             placeholder="שם ההוצאה"
             onChange={(e) => onPatch({ label: e.target.value })}
             style={{ fontSize: 16, flex: 1 }}
@@ -197,14 +198,20 @@ function FixedExpenseCard({ item, onPatch, onRemove, precise }: {
         ) : (
           <span style={{ fontWeight: 700, color: "var(--text-0)", flex: 1 }}>{item.label}</span>
         )}
-        <button type="button" onClick={onRemove} aria-label="הסר" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--text-2)", padding: 6 }}>
+        {/* Icon-only control: the name must say WHAT is removed, not just "הסר". */}
+        <button type="button" onClick={onRemove} aria-label={item.label.trim() ? `הסר ${item.label.trim()}` : "הסר הוצאה"} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--text-2)", padding: 6 }}>
           <Trash2 size={18} aria-hidden />
         </button>
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ flex: "1 1 140px", minWidth: 130 }}>
-          <MoneyInput value={item.amount} onChange={(v) => onPatch({ amount: v })} placeholder={item.isEstimate ? "הערכה" : "סכום"} />
+          <MoneyInput
+            value={item.amount}
+            onChange={(v) => onPatch({ amount: v })}
+            placeholder={item.isEstimate ? "הערכה" : "סכום"}
+            ariaLabel={item.label.trim() ? `סכום - ${item.label.trim()}` : "סכום"}
+          />
         </div>
         {precise && <FreqPick value={item.frequency} onChange={(v: FrequencyId) => onPatch({ frequency: v })} />}
       </div>
@@ -284,7 +291,7 @@ export function FixedStep({ state, set }: StepProps) {
                 background: on ? "var(--teal-bg)" : "var(--cream-2)",
                 color: on ? "var(--teal-dark)" : "var(--text-1)"
               }}>
-                <span>{p.emoji}</span>{p.label}{on ? " ✓" : ""}
+                <span aria-hidden>{p.emoji}</span>{p.label}{on ? " ✓" : ""}
               </button>
             );
           })}
@@ -328,12 +335,14 @@ export function BudgetStep({ state, set, totals }: StepProps) {
           ? `הצענו ${fmt(suggestion)} (הכנסה פחות הוצאות קבועות). אפשר לשנות.`
           : "אפשר לעדכן את הסכום."}
       >
-        <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder={String(suggestion || 10000)} />
+        <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder={String(suggestion || 10000)} ariaLabel="תקציב חודשי לניהול" />
       </Field>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-0)" }}>חלוקה לקטגוריות (לא חובה)</span>
+          {/* Real heading for the sub-section; inline resets keep the rendering
+              byte-identical to the styled <span> it replaced. */}
+          <h2 style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-0)", margin: 0 }}>חלוקה לקטגוריות (לא חובה)</h2>
           <button type="button" onClick={() => set({ subBudgets: autoSplitSubBudgets(totals.managed) })} className="btn sm">חלוקה אוטומטית</button>
         </div>
         <div className="muted" style={{ fontSize: 12.5 }}>
@@ -341,9 +350,9 @@ export function BudgetStep({ state, set, totals }: StepProps) {
         </div>
         {SUB_BUDGET_CATS.map((c) => (
           <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ flex: 1, fontSize: 14 }}>{c.icon} {c.labelHe}</span>
+            <span style={{ flex: 1, fontSize: 14 }}><span aria-hidden>{c.icon}</span> {c.labelHe}</span>
             <div style={{ width: 140 }}>
-              <MoneyInput value={state.subBudgets[c.id] ?? ""} onChange={(v) => setSub(c.id, v)} placeholder="0" />
+              <MoneyInput value={state.subBudgets[c.id] ?? ""} onChange={(v) => setSub(c.id, v)} placeholder="0" ariaLabel={c.labelHe} />
             </div>
           </div>
         ))}

@@ -8,11 +8,21 @@
     "dev:web": "pnpm --filter @shopping-assistant/web dev",
     "dev:admin": "pnpm --filter @shopping-assistant/admin dev",
     "build": "pnpm -r --workspace-concurrency=1 build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint --config eslint.a11y.config.mjs .",
+    "lint:a11y": "eslint --config eslint.a11y.config.mjs .",
+    "a11y": "node scripts/a11y-axe.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@types/node": "^22.10.7",
+    "axe-core": "^4.12.1",
+    "eslint": "^9",
+    "eslint-plugin-jsx-a11y": "^6",
+    "jsdom": "^29.1.1",
     "next": "^15.1.4",
-    "typescript": "^5.7.3"
+    "playwright-chromium": "^1.61.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8"
   }
 }

@@ -74,7 +74,7 @@ export function MagicLinkForm({
       >
         <div className="pt-form__sent">
           <span className="pt-form__sent-ic">
-            <MessageCircle size={22} />
+            <MessageCircle size={22} aria-hidden="true" focusable="false" />
           </span>
           <div>
             <div style={{ fontWeight: 800, fontSize: 16, color: "var(--text-0)" }}>
@@ -115,7 +115,7 @@ export function MagicLinkForm({
 
       {banner === "error" && (
         <div className="pt-form__banner is-error" role="alert">
-          <TriangleAlert size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+          <TriangleAlert size={18} aria-hidden="true" focusable="false" style={{ flexShrink: 0, marginTop: 1 }} />
           <span>
             <b>לא הצלחנו לשלוח את הקישור</b>
             אפשר לבדוק את החיבור ולנסות שוב.
@@ -124,7 +124,7 @@ export function MagicLinkForm({
       )}
       {banner === "ratelimit" && (
         <div className="pt-form__banner is-warn" role="alert">
-          <TriangleAlert size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+          <TriangleAlert size={18} aria-hidden="true" focusable="false" style={{ flexShrink: 0, marginTop: 1 }} />
           <span>
             <b>כבר שלחנו קישור</b>
             אפשר לבקש קישור חדש בעוד רגע.
@@ -150,7 +150,7 @@ export function MagicLinkForm({
       />
       {fieldErr && (
         <div className="pt-form__err" role="alert">
-          <TriangleAlert size={15} /> {fieldErr}
+          <TriangleAlert size={15} aria-hidden="true" focusable="false" /> {fieldErr}
         </div>
       )}
 
@@ -161,15 +161,15 @@ export function MagicLinkForm({
       >
         {working ? (
           <>
-            <Loader2 size={18} className="pt-spin" /> שולחים קישור…
+            <Loader2 size={18} aria-hidden="true" focusable="false" className="pt-spin" /> שולחים קישור…
           </>
         ) : banner === "ratelimit" ? (
           <>
-            <Send size={18} /> שליחת קישור חדש
+            <Send size={18} aria-hidden="true" focusable="false" /> שליחת קישור חדש
           </>
         ) : (
           <>
-            <MessageCircle size={18} /> מתחילים בחינם בוואטסאפ
+            <MessageCircle size={18} aria-hidden="true" focusable="false" /> מתחילים בחינם בוואטסאפ
           </>
         )}
       </button>
@@ -199,13 +199,13 @@ export function MagicLinkForm({
           }}
         >
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <MessageCircle size={13} color="var(--wa)" /> כניסה בוואטסאפ
+            <MessageCircle size={13} aria-hidden="true" focusable="false" color="var(--wa)" /> כניסה בוואטסאפ
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Check size={13} /> בלי סיסמה
+            <Check size={13} aria-hidden="true" focusable="false" /> בלי סיסמה
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <Check size={13} /> בלי הורדה
+            <Check size={13} aria-hidden="true" focusable="false" /> בלי הורדה
           </span>
         </div>
       )}

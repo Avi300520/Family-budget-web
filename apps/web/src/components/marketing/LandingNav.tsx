@@ -48,7 +48,9 @@ export function LandingNav() {
             aria-controls="pt-mobile-menu"
             onClick={() => setOpen((v) => !v)}
           >
-            {open ? <X size={20} /> : <Menu size={20} />}
+            {/* aria-hidden is safe here: the button's name comes from its
+                aria-label above, so hiding the glyph never leaves it nameless. */}
+            {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
           </button>
         </div>
       </div>

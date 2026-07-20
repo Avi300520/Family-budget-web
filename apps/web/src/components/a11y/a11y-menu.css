@@ -1,0 +1,202 @@
+/* =============================================================================
+   Accessibility menu (BATCH-GH / audit P0-1)
+   Hand-built, no third-party overlay (audit §6). Every colour is a design token
+   from styles/tokens.css - no new hex. Every control is >= 44px tall/wide.
+   RTL-safe: logical properties only (inset-inline-*, margin-inline-*, text-align:
+   start). The global :focus-visible ring in globals.css covers every control
+   here, so this file defines no focus styles of its own.
+   ============================================================================ */
+
+/* Anchor. z-index 48 sits UNDER the mobile off-canvas drawer (50) and its scrim
+   (49) so the launcher can never float on top of an open drawer, and ABOVE the
+   sticky app top bar (45) / side rail (40). */
+.a11y-widget {
+  position: fixed;
+  inset-inline-start: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 48;
+}
+
+/* Authenticated app only: `.side-nav` is a fixed 264px full-height rail on the
+   inline-start edge above 900px, with the account/logout footer pinned at its
+   bottom - exactly where the launcher lands. Flip the launcher to the opposite
+   corner there so it can never cover the logout button. Public pages (the
+   audited WCAG surface) have no rail and keep the bottom inline-start corner.
+   Progressive enhancement: a browser without :has() just ignores this. */
+@media (min-width: 901px) {
+  body:has(.app-shell) .a11y-widget {
+    inset-inline-start: auto;
+    inset-inline-end: 16px;
+  }
+  body:has(.app-shell) .a11y-panel {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+  }
+}
+
+/* Public routes with a full-width sticky bottom CTA (/l/[token]'s "סיימתי את
+   הקנייה", /onboarding's footer row) would otherwise run underneath the 48px
+   launcher on a narrow viewport, so a tap on the inline-start end of the CTA
+   would open the accessibility menu instead. Reserve the launcher's footprint
+   beside them. Only narrow viewports collide: above 900px both layouts are a
+   centred max-width column and the launcher sits outside it. */
+@media (max-width: 900px) {
+  .a11y-sticky-cta {
+    padding-inline-start: 72px;
+  }
+}
+
+.a11y-launcher {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid var(--teal-dark);
+  border-radius: 50%;
+  background: var(--teal);
+  color: var(--on-color);
+  box-shadow: var(--elev-3);
+}
+.a11y-launcher:hover {
+  background: var(--teal-dark);
+}
+
+/* Opens upward from the launcher. The wrapper is only as tall as the launcher
+   (the panel is out of flow), so bottom:100% pins the panel just above it. */
+.a11y-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  inset-inline-start: 0;
+  width: 264px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--cream-2);
+  border: 1px solid var(--cream-4);
+  border-radius: var(--r-4);
+  box-shadow: var(--elev-3);
+  text-align: start;
+}
+/* Explicit: `display:grid` above would otherwise beat the UA [hidden] rule. */
+.a11y-panel[hidden] {
+  display: none;
+}
+
+.a11y-panel__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-0);
+}
+
+.a11y-group__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-block-start: var(--sp-2);
+}
+
+.a11y-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.a11y-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--sp-2);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-0);
+  background: var(--cream-0);
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-2);
+}
+.a11y-btn:hover:not(:disabled) {
+  background: var(--cream-1);
+}
+/* Disabled controls are exempt from 1.4.3 contrast. */
+.a11y-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.a11y-stepper__value {
+  flex: 1;
+  min-width: 52px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-0);
+  font-family: var(--font-mono);
+}
+
+.a11y-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 14px;
+  text-align: start;
+  color: var(--text-0);
+  background: var(--cream-0);
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-2);
+}
+.a11y-toggle:hover {
+  background: var(--cream-1);
+}
+.a11y-toggle[aria-pressed="true"] {
+  background: var(--teal-bg);
+  border-color: var(--teal);
+}
+
+/* Decorative state echo - aria-pressed already carries the state to AT, so the
+   pill is aria-hidden and must never be the accessible name. */
+.a11y-toggle__state {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+  background: var(--cream-2);
+  border: 1px solid var(--cream-4);
+  border-radius: 999px;
+}
+.a11y-toggle[aria-pressed="true"] .a11y-toggle__state {
+  color: var(--on-color);
+  background: var(--teal);
+  border-color: var(--teal);
+}
+
+.a11y-reset {
+  width: 100%;
+  min-height: 44px;
+  margin-block-start: var(--sp-2);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--teal);
+  background: var(--cream-2);
+  border: 1px solid var(--teal);
+  border-radius: var(--r-2);
+}
+.a11y-reset:hover {
+  background: var(--teal-bg);
+}
+
+/* Print: the widget is chrome, never content. */
+@media print {
+  .a11y-widget {
+    display: none;
+  }
+}
