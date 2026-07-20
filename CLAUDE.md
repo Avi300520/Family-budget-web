@@ -8,6 +8,67 @@
 
 ---
 
+## Accessibility — WCAG 2.0 AA / IS 5568 (BATCH-GH, 2026-07-20) — READ BEFORE TOUCHING TOKENS, FOCUS, OR ANY PUBLIC ROUTE
+
+Branch `batch-gh/accessibility-wcag-aa` (off `main` `f2bf0c5`, commit `f7976a1`) makes the **public**
+web surface honestly WCAG 2.0 AA conformant so an Israeli accessibility statement (הצהרת נגישות,
+תקנה 35) can be published truthfully. **Frontend-only. NOT deployed — owner release gate.**
+Gap report: `Shopping assistant/docs/audit/2026-07-06/ACCESSIBILITY_AUDIT.md`.
+Auditor handoff: `.../ACCESSIBILITY_HANDOFF_CHECKLIST.md`. Ledger: `.../TASK_INDEX.md` BATCH-GH.
+
+**In scope = the 8 public routes only:** `/`, `/login`, `/auth/consume`, `/join`, `/onboarding`,
+`/l/[token]`, `/privacy`, `/terms`. The authenticated app and `apps/admin` are **outside** the
+statement's scope and were not structurally edited — but they DO inherit the global CSS fixes.
+
+**Load-bearing rules (do not relitigate):**
+- **Contrast lives in the token VALUES, not in call sites.** `--text-2`/`--text-3` are used
+  *exclusively* as `color:` — never a border, never a background. So AA is enforced by the token
+  value. `--text-3` is now an **alias of `--text-2`**: the neutral ramp has room for exactly three
+  AA text steps, not four. Current: `--text-2 #59626E` · `--pos #1B6B43` · `--warn #8A6410` ·
+  `--on-ink-2 #949DAA` · new `--field-border #9C8E6B` (1.4.11 form-control boundary; decorative
+  card outlines stay `--cream-3/-4` deliberately). **Never re-lighten these.**
+- **`styles/marketing.css` REDEFINES the same token names inside `.pt-root`.** A global token fix
+  does NOT reach the landing. Fix both scopes or you will ship a half-fix (this exact trap cost
+  `.pt-root --text-3` a separate patch).
+- **Specificity is a contrast bug vector here.** Two BLOCKER-severity 1.4.3 failures on `/` and
+  `/login` existed in production and were invisible to source reading: `.pt-root a{color:inherit}`
+  outranked `.pt-btn--primary`, painting every `<a>` CTA at **1.75:1**; `.pt-shead p` outranked
+  `.pt-trust__intro`, painting the trust lead at **1.71:1**. The anchor reset is now
+  `.pt-root :where(a)` (zero specificity). **Verify colour with `getComputedStyle` in a browser,
+  never by reading the rule.**
+- **`globals.css` owns a global unscoped `:focus-visible`** (3px `--focus-ring`, 2px offset) with a
+  cream variant on `.side-nav`/`.app-drawer`/`.settings-banner` and, in marketing.css, on
+  `.pt-trust`/`.pt-why__quote`/`.pt-insights`/`.pt-final`. **Never add `outline:none`** without an
+  equivalent replacement, and **never put `border-radius` on the focus rule** (it mutates the
+  focused element's own geometry).
+- **Accessible names must carry state.** An `aria-label` on an element with visible content
+  OVERRIDES that content. The audit's worst find was `/l`'s buy button hiding quantity + the
+  partial X/Y badge + out-of-stock from screen readers. Prefer `.sr-only` text *inside* the visible
+  content over an `aria-label`, so name and pixels cannot drift apart.
+- **Every rendered STATE needs one `<h1>` + one `<main id="main">`** — loading, error, empty and
+  terminal branches too, not just the happy path. `id="main"` is the site-wide skip-link target.
+- **`components/a11y/`** holds the hand-built accessibility menu (audit §6: **no third-party
+  overlay**, ever). It is mounted once in `app/layout.tsx` via `A11yBar` (skip link + menu). Font
+  scaling is `zoom` on `<html>` because this codebase is **100% px**; CSS hooks are
+  `html[data-a11y-contrast|motion|links|font]` in `globals.css`. The panel is a **non-modal**
+  disclosure: `aria-modal="false"`, **no focus trap** (a trap here is a bug). Never `disabled` a
+  control that disables itself on activation — it drops focus to `<body>` (2.4.3).
+- **Tooling:** `pnpm lint` (eslint-plugin-jsx-a11y) and `pnpm a11y` (axe-core over all 8 public
+  routes). `pnpm a11y` prefers a real browser; run `npx playwright install chromium` once to get
+  it, otherwise it falls back to jsdom and says so — **a clean jsdom run is not a conformance
+  result**. The lint config filename is deliberately `eslint.a11y.config.mjs`, NOT
+  `eslint.config.mjs`: a standard name makes `next build` (and Vercel) lint and fail.
+
+**Still open (NOT done, do not claim otherwise):** the manual gates — NVDA + VoiceOver on each
+public route, hand-run 200% zoom / 320px reflow, physical keyboard walkthrough, and a real-device
+check that the menu launcher does not obscure the sticky CTAs on `/l` and `/onboarding`. Plus every
+human/legal item in audit §9 (named coordinator, freshly authored statement text, no publication
+before the certified מורשה נגישות review closes). Automated coverage is also **state-limited**:
+with no backend, `/join`, `/auth/consume` and `/l/[token]` scan only their error states and
+`/onboarding` only its shell.
+
+---
+
 ## Public Root Landing (2026-06-29) — READ BEFORE TOUCHING `/`, `/login`, OR LANDING SEO
 
 Branch `feat/public-root-landing-pingtally` (off `main`) makes **`https://pingtally.com/`
