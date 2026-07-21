@@ -8,6 +8,76 @@
 
 ---
 
+## Accessibility follow-up — BATCH-GI (2026-07-21) — NOT DEPLOYED, owner-gated
+
+Branch `batch-gi/accessibility-fixes` (off `e136db4`, commit `16d1212`, pushed). Fixes the
+findings of three audit passes over the **deployed** BATCH-GH build: the Playwright harness
+(D1-D5) plus two Chrome-agent passes (visual + deep-interactive, F1-F14). **Frontend-only; no
+backend/DB/billing/flag change. Not merged** — merging FE `main` auto-promotes Vercel prod.
+
+**All five Playwright defects closed and RE-MEASURED in a real browser, both engines:**
+D1 skip link **1.75 → 5.47:1** · D2 `.pt-compare__tag` axe-serious → **0 violations** in
+high-contrast · D3 `סיימתי` focus `<body>` → the outcome heading (the one hard spec failure in
+the BATCH-GH run now passes) · D4 launcher overlap **48×34px → `overlaps=[]`** at 375 and 320 ·
+D5 `/auth/consume` fallback `h1 0 → 1`.
+
+**Three root causes worth remembering (each was invisible to source reading):**
+- **`:where()` only helps a rule that LOSES, not one that TIES.** `.skip-link` (0,1,0) vs
+  `.pt-root :where(a)` (0,1,0) → source order decides, and marketing.css loads later. The
+  selector is now `a.skip-link` (0,1,1). BATCH-GH's `:where()` fix worked for the CTAs only
+  because `.pt-btn--primary` out-specifies it.
+- **`--cream-3`/`--cream-4` are BOUNDARY tokens and must never sit under text.** High-contrast
+  darkens them *as lines*, which silently broke a chip to 3.94:1 — in the mode a low-vision
+  user turns ON. Same discipline as `--text-2`/`--text-3` being `color:`-only, in reverse.
+- **An inline `style` shorthand out-ranks any stylesheet rule.** `a11y-menu.css` had reserved
+  72px for the launcher since BATCH-GH; ShareList's inline `padding: "10px 0 …"` zeroed it, so
+  the documented mitigation was a no-op. Longhands (`paddingTop`/`paddingBottom`) fixed it.
+  `/onboarding` never had the bug because its footer is a CSS module.
+
+**Reusable patterns introduced (use these, do not reinvent):**
+- **`src/lib/a11y/announce.ts`** — one polite live region. Created once from `A11yBar` so it is
+  in the a11y tree *before* the first message (a region inserted with its content is often never
+  spoken), and **blank-then-set** so a repeated identical message announces again. Use it ONLY
+  where nothing else speaks — on `/l` the focus-restored control's own name plus the `נשאר N`
+  counter already say it, and adding announce() there produced **three** utterances per tap.
+- **Never `disabled` on a control that its own activation disables** (2.4.3). Eight submit
+  buttons now use `aria-busy`/`aria-disabled` + a re-entrancy guard as the handler's first
+  statement. `globals.css` styles that state as a **token swap, never opacity**.
+- **`role="alert"` fires on INSERTION.** Writing the same string into a mounted alert is silent,
+  so every repeat attempt said nothing. Each validation alert is now **keyed on an attempt
+  counter**. Do not "fix" this by also calling `announce()` — that makes the first failure speak
+  twice.
+- **Move focus to an invalid field from an EFFECT, not synchronously.** A `focus()` in the submit
+  handler lands before React commits `aria-invalid`/`aria-describedby`, so the reader announces
+  the field as valid.
+- **Guard every post-`await` focus move** with `if (document.activeElement !== document.body) return;`
+  — otherwise it steals focus from a user who Tabbed onward during the round-trip.
+
+**Split to a documented follow-up (NOT half-done):** F12 native `confirm()` → an accessible
+`role="alertdialog"`, and the full ARIA APG tabs pattern on `/insights` (shipped as plain
+buttons + a labelled region instead). `confirm()` is not a WCAG 2.0 AA failure and every call
+site is outside the statement's scope; the real defect under it — focus loss after the confirmed
+action — is fixed independently.
+
+**Owner must eyeball before merge (legitimate but visible):** the `/l` sticky CTA is 72px
+narrower below 900px (that IS the D4 fix); the dashboard `ממתין` pill goes white → ink on coral;
+ActivityFeed row separators and the fallback avatar chip now RENDER for the first time (their
+tokens `--line-1`/`--surface-2` were undefined, so the declarations computed to `initial`); the
+two settings save bars show the saved state on a still-mounted button instead of a bare span.
+
+**Verification:** typecheck · build (30 routes) · 83/83 unit tests · `eslint.a11y.config.mjs` ·
+Playwright harness **152 passed** both engines — axe **0 violations** across 13 route-states × 7
+menu modes, measured contrast **FAIL=0**, zero keyboard traps, `/l` names still carry
+quantity/partial/out-of-stock. The 10 remaining **soft** structure failures are byte-identical to
+the committed BATCH-GH evidence from the deployed production commit (the D6 2.5.3 judgement calls
++ the O2 flex-`<li>` question) — **pre-existing, for the auditor, not regressions.** Proven by
+running the same predicates over both evidence files.
+
+**Still NOT closed by this batch:** every manual/human gate below is unchanged. The accessibility
+statement still must not be published.
+
+---
+
 ## Accessibility — WCAG 2.0 AA / IS 5568 (BATCH-GH, 2026-07-20) — READ BEFORE TOUCHING TOKENS, FOCUS, OR ANY PUBLIC ROUTE
 
 Branch `batch-gh/accessibility-wcag-aa` (off `main` `f2bf0c5`, commits `f7976a1` + `7cdbf2f`) makes
