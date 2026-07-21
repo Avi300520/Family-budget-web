@@ -1,0 +1,11 @@
+{
+  "name": "a11y-verification-harness",
+  "private": true,
+  "description": "BATCH-GH accessibility verification harness. NOT part of the pnpm workspace (apps/* only globs direct children) and NOT in the repo lockfile - a committed playwright dep would download Chromium on every Vercel production build. Install on demand: npm install && npx playwright install chromium webkit",
+  "scripts": { "test": "playwright test", "digest": "node digest.mjs" },
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.61.1",
+    "axe-core": "4.12.1"
+  }
+}

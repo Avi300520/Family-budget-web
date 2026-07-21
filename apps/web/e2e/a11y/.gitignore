@@ -1,0 +1,6 @@
+node_modules/
+evidence/
+fixtures/
+states.json
+.seed-counter
+package-lock.json
