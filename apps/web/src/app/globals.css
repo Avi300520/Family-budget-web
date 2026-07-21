@@ -129,8 +129,18 @@ button {
   border: 0;
 }
 
-/* ── Skip link (site-wide; targets the page's <main id="main">) ─────────────── */
-.skip-link {
+/* ── Skip link (site-wide; targets the page's <main id="main">) ───────────────
+   BATCH-GI D1 (1.4.3): the selector is `a.skip-link` (0,1,1), NOT `.skip-link`
+   (0,1,0). marketing.css declares `.pt-root :where(a) { color: inherit }` which
+   is ALSO (0,1,0) and loads later, so at equal specificity source order won and
+   the skip link inherited .pt-root's --text-1 #3C474A onto the --teal fill =
+   1.75:1 on `/` and `/login` — the same ratio, and the same cascade trap, as the
+   two CTA blockers BATCH-GH fixed. `:where()` zeroing the inner selector was not
+   enough here because this rule merely TIED. One extra element in the selector
+   wins in every scope, present and future. Verified with getComputedStyle on the
+   focused element — this defect is invisible to a source read and to axe (the
+   link is 1x1 and clipped until focused). */
+a.skip-link {
   position: absolute;
   top: 8px;
   inset-inline-start: 12px;
@@ -225,6 +235,21 @@ html[data-a11y-contrast="on"] .section,
 html[data-a11y-contrast="on"] .login-box,
 html[data-a11y-contrast="on"] .item-card {
   border-color: var(--text-0);
+}
+
+/* BATCH-GI 1.4.3 — a BOUNDARY token used as a TEXT background. `.button.secondary`
+   fills with --cream-3, which high contrast darkens to #6B6B6B, while --text-0
+   #1A2330 is deliberately NOT overridden above: the pair measures 2.97:1 (and
+   1.46:1 on :hover, where the fill becomes --cream-4 #3D3D3D). In scope because
+   /onboarding renders it. Repainted as a bordered white button - the same
+   treatment as the cards above; --cream-1 is #FFFFFF in this mode and so is the
+   page, hence the explicit border. `.button.secondary:hover` (0,3,1) is listed
+   because it would otherwise outrank a single (0,3,0) override. */
+html[data-a11y-contrast="on"] .button.secondary,
+html[data-a11y-contrast="on"] .button.secondary:hover {
+  background: var(--cream-1);
+  color: var(--text-0);
+  border: 1px solid var(--text-0);
 }
 
 /* -----------------------------------------------------------------------------
@@ -459,6 +484,27 @@ html[data-a11y-contrast="on"] .item-card {
 
 .button:disabled {
   opacity: 0.55;
+  cursor: default;
+}
+
+/* BATCH-GI — the unavailable/in-flight state for controls that must NOT use `disabled`.
+   Disabling a control as a RESULT of activating it removes it from the focus order under the
+   user's finger and drops focus to <body> (2.4.3), so this batch replaced `disabled` with
+   `aria-busy` (a request is in flight) or `aria-disabled` (a precondition is unmet) on eight
+   submit buttons, each guarded by a re-entrancy check in its handler. Without this rule those
+   controls looked fully live while inert - a real usability regression for sighted users.
+
+   NOT `opacity`: this codebase has a standing rule that opacity on text composites it toward
+   the background and silently breaks contrast (CLAUDE.md). These are token swaps instead.
+   `cursor: default` (not `not-allowed`) matches the existing :disabled rule above. */
+.button[aria-disabled="true"],
+.button[aria-busy="true"],
+.btn[aria-disabled="true"],
+.btn[aria-busy="true"] {
+  background: var(--cream-3);
+  border-color: var(--cream-4);
+  color: var(--text-2);
+  box-shadow: none;
   cursor: default;
 }
 
@@ -794,11 +840,18 @@ html[data-a11y-contrast="on"] .item-card {
     color: var(--on-ink-0);
     overflow-y: auto;
     transform: translateX(100%);
-    transition: transform var(--dur-2) var(--ease);
+    /* BATCH-GI 4.1.2/2.4.3: the closed drawer was only translated off-screen, so
+       its links stayed in the tab order while the element carries
+       aria-hidden="true" (axe: aria-hidden-focus — focus lands on something no
+       screen reader can report). visibility removes it from BOTH the a11y tree
+       and the focus order, and still animates because it is transitionable. */
+    visibility: hidden;
+    transition: transform var(--dur-2) var(--ease), visibility var(--dur-2) var(--ease);
     box-shadow: var(--elev-3);
   }
   .app-drawer.open {
     transform: none;
+    visibility: visible;
   }
 }
 
@@ -1038,7 +1091,10 @@ html, body {
   background: rgba(255, 255, 255, 0.14);
   font-size: 26px;
 }
-.settings-banner__eyebrow { font-size: 12.5px; opacity: 0.78; }
+/* BATCH-GI 1.4.3: opacity:.78 composited the white eyebrow toward the teal
+   gradient below it (4.01:1 over the --teal stop, at 12.5px = normal text).
+   Opacity on text is a contrast bug — the quiet look comes from weight now. */
+.settings-banner__eyebrow { font-size: 12.5px; font-weight: 500; }
 .settings-banner__title { font-size: 21px; font-weight: 800; margin: 2px 0 6px; }
 .settings-banner__meta { font-size: 12.5px; opacity: 0.92; display: flex; flex-wrap: wrap; gap: 6px 14px; }
 

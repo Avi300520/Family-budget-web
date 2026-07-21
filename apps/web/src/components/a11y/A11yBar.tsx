@@ -11,9 +11,17 @@
  * takes focus).
  */
 
+import { useEffect } from "react";
 import AccessibilityMenu from "./AccessibilityMenu";
+import { ensureLiveRegion } from "../../lib/a11y/announce";
 
 export default function A11yBar() {
+  // BATCH-GI 4.1.3 — create the shared polite live region once, from the one component that is
+  // mounted on every route. A region that is inserted in the same task as its first message is
+  // often never spoken (VoiceOver especially), and /l is the mobile-Safari surface. Runs after
+  // hydration, so it adds no SSR-mismatch surface.
+  useEffect(() => { ensureLiveRegion(); }, []);
+
   // The href stays "#main" so the link works with JS disabled on any page that
   // has <main id="main">. The handler adds the fallback: pages whose <main> has
   // no id (and pages where the landmark is added later) still get a working

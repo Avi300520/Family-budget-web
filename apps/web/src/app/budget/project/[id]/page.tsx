@@ -8,6 +8,7 @@ import type { Household, ProjectBudget, Purchase } from "@shopping-assistant/sha
 import { AppShell } from "../../../../components/AppShell";
 import { LoadState } from "../../../../components/LoadState";
 import { api } from "../../../../lib/api";
+import { heDate } from "../../../../lib/format";
 
 import { CATEGORY_LABELS } from "../../../../lib/categories";
 
@@ -41,9 +42,12 @@ export default function ProjectBudgetDetailPage() {
 
   useEffect(() => { load(); }, [params.id]);
 
-  if (error) return <AppShell><LoadState error={error} /></AppShell>;
-  if (!household || !budget) return <AppShell><LoadState /></AppShell>;
+  // BATCH-GI 1.3.1/2.4.6 - the error and loading branches replace the whole page, so without
+  // their own <h1> those states render with no heading at all.
+  if (error) return <AppShell><h1 className="page-title">תקציב פרויקט</h1><LoadState error={error} /></AppShell>;
+  if (!household || !budget) return <AppShell><h1 className="page-title">תקציב פרויקט</h1><LoadState /></AppShell>;
 
+  const endDateLabel = heDate(budget.endDate);
   const remaining = Math.max(0, budget.totalAmount - spent);
   const pct = budget.totalAmount > 0 ? Math.min(100, Math.round((spent / budget.totalAmount) * 100)) : 0;
 
@@ -74,7 +78,7 @@ export default function ProjectBudgetDetailPage() {
           <div className={`progress-fill ${progressColor(pct)}`} style={{ width: `${pct}%` }} />
         </div>
         <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-          נוצלו {pct}%{budget.endDate ? ` · תאריך סיום ${budget.endDate}` : ""}
+          נוצלו {pct}%{endDateLabel ? ` · תאריך סיום ${endDateLabel}` : ""}
         </div>
       </section>
 
@@ -89,7 +93,7 @@ export default function ProjectBudgetDetailPage() {
                 <div>
                   <div style={{ fontWeight: 600 }}>{p.merchantNameRaw ?? "הוצאה"}</div>
                   <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-                    {p.purchaseDate} · {CATEGORY_LABELS[p.category] ?? p.category}
+                    {heDate(p.purchaseDate) ?? p.purchaseDate} · {CATEGORY_LABELS[p.category] ?? p.category}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>{p.totalAmount.toLocaleString()} ₪</div>

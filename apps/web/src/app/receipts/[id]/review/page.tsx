@@ -66,8 +66,9 @@ export default function ReceiptReviewPage() {
     router.push("/dashboard");
   }
 
-  if (error) return <AppShell><LoadState error={error} /></AppShell>;
-  if (!receipt) return <AppShell><LoadState /></AppShell>;
+  // 1.3.1/2.4.6: every rendered state needs an <h1>. sr-only so no pixels move.
+  if (error) return <AppShell><h1 className="sr-only">תיקון קבלה</h1><LoadState error={error} /></AppShell>;
+  if (!receipt) return <AppShell><h1 className="sr-only">תיקון קבלה</h1><LoadState /></AppShell>;
 
   return (
     <AppShell>
@@ -80,7 +81,7 @@ export default function ReceiptReviewPage() {
           </label>
           <label>
             תאריך
-            <input className="input" value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} />
+            <input className="input" dir="ltr" value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} />
           </label>
           <label>
             סך הכל
@@ -129,9 +130,9 @@ export default function ReceiptReviewPage() {
         <div className="list">
           {items.map((item, index) => (
             <div className="row" key={item.id}>
-              <input className="input" style={{ flex: 2 }} value={item.normalizedProductName ?? ""} onChange={(event) => updateItem(index, "normalizedProductName", event.target.value)} />
-              <input className="input" style={{ flex: 1 }} type="number" value={item.lineTotal} onChange={(event) => updateItem(index, "lineTotal", Number(event.target.value))} />
-              <select className="select" style={{ flex: 1 }} value={item.status} onChange={(event) => updateItem(index, "status", event.target.value)}>
+              <input className="input" style={{ flex: 2 }} aria-label={`שם המוצר - שורה ${index + 1}`} value={item.normalizedProductName ?? ""} onChange={(event) => updateItem(index, "normalizedProductName", event.target.value)} />
+              <input className="input" style={{ flex: 1 }} type="number" aria-label={`סכום השורה - שורה ${index + 1}`} value={item.lineTotal} onChange={(event) => updateItem(index, "lineTotal", Number(event.target.value))} />
+              <select className="select" style={{ flex: 1 }} aria-label={`סטטוס השורה - שורה ${index + 1}`} value={item.status} onChange={(event) => updateItem(index, "status", event.target.value)}>
                 <option value="parsed">parsed</option>
                 <option value="corrected">corrected</option>
                 <option value="ignored">ignored</option>

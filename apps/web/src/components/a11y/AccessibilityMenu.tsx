@@ -174,7 +174,12 @@ export default function AccessibilityMenu() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // BATCH-GI: preventDefault(), not just stopPropagation(). stopPropagation has NO effect on
+      // another listener bound to the SAME node, and the landing nav now binds its own document
+      // Escape handler - so on `/` and `/login` one Escape closed this panel AND then yanked focus
+      // to the nav burger. defaultPrevented is the flag both handlers agree to respect.
+      e.preventDefault();
       e.stopPropagation();
       close(true);
     };

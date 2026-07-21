@@ -211,9 +211,14 @@ export default function InsightsPage() {
               ))}
             </div>
 
-            {/* Tabs. */}
+            {/* View toggle. BATCH-GI (4.1.2): this is a toggle-button group, not an
+                APG tab widget - there is no tabpanel to own (the views are a bare
+                conditional, and during load/error NEITHER view is in the DOM), and
+                the arrow-key navigation a role="tab" announcement promises was never
+                implemented. aria-pressed states it honestly and matches the period
+                selector above. */}
             <div
-              role="tablist"
+              role="group"
               aria-label="תצוגה"
               style={{ display: "flex", gap: 6, padding: 4, borderRadius: 12, background: "var(--cream-1)", width: "fit-content" }}
             >
@@ -221,8 +226,7 @@ export default function InsightsPage() {
                 <button
                   key={id}
                   type="button"
-                  role="tab"
-                  aria-selected={tab === id}
+                  aria-pressed={tab === id}
                   onClick={() => setTab(id)}
                   style={{
                     padding: "9px 18px",

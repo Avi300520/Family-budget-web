@@ -57,9 +57,13 @@ export default function NotificationsPage() {
   }, [viewer.status, canManage]);
 
   // Viewer still resolving, or transient /me failure → explicit load/error state.
+  // a11y 1.3.1/2.4.6: every rendered state needs exactly one <h1>. These two
+  // branches render before the visible "page-title" heading exists, so they carry
+  // an .sr-only one - same accessible name, zero pixels moved.
   if (viewer.status === "loading") {
     return (
       <AppShell>
+        <h1 className="sr-only">התראות</h1>
         <LoadState />
       </AppShell>
     );
@@ -67,6 +71,7 @@ export default function NotificationsPage() {
   if (viewer.status === "error") {
     return (
       <AppShell>
+        <h1 className="sr-only">התראות</h1>
         <LoadState error="לא הצלחנו לטעון את הפרטים. נסו לרענן." />
       </AppShell>
     );

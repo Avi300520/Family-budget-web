@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CategoryBudget } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
 import { LoadState } from "../../../components/LoadState";
+import { announce } from "../../../lib/a11y/announce";
 import { api } from "../../../lib/api";
 import { redirectIfUnauthorized } from "../../../lib/authGuard";
 import { BUDGET_CATEGORIES, CAP_BUCKETS } from "../../../lib/categories";
@@ -20,6 +21,9 @@ import { useViewer } from "../../../lib/useViewer";
 // all roll into `other` are shown read-only (no fake caps, no migration).
 const CAP_CATEGORIES = BUDGET_CATEGORIES.filter((c) => c.capable); // 6 editable rows
 const TRACKING_CATEGORIES = BUDGET_CATEGORIES.filter((c) => !c.capable); // 8 display rows
+
+const CAP_INVALID_MSG = "התקרה חייבת להיות מספר גדול מ-0.";
+const CAP_ERROR_ID = "cap-error";
 
 // Summary stat tile - mirrors the design handoff's StatTile (set-screens-a.jsx):
 // centered label + mono value, with a teal-bg "strong" highlight variant.
@@ -73,6 +77,12 @@ export default function CategoryBudgetsPage() {
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string>();
+  // The cap bucket that failed validation - drives aria-invalid/aria-describedby AND the
+  // post-commit focus move (see the effect below).
+  const [invalidCap, setInvalidCap] = useState<string | null>(null);
+  // Attempt counter, used only as the alert's `key` so a repeated identical validation
+  // message still remounts the alert node and is therefore announced again.
+  const [capErrorAt, setCapErrorAt] = useState(0);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function seed(budgets: CategoryBudget[]) {
@@ -125,6 +135,14 @@ export default function CategoryBudgetsPage() {
     []
   );
 
+  // 3.3.1 - focus the failing row only AFTER React has committed aria-invalid +
+  // aria-describedby on it; focusing inside the submit handler lands on a field that is
+  // still announced as perfectly valid.
+  useEffect(() => {
+    if (!invalidCap) return;
+    document.getElementById(`cap-${invalidCap}`)?.focus();
+  }, [invalidCap]);
+
   // ── derived ──────────────────────────────────────────────────────────────────
   const incomeKnown = income !== null && income > 0;
   const inc = (income ?? 0) as number;
@@ -150,20 +168,33 @@ export default function CategoryBudgetsPage() {
   const barPct = incomeKnown ? Math.min(100, (allocated / inc) * 100) : 0;
 
   async function handleSave() {
-    if (!householdId || !canManage) return;
+    // `saving` re-entry guard lives here (not on the button's `disabled`): pressing the
+    // button is what sets `saving`, and disabling the focused control drops focus to <body>.
+    if (!householdId || !canManage || saving) return;
+    // Nothing to save - the bar is only still mounted to carry its "✓ נשמר" state.
+    if (!hasChanges) return;
     // Guard a capped row left with a non-empty but non-positive value before any call.
     for (const c of CAP_BUCKETS) {
       const v = local[c];
       if (typeof v === "string" && v.trim() !== "") {
         const n = Number(v.trim());
         if (!(Number.isFinite(n) && n > 0)) {
-          setError("התקרה חייבת להיות מספר גדול מ-0.");
+          setError(CAP_INVALID_MSG);
+          // 3.3.1 - the message lives at the bottom of the caps panel, far from the
+          // sticky bar that was pressed; the effect above sends focus to the row that
+          // actually failed once its aria attributes are committed.
+          setInvalidCap(c);
+          // 4.1.3 - role="alert" fires when the alert node is INSERTED. Re-failing on the same
+          // row writes an identical string into the already-mounted alert and says nothing, so
+          // the alert is keyed on this attempt counter and remounts on every press.
+          setCapErrorAt((n) => n + 1);
           return;
         }
       }
     }
     setSaving(true);
     setError(undefined);
+    setInvalidCap(null);
     setJustSaved(false);
     try {
       const ops: Promise<unknown>[] = [];
@@ -176,6 +207,9 @@ export default function CategoryBudgetsPage() {
       const { budgets } = await api.categoryBudgets(householdId);
       seed(budgets);
       setJustSaved(true);
+      // 4.1.3 - the save bar unmounts ~1.8s later, so a live region inside it would be
+      // gone before it could be read; the shared announcer carries the confirmation.
+      announce("נשמר");
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setJustSaved(false), 1800);
     } catch (err) {
@@ -186,9 +220,10 @@ export default function CategoryBudgetsPage() {
     }
   }
 
-  if (viewer.status === "loading") return <AppShell><LoadState /></AppShell>;
+  // 1.3.1/2.4.6 - every rendered state carries the page's single <h1>, not only the happy path.
+  if (viewer.status === "loading") return <AppShell><h1 className="page-title">תקציבי קטגוריות</h1><LoadState /></AppShell>;
   if (viewer.status === "error") {
-    return <AppShell><LoadState error="לא הצלחנו לטעון. נסו לרענן." /></AppShell>;
+    return <AppShell><h1 className="page-title">תקציבי קטגוריות</h1><LoadState error="לא הצלחנו לטעון. נסו לרענן." /></AppShell>;
   }
 
   if (!canManage) {
@@ -202,7 +237,7 @@ export default function CategoryBudgetsPage() {
     );
   }
 
-  if (loadingData) return <AppShell><LoadState /></AppShell>;
+  if (loadingData) return <AppShell><h1 className="page-title">תקציבי קטגוריות</h1><LoadState /></AppShell>;
 
   return (
     <AppShell>
@@ -292,6 +327,7 @@ export default function CategoryBudgetsPage() {
               <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", flex: "none" }}>
                 {capped ? (
                   <input
+                    id={`cap-${key}`}
                     className="input"
                     type="number"
                     min={1}
@@ -300,8 +336,17 @@ export default function CategoryBudgetsPage() {
                     inputMode="numeric"
                     placeholder="0"
                     aria-label={`תקרה חודשית ל${meta.labelHe}`}
+                    aria-invalid={invalidCap === key || undefined}
+                    aria-describedby={invalidCap === key ? CAP_ERROR_ID : undefined}
                     value={local[key] ?? ""}
-                    onChange={(e) => setLocal((prev) => ({ ...prev, [key]: e.target.value }))}
+                    onChange={(e) => {
+                      setLocal((prev) => ({ ...prev, [key]: e.target.value }));
+                      // 3.3.1 - the message must not outlive the problem it describes.
+                      if (invalidCap === key) {
+                        setInvalidCap(null);
+                        setError(undefined);
+                      }
+                    }}
                     style={{ width: 116, textAlign: "left" }}
                   />
                 ) : (
@@ -310,16 +355,26 @@ export default function CategoryBudgetsPage() {
                 <button
                   type="button"
                   className="btn sm"
-                  onClick={() => setLocal((prev) => ({ ...prev, [key]: capped ? null : "" }))}
+                  onClick={() => {
+                    setLocal((prev) => ({ ...prev, [key]: capped ? null : "" }));
+                    // Switching the failing row to "ללא הגבלה" also resolves the error.
+                    if (invalidCap === key) {
+                      setInvalidCap(null);
+                      setError(undefined);
+                    }
+                  }}
                 >
+                  {/* 2.4.6 - six rows shipped six identically-named buttons; the .sr-only
+                      tail names the row without moving a pixel. */}
                   {capped ? "ללא הגבלה" : "קבע תקרה"}
+                  <span className="sr-only"> ל{meta.labelHe}</span>
                 </button>
               </div>
             </div>
           );
         })}
         {error && (
-          <div className="status error" style={{ marginTop: "var(--sp-3)" }}>{error}</div>
+          <div key={capErrorAt} id={CAP_ERROR_ID} className="status error" role="alert" style={{ marginTop: "var(--sp-3)" }}>{error}</div>
         )}
       </section>
 
@@ -368,16 +423,22 @@ export default function CategoryBudgetsPage() {
       {/* Sticky save bar — managers only; inert when there is nothing to save */}
       {(hasChanges || justSaved) && (
         <div className="save-bar">
-          {justSaved && !hasChanges ? (
-            <span style={{ color: "var(--pos)", fontWeight: 700 }}>✓ נשמר</span>
-          ) : (
-            <>
-              <span className="muted">יש שינויים שלא נשמרו</span>
-              <button type="button" className="btn primary" onClick={handleSave} disabled={saving}>
-                {saving ? "שומר..." : "שמירת שינויים"}
-              </button>
-            </>
-          )}
+          {/* 2.4.3 - the button that was pressed stays mounted across the save; only its
+              LABEL carries the state. Swapping it for a non-focusable "✓ נשמר" span (as
+              this bar used to) dropped the keyboard user's focus to <body> on the common,
+              successful path. */}
+          <span className="muted">{justSaved && !hasChanges ? "" : "יש שינויים שלא נשמרו"}</span>
+          {/* No `disabled`: pressing it is what sets `saving`, and disabling the
+              focused button drops focus to <body> (2.4.3). handleSave guards re-entry. */}
+          <button
+            type="button"
+            className="btn primary"
+            onClick={handleSave}
+            aria-busy={saving || undefined}
+            aria-disabled={(justSaved && !hasChanges) || undefined}
+          >
+            {justSaved && !hasChanges ? "✓ נשמר" : saving ? "שומר..." : "שמירת שינויים"}
+          </button>
         </div>
       )}
     </AppShell>

@@ -3,7 +3,7 @@
 // Sticky landing nav. Burger stays available at 320px (the CTA button collapses
 // below 360px but navigation never disappears - responsive-proof requirement).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { PingtallyLockup } from "./PingtallyMark";
 
@@ -17,6 +17,27 @@ const LINKS = [
 
 export function LandingNav() {
   const [open, setOpen] = useState(false);
+  const burgerRef = useRef<HTMLButtonElement>(null);
+
+  // BATCH-GI F5 (2.1.2) — the authenticated shell already closes its drawer on Escape; the
+  // landing did not, so a keyboard user who opened this menu had no way out but Tab-through.
+  // Closing returns focus to the burger, which is what re-opens it (the disclosure contract).
+  // Document-level, not onKeyDown on the header: the menu can be opened by pointer, leaving
+  // focus on <body>, where a bubbling handler would never fire.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      // defaultPrevented: the accessibility panel binds its own document Escape handler and marks
+      // the event handled. Without this check, closing that panel on `/` also stole focus to the
+      // burger here (both listeners are on `document`, so stopPropagation cannot separate them).
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      setOpen(false);
+      burgerRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   return (
     <header className="pt-nav">
@@ -41,6 +62,7 @@ export function LandingNav() {
             מתחילים בחינם
           </a>
           <button
+            ref={burgerRef}
             type="button"
             className="pt-burger"
             aria-label={open ? "סגירת תפריט" : "פתיחת תפריט"}

@@ -13,7 +13,8 @@ import { parseMoneyInput } from "../../lib/moneyInput";
 // --field-border is the AA (1.4.11) control boundary introduced for
 // .input/.textarea/.select in globals.css; MoneyInput is a hand-rolled text
 // field, so it opts into the same token instead of the lighter --cream-4 line.
-const focusBorder = (on: boolean) => (on ? "var(--teal)" : "var(--field-border)");
+const focusBorder = (on: boolean, invalid = false) =>
+  (invalid ? "var(--neg)" : on ? "var(--teal)" : "var(--field-border)");
 
 // ── Stepper (− value +) ────────────────────────────────────────────────────────
 export function Stepper({ value, onChange, min = 0, max = 12, suffix, label }: {
@@ -31,14 +32,17 @@ export function Stepper({ value, onChange, min = 0, max = 12, suffix, label }: {
   const more = label ? `עוד ${label}` : "עוד";
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }} role="group" aria-label={label}>
-      <button type="button" style={{ ...btn, opacity: value <= min ? 0.4 : 1 }} onClick={() => set(value - 1)} aria-label={less}>−</button>
+      {/* a11y 1.4.3: opacity:.4 put the glyph at 2.42:1. These buttons stay ENABLED on
+          purpose (disabling one on activation drops focus to <body>), so the at-limit cue
+          is a token step on the glyph colour, not transparency. */}
+      <button type="button" style={{ ...btn, color: value <= min ? "var(--text-2)" : "var(--text-0)" }} onClick={() => set(value - 1)} aria-label={less}>−</button>
       {/* The count is the only feedback for the two buttons, so it is a live
           region - otherwise pressing +/- announces nothing. */}
       <div style={{ minWidth: 48, textAlign: "center" }} aria-live="polite" aria-atomic>
         <span className="mono" style={{ fontSize: 22, fontWeight: 700 }}>{value}</span>
         {suffix && <span style={{ fontSize: 13, color: "var(--text-2)", marginInlineStart: 4 }}>{suffix}</span>}
       </div>
-      <button type="button" style={{ ...btn, opacity: value >= max ? 0.4 : 1 }} onClick={() => set(value + 1)} aria-label={more}>+</button>
+      <button type="button" style={{ ...btn, color: value >= max ? "var(--text-2)" : "var(--text-0)" }} onClick={() => set(value + 1)} aria-label={more}>+</button>
     </div>
   );
 }
@@ -151,7 +155,7 @@ export function MiniToggle({ label, on, onChange }: { label: string; on: boolean
 }
 
 // ── MoneyInput (₪ prefixed, mono, LTR digits) ──────────────────────────────────
-export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = false, size = "md", ariaLabel }: {
+export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = false, size = "md", ariaLabel, id, invalid = false, describedById }: {
   value: number | "";
   onChange: (v: number | "") => void;
   placeholder?: string;
@@ -159,6 +163,14 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
   size?: "md" | "lg";
   /** Accessible name - the field's visible label. A placeholder is NOT a label. */
   ariaLabel?: string;
+  /** id for the <input>, so an external <label htmlFor> can target it (and so a
+   *  failed validation can move focus here). Mirrors PhoneInput. */
+  id?: string;
+  /** Mark the field invalid for assistive tech + the error border. */
+  invalid?: boolean;
+  /** id of the external error text, wired as aria-describedby (3.3.1). Pass
+   *  undefined when there is none - a dangling idref announces nothing. */
+  describedById?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { if (autoFocus && ref.current) ref.current.focus(); }, [autoFocus]);
@@ -185,8 +197,11 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
       }}>₪</span>
       <input
         ref={ref}
+        id={id}
         inputMode="decimal"
         aria-label={ariaLabel}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedById}
         value={text}
         placeholder={placeholder}
         onChange={(e) => {
@@ -198,13 +213,13 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
         style={{
           width: "100%", height: h, paddingInlineStart: 34, paddingInlineEnd: 14,
           fontSize: fs, fontWeight: 700, direction: "ltr", textAlign: "end",
-          borderRadius: 14, border: `1.5px solid ${focusBorder(false)}`, background: "var(--cream-2)",
+          borderRadius: 14, border: `1.5px solid ${focusBorder(false, invalid)}`, background: "var(--cream-2)",
           color: "var(--text-0)"
           // NB: no `outline: none` - that suppressed the global :focus-visible
           // ring (2.4.7). The onFocus border swap below is an extra cue only.
         }}
-        onFocus={(e) => { e.target.style.borderColor = focusBorder(true); }}
-        onBlur={(e) => { e.target.style.borderColor = focusBorder(false); }}
+        onFocus={(e) => { e.target.style.borderColor = focusBorder(true, invalid); }}
+        onBlur={(e) => { e.target.style.borderColor = focusBorder(false, invalid); }}
       />
     </div>
   );
@@ -255,15 +270,24 @@ export function FreqPick({ value, onChange }: { value: FrequencyId; onChange: (v
 // composite controls, not a single input). They are therefore wired to the
 // controls as a named group, so a screen reader announces the field name and its
 // hint on entry (1.3.1). Single inputs additionally carry their own aria-label.
-export function Field({ label, hint, children, style }: {
-  label?: string; hint?: string; children: ReactNode; style?: CSSProperties;
+// When the field wraps exactly ONE input, pass `htmlFor` with that input's id and
+// the same visible text is rendered as a real <label htmlFor> instead (3.3.2) -
+// display:block keeps the box identical to the <div> it replaces.
+export function Field({ label, hint, htmlFor, children, style }: {
+  label?: string; hint?: string;
+  /** id of the single input this label names. Omit for composite (group) children. */
+  htmlFor?: string;
+  children: ReactNode; style?: CSSProperties;
 }) {
   const uid = useId();
   const labelId = `${uid}-label`;
   const hintId = `${uid}-hint`;
+  const labelStyle: CSSProperties = { display: "block", fontSize: 13.5, fontWeight: 600, color: "var(--text-0)", marginBottom: hint ? 4 : 8 };
   return (
     <div style={style}>
-      {label && <div id={labelId} style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-0)", marginBottom: hint ? 4 : 8 }}>{label}</div>}
+      {label && (htmlFor
+        ? <label id={labelId} htmlFor={htmlFor} style={labelStyle}>{label}</label>
+        : <div id={labelId} style={labelStyle}>{label}</div>)}
       {hint && <div id={hintId} style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 12, lineHeight: 1.5 }}>{hint}</div>}
       {label ? (
         <div role="group" aria-labelledby={labelId} aria-describedby={hint ? hintId : undefined}>{children}</div>
@@ -273,14 +297,17 @@ export function Field({ label, hint, children, style }: {
 }
 
 // ── TextInput — plain RTL text field (reuses the site .input class) ────────────
-export function TextInput({ value, onChange, placeholder, autoComplete, ariaLabel }: {
+export function TextInput({ value, onChange, placeholder, autoComplete, ariaLabel, id }: {
   value: string; onChange: (v: string) => void; placeholder?: string; autoComplete?: string;
   /** Accessible name - the field's visible label. A placeholder is NOT a label. */
   ariaLabel?: string;
+  /** id for the <input>, so an external <label htmlFor> can target it. */
+  id?: string;
 }) {
   return (
     <input
       className="input"
+      id={id}
       value={value}
       aria-label={ariaLabel}
       placeholder={placeholder}

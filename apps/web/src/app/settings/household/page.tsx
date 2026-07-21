@@ -10,7 +10,9 @@ import type {
 } from "@shopping-assistant/shared-types";
 import { REPORT_CATEGORIES, monthlyOf, totalMonthlyFixed } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
+import { LoadState } from "../../../components/LoadState";
 import { DayChips, Field, MoneyInput, TextInput } from "../../onboarding/controls";
+import { announce } from "../../../lib/a11y/announce";
 import { api } from "../../../lib/api";
 import { nis } from "../../../lib/format";
 import { useViewer } from "../../../lib/useViewer";
@@ -24,6 +26,12 @@ const FREQ_LABEL: Record<FrequencyId, string> = {
   quarterly: "רבעוני",
   yearly: "שנתי"
 };
+
+// Stable ids for the one validated field on this page: the <label htmlFor> Field renders,
+// the aria-describedby target, and the post-validation focus move all point at them.
+const AMOUNT_ID = "hh-amount";
+const AMOUNT_ERROR_ID = "hh-amount-error";
+const CITY_ID = "hh-city";
 
 // Map a fixed-expense report category to its display emoji; generic receipt icon as fallback.
 function reportCatIcon(id: ReportCatId): string {
@@ -72,7 +80,12 @@ export default function HouseholdSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string>();
+  // 0 == the amount field is valid. It is a COUNTER, not a boolean, so a repeated failed
+  // attempt with the SAME message still changes state and re-runs the focus effect below.
+  const [amountErrorAt, setAmountErrorAt] = useState(0);
+  const amountInvalid = amountErrorAt > 0;
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveBtnRef = useRef<HTMLButtonElement>(null);
 
   function seed(h: Household) {
     setHousehold(h);
@@ -115,14 +128,40 @@ export default function HouseholdSettingsPage() {
     []
   );
 
+  // 3.3.1 - the focus move to the invalid field must happen AFTER React commits
+  // aria-invalid / aria-describedby. A focus() called synchronously inside handleSave
+  // lands before those attributes exist, so the reader announces the field as valid.
+  useEffect(() => {
+    if (amountErrorAt === 0) return;
+    document.getElementById(AMOUNT_ID)?.focus();
+  }, [amountErrorAt]);
+
+  const dirty =
+    monthlyBudgetAmount !== savedSnapshot.amount ||
+    budgetCycleDay !== savedSnapshot.day ||
+    defaultCity !== savedSnapshot.city;
+
   async function handleSave() {
-    if (!householdId || !canEdit) return;
+    // `saving` is guarded here rather than on the button: disabling the button the user just
+    // pressed drops focus to <body> (2.4.3). Re-entry is impossible either way.
+    if (!householdId || !canEdit || saving) return;
+    // The button now stays mounted (and focused) in the "נשמר" state, so a press with
+    // nothing to save must stay a no-op rather than re-issuing the same PUT.
+    if (!dirty) return;
     if (monthlyBudgetAmount === "" || !(Number(monthlyBudgetAmount) > 0)) {
+      // 3.3.1 - an empty/zero amount used to leave the button silently inert. It now marks the
+      // field invalid, pulls focus to it (effect above) and renders in the role="alert" div.
+      // The alert is KEYED on this counter (below), which is what makes a repeat attempt speak:
+      // writing an identical string into an already-mounted alert is not a DOM mutation, so it
+      // would otherwise be silent from the second press on. An earlier revision also called
+      // announce() here - that fixed the repeat but made the FIRST failure speak twice.
       setError("הזינו סכום תקציב חוקי.");
+      setAmountErrorAt((n) => n + 1);
       return;
     }
     setSaving(true);
     setError(undefined);
+    setAmountErrorAt(0);
     setJustSaved(false);
     try {
       await api.updateHouseholdSettings(householdId, {
@@ -134,8 +173,17 @@ export default function HouseholdSettingsPage() {
       const { household: fresh } = await api.currentHousehold();
       seed(fresh);
       setJustSaved(true);
+      // 4.1.3 - the visible "נשמר" lives inside the save bar, which unmounts ~1.8s later,
+      // so a live region hosted there would mount and vanish with its own content. The
+      // shared announcer is the only thing that survives long enough to be read.
+      announce("נשמר");
       if (savedTimer.current) clearTimeout(savedTimer.current);
-      savedTimer.current = setTimeout(() => setJustSaved(false), 1800);
+      savedTimer.current = setTimeout(() => {
+        // 2.4.3 - do not pull the save bar out from under a keyboard user who is still
+        // standing on the save button; unmounting the focused element drops focus to <body>.
+        if (document.activeElement === saveBtnRef.current) return;
+        setJustSaved(false);
+      }, 1800);
     } catch (err) {
       setError(err instanceof Error ? err.message : "לא הצלחנו לשמור. נסו שוב.");
     } finally {
@@ -144,7 +192,10 @@ export default function HouseholdSettingsPage() {
   }
 
   // ── states ─────────────────────────────────────────────────────────────────────
-  if (viewer.status === "loading") return <AppShell><p className="muted">טוען...</p></AppShell>;
+  // Every rendered state needs its own <h1> (2.4.6/1.3.1); LoadState carries role="status".
+  if (viewer.status === "loading") {
+    return <AppShell><h1 className="page-title">פרטי משק הבית</h1><LoadState /></AppShell>;
+  }
 
   if (viewer.status === "error") {
     return (
@@ -172,7 +223,9 @@ export default function HouseholdSettingsPage() {
     );
   }
 
-  if (loading) return <AppShell><p className="muted">טוען...</p></AppShell>;
+  if (loading) {
+    return <AppShell><h1 className="page-title">פרטי משק הבית</h1><LoadState /></AppShell>;
+  }
 
   const baseline = household?.financialBaseline;
   const incomeMode = baseline?.budget?.mode === "income";
@@ -180,11 +233,6 @@ export default function HouseholdSettingsPage() {
   const fixedMonthly = baseline ? totalMonthlyFixed(baseline.fixedExpenses) : 0;
   const available = Math.max(0, income - fixedMonthly);
   const activeFixed = baseline ? baseline.fixedExpenses.filter((f) => f.isActive) : [];
-
-  const dirty =
-    monthlyBudgetAmount !== savedSnapshot.amount ||
-    budgetCycleDay !== savedSnapshot.day ||
-    defaultCity !== savedSnapshot.city;
 
   return (
     <AppShell>
@@ -196,10 +244,27 @@ export default function HouseholdSettingsPage() {
       <section className="panel" style={{ maxWidth: 480, marginBottom: 16 }}>
         <Field
           label={incomeMode ? "הכנסה חודשית נטו (₪)" : "תקציב חודשי (₪)"}
+          htmlFor={AMOUNT_ID}
           hint={incomeMode ? "הסכום שעליו נבנה כל התקציב. אפשר לעדכן בכל שינוי בשכר." : undefined}
         >
           <div style={{ maxWidth: 240 }}>
-            <MoneyInput value={monthlyBudgetAmount} onChange={(v) => setMonthlyBudgetAmount(v)} />
+            {/* The name comes from the real <label htmlFor> that Field renders, so it is the
+                visible text itself and cannot drift - and it is not also duplicated as an
+                aria-label, which made AT read the name twice. */}
+            <MoneyInput
+              id={AMOUNT_ID}
+              value={monthlyBudgetAmount}
+              onChange={(v) => {
+                setMonthlyBudgetAmount(v);
+                // 3.3.1 - the validation message must not outlive the problem it describes.
+                if (amountInvalid) {
+                  setAmountErrorAt(0);
+                  setError(undefined);
+                }
+              }}
+              invalid={amountInvalid}
+              describedById={amountInvalid ? AMOUNT_ERROR_ID : undefined}
+            />
           </div>
         </Field>
 
@@ -207,13 +272,20 @@ export default function HouseholdSettingsPage() {
           <DayChips value={budgetCycleDay} onChange={(v) => setBudgetCycleDay(v)} />
         </Field>
 
-        <Field label="אזור קניות" hint="עוזר להשוואות ולזיהוי חנויות בצ׳אט." style={{ marginTop: 22 }}>
+        <Field label="אזור קניות" htmlFor={CITY_ID} hint="עוזר להשוואות ולזיהוי חנויות בצ׳אט." style={{ marginTop: 22 }}>
           <div style={{ maxWidth: 320 }}>
-            <TextInput value={defaultCity} onChange={(v) => setDefaultCity(v)} placeholder="בני ברק" />
+            {/* Named by Field's <label htmlFor> - no duplicate ariaLabel (see above). */}
+            <TextInput id={CITY_ID} value={defaultCity} onChange={(v) => setDefaultCity(v)} placeholder="בני ברק" />
           </div>
         </Field>
 
-        {error && <div className="status error" style={{ marginTop: 16 }}>{error}</div>}
+        {/* role="alert" - both the validation message and a save failure appear after the
+            page has rendered, and were previously silent to a screen reader (4.1.3/3.3.1).
+            The id is the aria-describedby target of the amount field; it is only referenced
+            while `amountInvalid`, so a save failure never becomes a dangling description. */}
+        {/* key={amountErrorAt}: remounts the node on every failed attempt, so role="alert" is
+            genuinely INSERTED each time and speaks again even when the message is identical. */}
+        {error && <div key={amountErrorAt} id={AMOUNT_ERROR_ID} className="status error" role="alert" style={{ marginTop: 16 }}>{error}</div>}
       </section>
 
       {/* ── Full financial model (read-only summary) ── */}
@@ -281,21 +353,21 @@ export default function HouseholdSettingsPage() {
       {/* Sticky save bar - dirty-aware; shows a transient "נשמר" for ~1.8s after a save. */}
       {(dirty || justSaved) && (
         <div className="save-bar">
-          {justSaved && !dirty ? (
-            <span style={{ color: "var(--pos)", fontWeight: 700 }}>✓ נשמר</span>
-          ) : (
-            <>
-              <span className="muted">יש שינויים שלא נשמרו</span>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={handleSave}
-                disabled={saving || monthlyBudgetAmount === ""}
-              >
-                {saving ? "שומר..." : "שמירת שינויים"}
-              </button>
-            </>
-          )}
+          {!(justSaved && !dirty) && <span className="muted">יש שינויים שלא נשמרו</span>}
+          {/* 2.4.3 - the SAME button element is kept mounted across all three states and its
+              LABEL carries the state instead. Swapping it for a non-focusable "✓ נשמר" span
+              on success (the common path) dropped focus to <body>; removing `disabled` alone
+              never fixed that. Re-entry, the no-op press and the empty-amount case are all
+              guarded inside handleSave (3.3.1), not by disabling the focused control. */}
+          <button
+            ref={saveBtnRef}
+            type="button"
+            className="btn primary"
+            onClick={handleSave}
+            aria-busy={saving || undefined}
+          >
+            {saving ? "שומר..." : justSaved && !dirty ? "✓ נשמר" : "שמירת שינויים"}
+          </button>
         </div>
       )}
     </AppShell>

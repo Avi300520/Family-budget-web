@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Plus, Send, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Household,
   HouseholdMember,
@@ -15,6 +15,7 @@ import {
 import { AppShell } from "../../components/AppShell";
 import { Avatar } from "../../components/Avatar";
 import { LoadState } from "../../components/LoadState";
+import { announce } from "../../lib/a11y/announce";
 import { api } from "../../lib/api";
 
 // ── Visual category color mapping (Iteration 4) ──────────────────────────────
@@ -99,11 +100,17 @@ function ShoppingHeader({
           </div>
         </div>
 
+        {/* BATCH-GI 2.4.3: `disabled` must never be toggled BY the activation - the button
+            disabled itself under the user's finger and focus fell to <body>. sendToWhatsapp()
+            already re-entrancy-guards on sendStatus, so aria-disabled is enough while the send
+            is in flight and focus is kept. (activeCount===0 is not self-inflicted: it stays a
+            real `disabled`, so the .button:disabled dimming for an empty list is unchanged.) */}
         <button
           type="button"
           className="button"
           onClick={onSend}
-          disabled={activeCount === 0 || sendStatus === "sending"}
+          disabled={activeCount === 0}
+          aria-disabled={sendStatus === "sending"}
           style={{ minWidth: 200 }}
         >
           <Send size={16} aria-hidden />
@@ -133,6 +140,11 @@ function ItemRow({
   onDelete: () => void;
 }) {
   const name = item.normalizedName ?? item.rawText;
+  // BATCH-GI 4.1.2: the check-off control is NAMED BY its own sr-only verb PLUS the visible
+  // row title, so the accessible name and the pixels cannot drift apart (the old
+  // aria-label="סמן כנקנה" named every row identically and hid which item it was).
+  const nameId = `sl-item-${item.id}`;
+  const buyVerbId = `sl-buy-${item.id}`;
   return (
     <div
       style={{
@@ -144,11 +156,18 @@ function ItemRow({
         borderTop: "1px solid var(--cream-3)",
       }}
     >
-      {/* 40px tap target (touch-friendly) with the 22px visual checkbox centered inside. */}
+      {/* 40px tap target (touch-friendly) with the 22px visual checkbox centered inside.
+          BATCH-GI 4.1.2 (Name, Role, Value): the name now carries the item. It stays a plain
+          <button> on purpose - role="checkbox" would lie, because the "checked" twin lives in
+          the "נקנו החודש" section, which is COLLAPSED by default, so the control would be
+          announced unchecked and then vanish instead of flipping. The verb lives in a .sr-only
+          span INSIDE the control (the /l idiom) rather than in an aria-label, so it cannot
+          drift from the pixels. data-item-control is the focus anchor for the 2.4.3 restore. */}
       <button
         type="button"
         onClick={onMarkBought}
-        aria-label="סמן כנקנה"
+        aria-labelledby={`${buyVerbId} ${nameId}`}
+        data-item-control={item.id}
         style={{
           width: 40,
           height: 40,
@@ -161,13 +180,17 @@ function ItemRow({
           flexShrink: 0,
         }}
       >
+        <span id={buyVerbId} className="sr-only">סמן כנקנה</span>
         <span
           aria-hidden
           style={{
             width: 22,
             height: 22,
             borderRadius: 7,
-            border: "1.5px solid var(--cream-4)",
+            // 1.4.11: on this control the border IS the only affordance, so it uses the
+            // form-control boundary token (3.05:1) rather than decorative --cream-4 (1.49:1).
+            // NOTE: 1.4.11 is WCAG 2.1, not a 2.0 AA gap.
+            border: "1.5px solid var(--field-border)",
             background: "var(--cream-2)",
           }}
         />
@@ -175,6 +198,7 @@ function ItemRow({
 
       <div style={{ minWidth: 0 }}>
         <div
+          id={nameId}
           style={{
             fontSize: 14,
             fontWeight: 500,
@@ -201,18 +225,30 @@ function ItemRow({
           </span>
         )}
         {member ? (
+          // BATCH-GI 1.1.1: Avatar is role="img" and defaults its name to displayName - or to
+          // the raw userId (a UUID) when the roster has no name. The "הוסיף:" context existed
+          // only in the sighted `title`. Give the image the same sentence the tooltip shows.
           <span title={member.displayName ? `הוסיף: ${member.displayName}` : undefined}>
-            <Avatar memberId={member.userId} displayName={member.displayName} colorKey={member.colorKey} size="sm" />
+            <Avatar
+              memberId={member.userId}
+              displayName={member.displayName}
+              colorKey={member.colorKey}
+              size="sm"
+              ariaLabel={member.displayName ? `הוסיף: ${member.displayName}` : "הוסיף: חבר בית"}
+            />
           </span>
         ) : (
           <span style={{ width: 24, height: 24, flexShrink: 0 }} aria-hidden />
         )}
       </div>
 
+      {/* BATCH-GI 4.1.2: aria-label is legitimate HERE - the button's only content is an
+          aria-hidden icon, so there is no visible text for the label to override. It just
+          has to carry the item, or every row's remove button is named "הסר פריט". */}
       <button
         type="button"
         onClick={onDelete}
-        aria-label="הסר פריט"
+        aria-label={`הסר פריט: ${name}`}
         className="btn ghost"
         style={{ width: 40, height: 40, padding: 0, borderRadius: 8, display: "grid", placeItems: "center" }}
       >
@@ -282,21 +318,25 @@ function ToBuyCards({
                 </div>
               </div>
             </header>
-            <div style={{ paddingBottom: "var(--sp-2)" }}>
+            {/* BATCH-GI 1.3.1: the rows are a list, so announce a count and support list
+                navigation. The <li> stays display:list-item (block) - do NOT make it flex or
+                grid, that is what dropped the implicit listitem role in WebKit on /l. */}
+            <ul role="list" style={{ listStyle: "none", margin: 0, padding: 0, paddingBottom: "var(--sp-2)" }}>
               {group.items.map((item) => {
                 const adder = item.createdByUserId ? memberMap[item.createdByUserId] : undefined;
                 return (
-                  <ItemRow
-                    key={item.id}
-                    item={item}
-                    member={adder}
-                    color={color}
-                    onMarkBought={() => onMarkBought(item.id)}
-                    onDelete={() => onDelete(item.id)}
-                  />
+                  <li key={item.id}>
+                    <ItemRow
+                      item={item}
+                      member={adder}
+                      color={color}
+                      onMarkBought={() => onMarkBought(item.id)}
+                      onDelete={() => onDelete(item.id)}
+                    />
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           </section>
         );
       })}
@@ -385,10 +425,15 @@ function BoughtSection({
                     borderTop: idx > 0 ? "1px solid var(--cream-3)" : "none",
                   }}
                 >
+                  {/* BATCH-GI 4.1.2: same treatment as the to-buy control - the verb is an
+                      sr-only span inside the button and the item comes from the visible
+                      struck-through title, so every bought row is no longer named
+                      "החזר לרשימה". data-item-control is the 2.4.3 focus anchor. */}
                   <button
                     type="button"
                     onClick={() => onRestore(item.id)}
-                    aria-label="החזר לרשימה"
+                    aria-labelledby={`sl-restore-${item.id} sl-bought-${item.id}`}
+                    data-item-control={item.id}
                     style={{
                       width: 24,
                       height: 24,
@@ -402,9 +447,11 @@ function BoughtSection({
                       flexShrink: 0,
                     }}
                   >
+                    <span id={`sl-restore-${item.id}`} className="sr-only">החזר לרשימה</span>
                     <Check size={14} aria-hidden />
                   </button>
                   <span
+                    id={`sl-bought-${item.id}`}
                     style={{
                       flex: 1,
                       minWidth: 0,
@@ -455,6 +502,17 @@ export default function ShoppingListPage() {
   const [error, setError] = useState<string>();
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [showBought, setShowBought] = useState(false);
+  // BATCH-GI 4.1.3: add / mark-bought / undo / remove change the list silently - the row
+  // just moves or vanishes. These SUCCESS messages go through the shared polite region in
+  // lib/a11y/announce, NOT a locally rendered <span role="status">: the local region wrote the
+  // new string directly, so adding "חלב" twice in a row was not a DOM mutation and stayed
+  // silent the second time. announce() blanks-then-sets, so a repeat speaks again.
+  //
+  // FAILURES do NOT belong in that polite region: it is sr-only, so a sighted user saw the row
+  // silently snap back with no error text at all, and the message queued behind whatever the
+  // reader was saying. They go to `actionError`, rendered as a visible role="alert" below.
+  // `error` is now reserved for LOAD failures (it replaces the whole page).
+  const [actionError, setActionError] = useState("");
 
   async function load() {
     try {
@@ -497,38 +555,129 @@ export default function ShoppingListPage() {
     load();
   }, []);
 
+  // BATCH-GI 2.4.3 (Focus Order) - marking bought / restoring / removing UNMOUNTS the
+  // control that currently has focus, so React drops focus to <body> and a keyboard or
+  // screen-reader user loses their place in the list every single time. Same defect and
+  // same remedy as /l (ShareList refocusIdRef), implemented separately because the two
+  // pages share no code. Target order: the item's OWN control in its new section (both
+  // the to-buy control and the נקנו control carry data-item-control={id}) -> the
+  // neighbouring row's control -> the add-item field, the natural next action.
+  const refocusRef = useRef<{ id: string; fallbackId?: string } | null>(null);
+  const addInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const target = refocusRef.current;
+    if (!target) return;
+    refocusRef.current = null;
+    // Only step in if the activation actually orphaned focus. If the user already moved
+    // on (or is using a pointer), leave focus exactly where they put it.
+    const ae = document.activeElement;
+    if (ae && ae !== document.body) return;
+    const pick = (id?: string) =>
+      id ? document.querySelector<HTMLElement>(`[data-item-control="${CSS.escape(id)}"]`) : null;
+    (pick(target.id) ?? pick(target.fallbackId) ?? addInputRef.current)?.focus();
+  }, [items, bought]);
+
+  /** The control that should take focus when `id`'s row disappears. Read from the DOM so
+   *  it follows the order the user actually sees (category grouping included).
+   *  Scoped to the acted-on control's OWN <section>: a flat document-order query returns the
+   *  to-buy check buttons AND the "נקנו החודש" restore buttons in one list, so acting on the
+   *  last to-buy row handed focus to a bought row - a different section with a different verb.
+   *  With no neighbour inside the section the caller falls through to the add-item field. */
+  function neighbourControlId(id: string): string | undefined {
+    const el = document.querySelector<HTMLElement>(`[data-item-control="${CSS.escape(id)}"]`);
+    if (!el) return undefined;
+    const scope: ParentNode = el.closest("section") ?? document;
+    const all = Array.from(scope.querySelectorAll<HTMLElement>("[data-item-control]"));
+    const i = all.indexOf(el);
+    if (i < 0) return undefined;
+    return (all[i + 1] ?? all[i - 1])?.dataset.itemControl;
+  }
+
+  /** Item title, read BEFORE the mutation - same `normalizedName ?? rawText` rule the rows use. */
+  function nameOf(id: string): string {
+    const it = [...items, ...bought].find((x) => x.id === id);
+    return it ? it.normalizedName ?? it.rawText : "הפריט";
+  }
+
   async function addItem(event: React.FormEvent) {
     event.preventDefault();
     if (!household || !rawText.trim()) return;
-    await api.addShoppingItem(household.id, rawText.trim());
-    setRawText("");
-    await reloadList();
+    const text = rawText.trim();
+    setActionError("");
+    try {
+      await api.addShoppingItem(household.id, text);
+      setRawText("");
+      // 2.4.3: the submit button disables itself the moment rawText clears, which would
+      // drop focus to <body>. Hand focus back to the field before that render commits.
+      addInputRef.current?.focus();
+      await reloadList();
+      announce(`${text} נוסף לרשימה`);
+    } catch {
+      setActionError("שגיאה בהוספת הפריט");
+    }
   }
 
   async function markBought(id: string) {
-    await api.patchShoppingItem(id, { status: "purchased" });
-    await reloadList();
+    const label = nameOf(id);
+    refocusRef.current = { id, fallbackId: neighbourControlId(id) };
+    setActionError("");
+    try {
+      await api.patchShoppingItem(id, { status: "purchased" });
+      await reloadList();
+      announce(`${label} סומן כנקנה`);
+    } catch {
+      // The list never changed, so the refocus effect never runs - leaving the target armed
+      // would yank focus on the NEXT, unrelated list refresh.
+      refocusRef.current = null;
+      setActionError("שגיאה בעדכון הפריט");
+    }
   }
 
   async function restoreItem(id: string) {
-    await api.patchShoppingItem(id, { status: "active" });
-    await reloadList();
+    const label = nameOf(id);
+    refocusRef.current = { id, fallbackId: neighbourControlId(id) };
+    setActionError("");
+    try {
+      await api.patchShoppingItem(id, { status: "active" });
+      await reloadList();
+      announce(`${label} הוחזר לרשימה`);
+    } catch {
+      refocusRef.current = null;
+      setActionError("שגיאה בעדכון הפריט");
+    }
   }
 
   async function removeItem(id: string) {
-    await api.patchShoppingItem(id, { status: "removed" });
-    await reloadList();
+    const label = nameOf(id);
+    refocusRef.current = { id, fallbackId: neighbourControlId(id) };
+    setActionError("");
+    try {
+      await api.patchShoppingItem(id, { status: "removed" });
+      await reloadList();
+      announce(`${label} הוסר מהרשימה`);
+    } catch {
+      refocusRef.current = null;
+      setActionError("שגיאה בהסרת הפריט");
+    }
   }
 
   async function sendToWhatsapp() {
     if (!household || sendStatus === "sending") return;
     setSendStatus("sending");
+    setActionError("");
+    announce("שולח את הרשימה לוואטסאפ");
     try {
       await api.sendShoppingListToWhatsapp(household.id);
       setSendStatus("sent");
+      announce("הרשימה נשלחה לוואטסאפ");
       setTimeout(() => setSendStatus("idle"), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "שגיאה בשליחה");
+      // 2.4.3: this used to setError(...), and the `if (error)` early return then replaced the
+      // WHOLE page - header, send button, list - so the focused button was unmounted, focus fell
+      // to <body> and there was no retry control. A transient send failure must not destroy the
+      // shopping list, so it stays a page-local alert and the button keeps focus.
+      setActionError(err instanceof Error ? err.message : "שגיאה בשליחה");
       setSendStatus("idle");
     }
   }
@@ -540,8 +689,12 @@ export default function ShoppingListPage() {
   );
   const groups = useMemo(() => groupByCategory(activeItems), [activeItems]);
 
-  if (error) return <AppShell><LoadState error={error} /></AppShell>;
-  if (!household) return <AppShell><LoadState /></AppShell>;
+  // BATCH-GI 1.3.1 / 2.4.6: a terminal state IS the page, so it needs the same <h1> the
+  // ready view has (the ready <h1> lives inside ShoppingHeader and is not rendered here).
+  // .sr-only because the design shows no title on these screens - zero pixels change.
+  // AppShell supplies the <main> landmark.
+  if (error) return <AppShell><h1 className="sr-only">רשימת קניות</h1><LoadState error={error} /></AppShell>;
+  if (!household) return <AppShell><h1 className="sr-only">רשימת קניות</h1><LoadState /></AppShell>;
 
   return (
     <AppShell>
@@ -565,6 +718,7 @@ export default function ShoppingListPage() {
           >
             <input
               className="input"
+              ref={addInputRef}
               style={{ flex: 1, minWidth: 200 }}
               value={rawText}
               placeholder="הוסיפו פריט - למשל: חלב, פיתות, גלידה"
@@ -577,6 +731,13 @@ export default function ShoppingListPage() {
             </button>
           </div>
         </form>
+
+        {/* BATCH-GI 4.1.3 - add / check-off / undo / remove / send failures. Conditionally
+            inserted, so role="alert" is announced on mount, AND a sighted user finally sees
+            why the row snapped back (it used to land in an sr-only polite region only). */}
+        {actionError && (
+          <div className="status error" role="alert">{actionError}</div>
+        )}
 
         {/* To-buy */}
         <div className="row between" style={{ marginTop: "var(--sp-1)" }}>

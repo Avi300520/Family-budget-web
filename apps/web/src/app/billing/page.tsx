@@ -7,7 +7,7 @@ import BillingClient from "./BillingClient";
 // Suspense boundary for app-router static rendering — mirror the auth/consume page.
 export default function BillingPage() {
   return (
-    <Suspense fallback={<AppShell><LoadState /></AppShell>}>
+    <Suspense fallback={<AppShell><h1 className="page-title">תשלום ומסלול</h1><LoadState /></AppShell>}>
       <BillingClient />
     </Suspense>
   );

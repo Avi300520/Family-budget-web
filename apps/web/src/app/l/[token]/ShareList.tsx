@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SHOPPING_CATEGORIES, shoppingCategoryMeta, type ShoppingCategoryId } from "@shopping-assistant/shared-types";
 import { apiBaseUrl } from "../../../lib/apiBase";
+import { announce } from "../../../lib/a11y/announce";
 
 type ShareItem = {
   id: string;
@@ -137,6 +138,19 @@ export function ShareList({ token }: { token: string }) {
     })();
   }, [base, token, fetchList]);
 
+  // BATCH-GI 4.1.3 — DELIBERATELY NOT announced per item. An earlier revision of this batch called
+  // announce() in buy/undo/toggleMissing; an independent review measured what one tap actually
+  // produces and it was THREE utterances, not one:
+  //   1. the header counter (role="status", below) re-reads "נשאר N" on every buy/undo;
+  //   2. the refocus effect moves focus to the item's control in its new section, so the reader
+  //      speaks that control's name - which BATCH-FF/FG already made self-describing
+  //      ("בטל קנייה של חלב", "סמן ביצים × כמות 9 נלקחו 5 מתוך 9 כנקנה");
+  //   3. on the חסר toggle, aria-pressed flips on a button that KEEPS focus, which is announced
+  //      with a name that already contains the item and the words "חסר במלאי".
+  // Each of those names the item and its new state better than a generic string could, and they
+  // are already correct. An announce() here would also have LIED: it fired optimistically, before
+  // the POST, so a failed write announced success and only a generic "לא הצלחתי לעדכן פריט" toast
+  // followed. Completion is the one event nothing else covers - it is announced below.
   const buy = (it: ShareItem) => act(it.id, "bought", (x) => ({ ...x, status: "purchased", outOfStock: false, quantityBought: null }));
   const undo = (it: ShareItem) => act(it.id, "unbought", (x) => ({ ...x, status: "active", quantityBought: null }));
   const toggleMissing = (it: ShareItem) =>
@@ -187,6 +201,40 @@ export function ShareList({ token }: { token: string }) {
     document.querySelector<HTMLElement>(`[data-share-item="${CSS.escape(id)}"]`)?.focus();
   }, [items]);
 
+  // BATCH-GI D3 (2.4.3) — the per-item restore above only covers buy/undo. Completion is the
+  // one action that replaces the ENTIRE view: the "סיימתי" button unmounts with the whole
+  // active list, so focus fell to <body> at the exact moment losing your place is most
+  // disorienting - the end of the trip. Focus the outcome heading (not the page <h1>): it is
+  // what actually tells the user the trip closed. Same "only if focus was orphaned" guard as
+  // the per-item effect, so a pointer user who has already moved on is never yanked, and a
+  // completion arriving from ANOTHER device via the poll is handled by the same code path.
+  // `wasOpen` is load-bearing: without it this effect ALSO fires on first paint of a list that was
+  // already closed before the user opened the link, moving focus - and the scroll position - with no
+  // user action at all. That is the same unexpected context change the batch exists to remove. Only
+  // a list that was OPEN in this session and then closed gets the focus move.
+  //
+  // The `phase !== "ready"` term is equally load-bearing, and a review caught its absence: `completed`
+  // initialises to false, so while the FIRST GET is still in flight this effect would run, see
+  // !completed, and arm the ref - after which a response saying the trip was already closed would
+  // pass the guard and steal focus on page load. The ref may only be armed by a list we have actually
+  // SEEN open.
+  const wasOpenRef = useRef(false);
+  const doneHeadingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (phase !== "ready") return;
+    if (!completed) { wasOpenRef.current = true; return; }
+    if (!wasOpenRef.current) return;
+    // Exactly ONE utterance either way. Keyboard/screen-reader: the activation orphaned focus, so
+    // moving it to the outcome heading IS the announcement ("כל הכבוד, סיימתם את הקנייה!"). Pointer
+    // or touch: focus never moved, nothing would be spoken, so the announcer carries it instead.
+    const ae = document.activeElement;
+    if (ae && ae !== document.body) {
+      announce("הקנייה הסתיימה. הרשימה נסגרה.");
+      return;
+    }
+    doneHeadingRef.current?.focus();
+  }, [completed, phase]);
+
   const active = useMemo(() => items.filter((i) => i.status === "active"), [items]);
   const bought = useMemo(() => items.filter((i) => i.status === "purchased"), [items]);
   const groups = useMemo(() => {
@@ -216,7 +264,8 @@ export function ShareList({ token }: { token: string }) {
         </header>
 
         <div style={S.doneBanner}>
-          <h2 style={S.doneTitle}><span aria-hidden>🎉</span> כל הכבוד, סיימתם את הקנייה!</h2>
+          {/* tabIndex={-1}: programmatically focusable, never a Tab stop (BATCH-GI D3). */}
+          <h2 style={S.doneTitle} ref={doneHeadingRef} tabIndex={-1}><span aria-hidden>🎉</span> כל הכבוד, סיימתם את הקנייה!</h2>
           <div style={S.doneSub}>שלחו לבוט בוואטסאפ את הסכום ששילמתם ונוסיף אותו לתקציב.</div>
         </div>
 
@@ -376,7 +425,15 @@ export function ShareList({ token }: { token: string }) {
         <div className="a11y-sticky-cta" style={S.footer}>
           {/* No aria-label: it duplicated the visible text and went stale while the button read
               "מסיים…". The visible text is the accessible name and stays in sync by construction. */}
-          <button style={S.finishBtn} onClick={finish} disabled={finishing}>
+          {/* BATCH-GI 2.4.3 — NOT `disabled={finishing}`. Activating this button was what disabled
+              it, so the focused element left the focus order under the user's finger and focus fell
+              to <body> for the whole round-trip. Worse, the completion refocus above only fires when
+              the server reports `completed` — and `/complete` 404s while the backend feature is
+              dormant, in which case `finishing` returns to false, the view never changes, and focus
+              stays on <body> permanently. Keeping the button mounted keeps focus on it in that path.
+              Re-entrancy is already guarded: `if (finishing) return` is the first statement of
+              finish(), so nothing double-POSTs. aria-busy carries the in-flight state. */}
+          <button style={S.finishBtn} onClick={finish} aria-busy={finishing}>
             {finishing ? "מסיים…" : <>סיימתי את הקנייה <span aria-hidden>✓</span></>}
           </button>
         </div>
@@ -468,7 +525,13 @@ const S: Record<string, React.CSSProperties> = {
   doneBanner: { margin: "0 0 14px", padding: "14px 16px", background: "#E7F6EE", border: "1px solid #BFE6CE", borderRadius: 14, textAlign: "center" },
   doneTitle: { margin: 0, fontSize: 17, fontWeight: 800, color: "var(--pos, #1B6B43)" },
   doneSub: { marginTop: 4, fontSize: 14, lineHeight: 1.4, color: "var(--text-1, #45505F)" },
-  footer: { position: "sticky", bottom: 0, marginTop: 8, padding: "10px 0 calc(6px + env(safe-area-inset-bottom))", background: "linear-gradient(to top, var(--cream-0, #FBF8F1) 70%, transparent)" },
+  // BATCH-GI D4 — this WAS `padding: "10px 0 calc(...)"`. a11y-menu.css already reserves the
+  // launcher's footprint with `.a11y-sticky-cta { padding-inline-start: 72px }` below 900px,
+  // but an INLINE `padding` shorthand beats any stylesheet rule, so it silently zeroed the
+  // reserve and the launcher covered 48x34px of this full-width CTA at 375/320. Longhands that
+  // leave `padding-inline-start` alone let the stylesheet do its job. /onboarding never had the
+  // bug because its footer is a CSS module. Never re-introduce the shorthand here.
+  footer: { position: "sticky", bottom: 0, marginTop: 8, paddingTop: 10, paddingInlineEnd: 0, paddingBottom: "calc(6px + env(safe-area-inset-bottom))", background: "linear-gradient(to top, var(--cream-0, #FBF8F1) 70%, transparent)" },
   finishBtn: { width: "100%", minHeight: 52, borderRadius: 14, border: "none", background: "var(--teal, #0F766E)", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer" },
   centered: { minHeight: "70dvh", display: "grid", placeItems: "center", padding: 24, textAlign: "center", color: "var(--text-2, #59626E)", fontSize: 16, lineHeight: 1.5 },
 };

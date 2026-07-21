@@ -22,6 +22,7 @@ import { WhatsAppCtaBanner } from "../../components/WhatsAppCta";
 import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut } from "../../components/charts";
 import { api } from "../../lib/api";
+import { heDate } from "../../lib/format";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
 import { requiresOnboarding } from "../../lib/authRouting";
 import { selectInsightPreview } from "../../lib/insightsPreview";
@@ -258,7 +259,9 @@ function MonthProgress({ budget }: { budget: BudgetCurrent }) {
             justifyContent: "space-between",
             fontSize: 10,
             marginTop: 4,
-            opacity: 0.7,
+            // a11y 1.4.3: opacity composited this 10px white label toward the teal
+            // hero. The row is already secondary by size and position; the
+            // transparency was the only thing pushing it under the AA floor.
           }}
         >
           <span className="mono">{dateLabel(budget.periodStart)}</span>
@@ -304,7 +307,7 @@ function PendingApprovals({ role }: { role: string | undefined }) {
         🔔
       </div>
       <div>
-        <div className="h4">בקשות ממתינות לאישור</div>
+        <h2 className="h4">בקשות ממתינות לאישור</h2>
         <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
           בקשות מחברי הבית יופיעו כאן כשתהיינה בקשות ממתינות.
         </div>
@@ -323,7 +326,7 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
     <section className="card" style={{ padding: "var(--sp-6)" }}>
       <div className="row between" style={{ marginBottom: "var(--sp-5)" }}>
         <div>
-          <h3 className="h3">פרויקטים פעילים</h3>
+          <h2 className="h3">פרויקטים פעילים</h2>
           <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
             מעקב הוצאות לכל פרויקט
           </div>
@@ -360,6 +363,10 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
         <div className="grid three">
           {visible.map((p) => {
             const color = projectColor(p.id);
+            // 1.3.1: `new Date(endDate + "T00:00:00")` rendered the literal
+            // "יעד: Invalid Date" whenever endDate was not a bare YYYY-MM-DD.
+            // heDate() returns null instead of garbage, and the row is dropped.
+            const targetHe = heDate(p.endDate);
             return (
               <Link
                 key={p.id}
@@ -407,9 +414,9 @@ function ProjectsStrip({ projects }: { projects: ProjectBudget[] }) {
                     >
                       {p.name}
                     </div>
-                    {p.endDate && (
+                    {targetHe && (
                       <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                        יעד: {new Date(p.endDate + "T00:00:00").toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" })}
+                        יעד: {targetHe}
                       </div>
                     )}
                   </div>
@@ -483,7 +490,7 @@ function CategoriesPanel({
     <section className="card" style={{ padding: "var(--sp-6)" }}>
       <div className="row between" style={{ marginBottom: "var(--sp-5)" }}>
         <div>
-          <h3 className="h3">קטגוריות</h3>
+          <h2 className="h3">קטגוריות</h2>
           <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
             {hasData
               ? `סה"כ ${totalSpent.toLocaleString()} ש"ח החודש`
@@ -531,7 +538,6 @@ function CategoriesPanel({
                   style={{
                     display: "grid",
                     gap: 4,
-                    opacity: isActive ? 1 : 0.4,
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
@@ -542,9 +548,14 @@ function CategoriesPanel({
                         borderRadius: 999,
                         background: c.color,
                         flexShrink: 0,
+                        opacity: isActive ? 1 : 0.4,
                       }}
                     />
-                    <span style={{ flex: 1, fontSize: 13, color: "var(--text-1)" }}>{c.label}</span>
+                    {/* a11y 1.4.3: the inactive (taxonomy-reference) rows used to be dimmed
+                        with opacity:.4 on the whole row, which composited --text-1 down to
+                        about 1.9:1 on the white card. The de-emphasis is now a token step on
+                        the text and stays as transparency only on the decorative colour dot. */}
+                    <span style={{ flex: 1, fontSize: 13, color: isActive ? "var(--text-1)" : "var(--text-2)" }}>{c.label}</span>
                     {hasCap ? (
                       <span className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
                         {spent.toLocaleString()} / {cap!.toLocaleString()}
@@ -627,7 +638,7 @@ function ActivityFeed({ entries, memberColorMap }: { entries: ActivityEntry[] | 
   return (
     <section className="card" style={{ padding: "var(--sp-6)" }}>
       <div style={{ marginBottom: "var(--sp-4)" }}>
-        <h3 className="h3">הפעילות שלנו</h3>
+        <h2 className="h3">הפעילות שלנו</h2>
         <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
           פעולות אחרונות בבית
         </div>
@@ -638,10 +649,14 @@ function ActivityFeed({ entries, memberColorMap }: { entries: ActivityEntry[] | 
           טוען פעילות…
         </div>
       ) : hasEntries ? (
-        <ul style={{ display: "grid", gap: "var(--sp-3)", listStyle: "none", padding: 0, margin: 0 }}>
+        /* 1.3.1: `list-style:none` drops the list role and `display:flex` on the li
+           drops the listitem role in WebKit - the same defect BATCH-GH fixed on /l.
+           The explicit roles restore the item count with zero visual change. */
+        <ul role="list" style={{ display: "grid", gap: "var(--sp-3)", listStyle: "none", padding: 0, margin: 0 }}>
           {entries.slice(0, 12).map((e, idx) => (
             <li
               key={`${e.ts}-${idx}`}
+              role="listitem"
               style={{
                 display: "flex",
                 alignItems: "flex-start",
@@ -650,7 +665,10 @@ function ActivityFeed({ entries, memberColorMap }: { entries: ActivityEntry[] | 
                 borderBottom:
                   idx === Math.min(entries.length, 12) - 1
                     ? "none"
-                    : "1px solid var(--line-1)",
+                    // --line-1 is not defined anywhere in tokens.css, so the whole
+                    // `border` declaration computed to `initial` and no rule was drawn
+                    // between rows.
+                    : "1px solid var(--cream-3)",
               }}
             >
               {e.actorUserId ? (
@@ -668,7 +686,8 @@ function ActivityFeed({ entries, memberColorMap }: { entries: ActivityEntry[] | 
                     width: 24,
                     height: 24,
                     borderRadius: 999,
-                    background: "var(--surface-2)",
+                    // --surface-2 is not defined; the fallback icon chip had no fill.
+                    background: "var(--cream-3)",
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -698,7 +717,9 @@ function ActivityFeed({ entries, memberColorMap }: { entries: ActivityEntry[] | 
                     padding: "2px 8px",
                     borderRadius: 999,
                     background: "var(--coral)",
-                    color: "white",
+                    // a11y 1.4.3: white on --coral is 3.14:1 and 11px is not large
+                    // text, so the pill keeps its coral fill and takes ink text.
+                    color: "var(--text-0)",
                     flexShrink: 0,
                   }}
                 >
@@ -762,7 +783,7 @@ function InsightsStrip({ householdId }: { householdId: string }) {
     <section className="card" style={{ padding: "var(--sp-6)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "var(--sp-4)" }}>
         <div>
-          <h3 className="h3">תובנות</h3>
+          <h2 className="h3">תובנות</h2>
           <div className="muted" style={{ fontSize: 13, marginTop: "var(--sp-1)" }}>
             מבוסס על ההתנהגות שלכם
           </div>
@@ -1046,9 +1067,13 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
+  // 2.4.6 / 1.3.1: the error and loading branches replace the whole page, so each
+  // needs its own <h1>. .sr-only keeps them at zero pixels - the visible h1 in the
+  // ready state is the greeting below.
   if (error) {
     return (
       <AppShell>
+        <h1 className="sr-only">דשבורד</h1>
         <LoadState error={error} />
         <Link className="button" href="/login">
           כניסה
@@ -1056,7 +1081,14 @@ export default function DashboardPage() {
       </AppShell>
     );
   }
-  if (!user || !household || !budget) return <AppShell><LoadState /></AppShell>;
+  if (!user || !household || !budget) {
+    return (
+      <AppShell>
+        <h1 className="sr-only">דשבורד</h1>
+        <LoadState />
+      </AppShell>
+    );
+  }
 
   const role = membership?.role;
   const isLimited = role === "limited_member";
@@ -1069,9 +1101,9 @@ export default function DashboardPage() {
       <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", marginBottom: "var(--sp-6)" }}>
         <Avatar memberId={user.id} displayName={user.displayName} colorKey={membership?.color} size="lg" />
         <div>
-          <p className="h2" style={{ margin: 0 }}>
+          <h1 className="h2" style={{ margin: 0 }}>
             שלום {greetingName} 👋
-          </p>
+          </h1>
           <div className="muted" style={{ marginTop: "var(--sp-1)" }}>
             הנה מה שקורה בבית החודש
           </div>

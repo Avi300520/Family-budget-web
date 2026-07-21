@@ -1,13 +1,14 @@
 "use client";
 
 import { Check, MessageCircle, Pencil, Trash2, UserPlus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Household, HouseholdMember, HouseholdRole } from "@shopping-assistant/shared-types";
 import { ApiClientError } from "@shopping-assistant/api-client";
 import { AppShell } from "../../../components/AppShell";
 import { Avatar } from "../../../components/Avatar";
 import { LoadState } from "../../../components/LoadState";
 import { PhoneInput } from "../../../components/PhoneInput";
+import { announce } from "../../../lib/a11y/announce";
 import { api } from "../../../lib/api";
 import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../../lib/countryCodes";
 import { useViewer } from "../../../lib/useViewer";
@@ -50,14 +51,18 @@ const ROLE_OPTIONS: RoleOption[] = [
 function RolePicker({
   value,
   onChange,
-  options
+  options,
+  label = "בחירת תפקיד"
 }: {
   value: string;
   onChange: (value: string) => void;
   options: RoleOption[];
+  /** Group name. Two pickers can be on screen at once (invite form + inline editor),
+   *  so the name must say WHICH one; it also has to contain the visible "תפקיד" text (2.5.3). */
+  label?: string;
 }) {
   return (
-    <div className="role-cards" role="group" aria-label="בחירת תפקיד">
+    <div className="role-cards" role="group" aria-label={label}>
       {options.map((opt) => {
         const selected = value === opt.value;
         return (
@@ -137,6 +142,9 @@ export default function MembersPage() {
   const [inviteCountryIso, setInviteCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [inviteLocalPhone, setInviteLocalPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string>();
+  // Attempt counter, used only as the alert's `key` so a repeated identical validation
+  // message still remounts the alert node and is therefore announced again.
+  const [phoneErrorAt, setPhoneErrorAt] = useState(0);
   const [inviteRole, setInviteRole] = useState("adult_member");
   const [inviteLimit, setInviteLimit] = useState<string>("");
   const [joinLink, setJoinLink] = useState<string>();
@@ -149,6 +157,14 @@ export default function MembersPage() {
   // Co-manager flag (permissions.all) — owner/admin only; grants an adult_member full
   // household-management capability (spouse / co-manager).
   const [editCoManager, setEditCoManager] = useState(false);
+  // Focus bookkeeping (2.4.3). Every one of these interactions unmounts the control that
+  // was just activated: a removal deletes the row, opening the editor replaces the row,
+  // saving/cancelling replaces the editor back. Without a target, focus falls to <body>.
+  const membersHeadingRef = useRef<HTMLHeadingElement>(null);
+  const editBudgetRef = useRef<HTMLInputElement>(null);
+  const lastEditedRef = useRef<string | null>(null);
+  // Set by removeMember/cancelInvite; consumed by the guarded focus effect below.
+  const pendingRemovalFocusRef = useRef(false);
 
   async function load() {
     setError(undefined);
@@ -164,13 +180,58 @@ export default function MembersPage() {
 
   useEffect(() => { load(); }, []);
 
+  // Opening the editor moves focus into it; closing it (save or cancel) returns focus to
+  // the row's edit button, which is the control the user came from.
+  useEffect(() => {
+    if (editingId) {
+      editBudgetRef.current?.focus();
+      return;
+    }
+    const back = lastEditedRef.current;
+    if (!back) return;
+    lastEditedRef.current = null;
+    document.querySelector<HTMLElement>(`[data-member-edit="${CSS.escape(back)}"]`)?.focus();
+  }, [editingId]);
+
+  // 3.3.1 - focus the invalid phone field only AFTER React has committed `aria-invalid` +
+  // `aria-describedby` and mounted #invite-phone-error. Focusing synchronously inside the
+  // submit handler lands before the commit, so the reader announces the field as valid and
+  // loses the description entirely.
+  useEffect(() => {
+    if (!phoneError) return;
+    document.getElementById("invite-phone")?.focus();
+  }, [phoneError]);
+
+  // 2.4.3 - focus repair after a removal / invite cancellation. It has to live in an effect
+  // keyed on `members`, not inline in the handler: React commits the removal asynchronously,
+  // so at the end of removeMember/cancelInvite the activated button is still mounted and still
+  // focused - reading document.activeElement there would always see the button, never <body>,
+  // and the orphan guard would swallow every legitimate repair. By the time this effect runs
+  // the row is gone, so the test is meaningful. Same idiom as ShareList / shopping-list.
+  useEffect(() => {
+    if (!pendingRemovalFocusRef.current) return;
+    pendingRemovalFocusRef.current = false;
+    // Only step in if the removal actually orphaned focus. A keyboard user who Tabbed onward
+    // during the round-trip keeps their place instead of being yanked back to the heading.
+    const ae = document.activeElement;
+    if (ae && ae !== document.body) return;
+    membersHeadingRef.current?.focus();
+  }, [members]);
+
   async function invite(event: React.FormEvent) {
     event.preventDefault();
-    if (!household) return;
+    // Re-entrancy guard: the submit button no longer disables itself (see its comment).
+    if (!household || working) return;
     setPhoneError(undefined);
     const e164 = toE164(dialForIso(inviteCountryIso), inviteLocalPhone);
     if (!e164) {
+      // role="alert" fires when the alert node is INSERTED, so writing the SAME string into an
+      // already-mounted alert is silent - and the setPhoneError(undefined) above does not save
+      // it, because React batches both updates into one commit with no intermediate render. The
+      // alert is keyed on this counter instead, so it remounts and speaks on every attempt
+      // (3.3.1 / 4.1.3). Focus is moved by the effect above, once the aria attrs are committed.
       setPhoneError("מספר הטלפון לא נראה תקין.");
+      setPhoneErrorAt((n) => n + 1);
       return;
     }
     setWorking(true);
@@ -189,6 +250,9 @@ export default function MembersPage() {
       setInviteLocalPhone("");
       setInviteLimit("");
       await load();
+      // The join-link block is not a pre-existing live region, and the form fields just
+      // cleared under the user - announce the result explicitly (4.1.3).
+      announce("ההזמנה נשלחה בוואטסאפ");
     } catch (err) {
       setError(describeMemberActionError(err, "לא הצלחנו לשלוח את ההזמנה. בדקו את המספר ונסו שוב."));
     } finally {
@@ -203,6 +267,11 @@ export default function MembersPage() {
     try {
       await api.removeMember(household.id, memberId);
       setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      // The row holding focus unmounts - the effect above parks focus on the list heading
+      // instead of letting it fall to <body> (2.4.3). Announce it here either way: the row
+      // simply disappears, there is no visible success copy.
+      pendingRemovalFocusRef.current = true;
+      announce("החבר הוסר.");
     } catch (err) {
       setError(describeMemberActionError(err, "לא הצלחנו להסיר את החבר."));
     }
@@ -218,12 +287,17 @@ export default function MembersPage() {
     try {
       await api.removeMember(household.id, m.id);
       setMembers((prev) => prev.filter((x) => x.id !== m.id));
+      // Same as removeMember - and when this was the last invite, the whole "הזמנות שנשלחו"
+      // section unmounts with the activated button inside it.
+      pendingRemovalFocusRef.current = true;
+      announce("ההזמנה בוטלה.");
     } catch (err) {
       setError(describeMemberActionError(err, "לא הצלחנו לבטל את ההזמנה."));
     }
   }
 
   function beginEdit(m: MemberRow) {
+    lastEditedRef.current = m.id;
     setEditingId(m.id);
     setEditRole(m.role);
     setEditBudget(m.personalBudgetMonthly != null ? String(m.personalBudgetMonthly) : "");
@@ -250,13 +324,22 @@ export default function MembersPage() {
       body.personalBudgetMonthly = editBudget.trim() === "" ? null : Number(editBudget);
       await api.updateMember(household.id, memberId, body);
       setEditingId(null);
+      announce("נשמר");
       await load();
     } catch (err) {
       setError(describeMemberActionError(err, "לא הצלחנו לעדכן את החבר."));
     }
   }
 
-  if (!household) return <AppShell><LoadState error={error} /></AppShell>;
+  // Loading AND load-failure share this branch, so it needs the page's own <h1>.
+  if (!household) {
+    return (
+      <AppShell>
+        <h1 className="page-title">חברי הבית</h1>
+        <LoadState error={error} />
+      </AppShell>
+    );
+  }
 
   const activeMembers = members.filter((m) => m.status === "active");
   const pendingInvites = members.filter((m) => m.status === "invited");
@@ -266,7 +349,8 @@ export default function MembersPage() {
       <h1 className="page-title">חברי הבית - {household.name}</h1>
 
       <section className="panel" style={{ marginBottom: 24 }}>
-        <h2>חברים פעילים</h2>
+        {/* tabIndex=-1 so a removal can park focus here (2.4.3). Not in the tab order. */}
+        <h2 ref={membersHeadingRef} tabIndex={-1}>חברים פעילים</h2>
         {activeMembers.length === 0 && <p className="muted">אין חברים נוספים עדיין.</p>}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
           {activeMembers.map((m) => {
@@ -299,14 +383,19 @@ export default function MembersPage() {
                     </div>
                     {canManage && (
                       <div style={{ display: "flex", gap: 6 }}>
+                        {/* Icon-only and repeated once per row: `title` alone was a weak name and
+                            said nothing about WHICH member. .sr-only text INSIDE the button (not an
+                            aria-label) keeps the name and the pixels from drifting apart. */}
                         {m.role !== "owner" && (
-                          <button className="button secondary" onClick={() => beginEdit(m)} style={{ padding: "4px 8px" }} title="ערוך">
+                          <button className="button secondary" data-member-edit={m.id} onClick={() => beginEdit(m)} style={{ padding: "4px 8px" }} title="ערוך">
                             <Pencil size={14} aria-hidden />
+                            <span className="sr-only">עריכת {displayName}</span>
                           </button>
                         )}
                         {m.role !== "owner" && (
                           <button className="button secondary" onClick={() => removeMember(m.id)} style={{ padding: "4px 8px" }} title="הסר">
                             <Trash2 size={14} aria-hidden />
+                            <span className="sr-only">הסרת {displayName}</span>
                           </button>
                         )}
                       </div>
@@ -326,12 +415,14 @@ export default function MembersPage() {
                             value={editRole}
                             onChange={(v) => setEditRole(v as HouseholdRole)}
                             options={ROLE_OPTIONS}
+                            label={`תפקיד - ${displayName}`}
                           />
                         </div>
                       )}
                       <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
                         תקציב אישי חודשי (₪, ריק = ללא)
                         <input
+                          ref={editBudgetRef}
                           className="input"
                           type="number"
                           min={1}
@@ -394,7 +485,7 @@ export default function MembersPage() {
                     </div>
                   </div>
                   <button className="button secondary" onClick={() => cancelInvite(m)} style={{ padding: "4px 10px" }} title="ביטול ההזמנה">
-                    ביטול
+                    ביטול<span className="sr-only"> ההזמנה ל{name}</span>
                   </button>
                 </div>
               );
@@ -436,11 +527,14 @@ export default function MembersPage() {
               phone={inviteLocalPhone}
               onPhoneChange={(v) => { setInviteLocalPhone(v); setPhoneError(undefined); }}
               placeholder="052-660-6680"
-              phoneAriaLabel="מספר טלפון מקומי"
+              /* No phoneAriaLabel override here: the field is wired to the visible
+                 <label htmlFor="invite-phone"> above, so the accessible name must be that
+                 same visible string ("מספר טלפון") rather than a second, different one. */
               invalid={Boolean(phoneError)}
+              describedById={phoneError ? "invite-phone-error" : undefined}
             />
             {phoneError && (
-              <div style={{ color: "var(--neg)", fontSize: "0.82rem", marginTop: 4 }}>
+              <div key={phoneErrorAt} id="invite-phone-error" role="alert" style={{ color: "var(--neg)", fontSize: "0.82rem", marginTop: 4 }}>
                 {phoneError}
               </div>
             )}
@@ -466,7 +560,12 @@ export default function MembersPage() {
               onChange={(e) => setInviteLimit(e.target.value)}
             />
           </label>
-          <button className="button" type="submit" disabled={working || !inviteLocalPhone.trim()}>
+          {/* No `disabled`: submitting is what sets `working`, so disabling the focused button
+              drops focus to <body> mid-request (2.4.3) - and after a successful invite the phone
+              field is cleared, which used to leave the button disabled with no explanation. An
+              empty/invalid number now yields the existing, focusable "מספר הטלפון לא נראה תקין."
+              error; invite() guards re-entry on `working`. */}
+          <button className="button" type="submit" aria-busy={working || undefined}>
             <UserPlus size={18} aria-hidden />
             שליחת הזמנה
           </button>
@@ -480,7 +579,9 @@ export default function MembersPage() {
             </a>
           </div>
         )}
-        {error && <div className="status error" style={{ marginTop: 12 }}>{error}</div>}
+        {/* Also carries the inline-edit / remove failures, which render far above -
+            role="alert" is what makes them reach the user at all (3.3.1). */}
+        {error && <div className="status error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
       </section>
       )}
     </AppShell>

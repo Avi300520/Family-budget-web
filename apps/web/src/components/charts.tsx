@@ -435,6 +435,12 @@ export function BarsChart({
 
   const maxVal = max || Math.max(...sanitized.map((d) => d.value), 1);
 
+  // BATCH-GI (1.1.1/4.1.2): NOT role="img". Every bar already renders its own real
+  // text - the formatted amount and the label - so role="img" would make the whole
+  // dataset presentational and replace it with the one short aria-label; and
+  // aria-hidden={!ariaLabel} removed the chart from the a11y tree outright whenever
+  // a caller omitted the prop. role="group" names the collection while leaving the
+  // numbers readable.
   return (
     <div
       style={{
@@ -444,8 +450,7 @@ export function BarsChart({
         height: height + 28,
       }}
       aria-label={ariaLabel}
-      role={ariaLabel ? "img" : undefined}
-      aria-hidden={!ariaLabel}
+      role={ariaLabel ? "group" : undefined}
     >
       {sanitized.map((d, i) => {
         const barH = Math.max((d.value / maxVal) * height, d.value > 0 ? 4 : 2);
@@ -761,9 +766,18 @@ export function ActivityHeatmap({
               >
                 {m.displayName?.split(/\s+/)[0] ?? ""}
               </span>
+              {/* BATCH-GI (1.1.1 + 1.4.1): the grid encodes each day's count ONLY as
+                  colour intensity, and the aria-label that was meant to expose it sat
+                  on role=generic cell <div>s, where name-from-author is not allowed -
+                  so AT got nothing. The row total is given as real .sr-only text
+                  (position:absolute - zero pixels change) and the decorative grid is
+                  taken out of the a11y tree below. */}
+              <span className="sr-only">
+                {` ${paddedCounts.reduce((s, n) => s + n, 0)} פעולות ב-${days} הימים האחרונים`}
+              </span>
             </div>
-            {/* day cells */}
-            <div style={{ display: "flex", gap: 3, flex: 1 }}>
+            {/* day cells - decorative; the row's numbers are the .sr-only text above. */}
+            <div style={{ display: "flex", gap: 3, flex: 1 }} aria-hidden="true">
               {paddedCounts.map((v, i) => {
                 const intensity = HEAT_OPACITY[Math.min(v, 4)] ?? 1;
                 return (
@@ -779,7 +793,6 @@ export function ActivityHeatmap({
                       transition: "opacity 200ms var(--ease)",
                     }}
                     title={`יום ${i + 1}: ${v} פעולות`}
-                    aria-label={`יום ${i + 1}: ${v} פעולות`}
                   />
                 );
               })}

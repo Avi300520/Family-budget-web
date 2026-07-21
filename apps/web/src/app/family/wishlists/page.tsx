@@ -322,12 +322,15 @@ export default function FamilyWishlistsPage() {
                     <div style={{ fontWeight: 600 }}>{member?.displayName ?? "חבר משפחה"}</div>
                   </div>
 
-                  <ul style={{ display: "grid", gap: "var(--sp-2)", listStyle: "none", padding: 0, margin: 0 }}>
+                  {/* role="list"/"listitem" restore the semantics WebKit drops on a
+                      list-style:none <ul> whose <li> are display:flex (1.3.1). */}
+                  <ul role="list" style={{ display: "grid", gap: "var(--sp-2)", listStyle: "none", padding: 0, margin: 0 }}>
                     {ownerItems.map((w) => {
                       const fulfilled = w.status === "fulfilled";
                       return (
                         <li
                           key={w.id}
+                          role="listitem"
                           style={{
                             display: "flex",
                             alignItems: "center",
@@ -335,11 +338,15 @@ export default function FamilyWishlistsPage() {
                             padding: "var(--sp-3)",
                             borderRadius: "var(--r-2)",
                             background: "var(--cream-1)",
+                            // No opacity on a fulfilled row: it composites the text
+                            // toward the background and breaks 1.4.3. The
+                            // line-through + "נקנה ✓" status already carry the state.
                             border: "1px solid var(--cream-3)",
-                            opacity: fulfilled ? 0.6 : 1,
                           }}
                         >
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: "var(--text-1)" }}>
+                          {/* De-emphasis for a fulfilled row is a token step on the
+                              text (--text-2, still AA), never opacity. */}
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: fulfilled ? "var(--text-2)" : "var(--text-1)" }}>
                             {w.priority === "high" && <span aria-hidden="true">⭐ </span>}
                             <span style={{ textDecoration: fulfilled ? "line-through" : "none" }}>{w.title}</span>
                             {typeof w.priceEst === "number" && (

@@ -291,7 +291,19 @@
 .pt-compare__card.is-brand { border-color: var(--teal); box-shadow: var(--elev-2); }
 .pt-compare__card.is-muted { background: transparent; border-style: dashed; }
 .pt-compare__tag { display: inline-block; font-size: 13px; font-weight: 800; padding: 4px 12px; border-radius: var(--r-pill); margin-bottom: 10px; }
-.pt-compare__card.is-muted .pt-compare__tag { background: var(--cream-3); color: var(--text-2); }
+/* BATCH-GI D2 (1.4.3) — this was `background: var(--cream-3)`, i.e. a BOUNDARY
+   token used as a text-bearing background. globals.css correctly darkens
+   --cream-3 to #6B6B6B in high-contrast mode (it is a line colour there), which
+   dropped this 13px bold chip to #000 on #6B6B6B = 3.94:1 — a defect that only
+   appears in the mode a low-vision user turns ON. --cream-1 is a genuine surface
+   token in both scopes: #F4EEE1 by default (4.64:1 with --text-2) and #FFFFFF in
+   high contrast (21:1). The dashed --cream-4 border keeps the "muted" look the
+   grey fill used to carry. Rule: --cream-3/--cream-4 never sit under text. */
+.pt-compare__card.is-muted .pt-compare__tag {
+  background: var(--cream-1);
+  color: var(--text-2);
+  border: 1px solid var(--cream-4);
+}
 .pt-compare__card.is-brand .pt-compare__tag { background: var(--teal); color: #fff; }
 .pt-compare__card p { font-size: 15px; color: var(--text-1); line-height: 1.55; }
 .pt-compare__vs { align-self: center; font-size: 13px; font-weight: 800; color: var(--text-2); }

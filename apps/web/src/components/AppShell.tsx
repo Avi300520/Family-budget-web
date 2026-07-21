@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BarChart3, ChevronRight, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Menu, Settings, Sparkles } from "lucide-react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { api, clearClientSession } from "../lib/api";
@@ -62,17 +62,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const burgerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
 
   // Close the mobile drawer whenever the route changes (a nav tap navigates).
+  // A navigation legitimately resets focus, so this path deliberately does NOT
+  // move focus - only the two explicit dismissals below do.
   useEffect(() => {
     setDrawerOpen(false);
   }, [pathname]);
+
+  // BATCH-GI (2.4.3): the closed drawer is `visibility:hidden`, which drops its
+  // whole subtree out of the focus order - so an explicit dismissal (Escape or
+  // scrim) would blur the focused nav link and orphan focus to <body>. Return
+  // focus to the burger that opened it (same contract as LandingNav). Orphan
+  // guard: if the user has already Tabbed somewhere outside the drawer, leave
+  // their focus exactly where they put it.
+  const dismissDrawer = useCallback(() => {
+    const ae = document.activeElement;
+    const shouldRestore = !ae || ae === document.body || !!drawerRef.current?.contains(ae);
+    setDrawerOpen(false);
+    if (shouldRestore) burgerRef.current?.focus();
+  }, []);
 
   // While the drawer is open: lock body scroll and close on Escape.
   useEffect(() => {
     if (!drawerOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDrawerOpen(false);
+      if (e.key === "Escape") dismissDrawer();
     };
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -81,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [drawerOpen]);
+  }, [drawerOpen, dismissDrawer]);
 
   // Real logout: the backend revokes the session + clears the HttpOnly cookie (the FE
   // cannot clear it). Only on a confirmed success do we drop the local csrf and route to
@@ -142,11 +159,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         )}
-        <button type="button" className="nav-link nav-logout" onClick={handleLogout} disabled={loggingOut}>
+        {/* BATCH-GI F-A1 (2.4.3): activating this button is what disabled it, so the
+            focused element vanished from the focus order and focus fell to <body>.
+            aria-busy carries the in-flight state instead; the re-entrancy guard is
+            already the first statement of handleLogout(), so nothing double-submits. */}
+        <button type="button" className="nav-link nav-logout" onClick={handleLogout} aria-busy={loggingOut}>
           <LogOut size={18} aria-hidden />
           <span>{loggingOut ? "מתנתק…" : "התנתקות"}</span>
         </button>
-        {logoutError && <div className="nav-logout-error">ההתנתקות נכשלה, נסו שוב.</div>}
+        {/* BATCH-GI F-B1 (4.1.3): the failure appears with no other announcement. */}
+        {logoutError && <div className="nav-logout-error" role="alert">ההתנתקות נכשלה, נסו שוב.</div>}
       </div>
     </>
   );
@@ -160,6 +182,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="app-topbar">
         <button
           type="button"
+          ref={burgerRef}
           className="topbar-btn"
           aria-label="פתיחת תפריט"
           aria-expanded={drawerOpen}
@@ -177,14 +200,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Mobile off-canvas drawer (slides from the RTL right) + scrim. */}
       <div
         className={"app-drawer-scrim" + (drawerOpen ? " open" : "")}
-        onClick={() => setDrawerOpen(false)}
+        onClick={dismissDrawer}
         aria-hidden
       />
-      <aside className={"app-drawer" + (drawerOpen ? " open" : "")} aria-label="תפריט" aria-hidden={!drawerOpen}>
+      <aside ref={drawerRef} className={"app-drawer" + (drawerOpen ? " open" : "")} aria-label="תפריט" aria-hidden={!drawerOpen}>
         {sidebar}
       </aside>
 
-      <main className="main">
+      {/* BATCH-GI F2 (2.4.1): id="main" was missing, so the site-wide skip link's
+          href="#main" resolved to nothing on EVERY authenticated route, not just
+          the dashboard. A11yBar's JS fallback masked it for mouse-less users with
+          JS on; with JS off the link went nowhere. */}
+      <main id="main" className="main">
         {/* Back-to-hub affordance on every Settings sub-screen (and the two
             settings-only sub-pages reached from the hub: /receipts, /export).
             Never on the /settings hub itself. One place → covers all states. */}

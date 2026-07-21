@@ -17,6 +17,9 @@ function formatPurchaseTime(p: Purchase): string {
 
   try {
     const created = new Date(p.createdAt);
+    // toLocaleTimeString does NOT throw on an unparseable date - it returns the
+    // literal "Invalid Date", so the catch below never ran. Guard explicitly.
+    if (Number.isNaN(created.getTime())) return p.purchaseDate;
     const timeStr = created.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false });
     if (purchaseIsToday) return timeStr;
     // Not today - show short date too: "24.5  13:52"
@@ -59,8 +62,10 @@ export default function SpendingBreakdownPage() {
     load();
   }, []);
 
-  if (error) return <AppShell><LoadState error={error} /></AppShell>;
-  if (!periodStart) return <AppShell><LoadState /></AppShell>;
+  // 1.3.1/2.4.6: the error and loading branches never rendered an <h1>, so the
+  // page had no heading at all in those states. .sr-only keeps the pixels identical.
+  if (error) return <AppShell><h1 className="sr-only">הוצאות החודש</h1><LoadState error={error} /></AppShell>;
+  if (!periodStart) return <AppShell><h1 className="sr-only">הוצאות החודש</h1><LoadState /></AppShell>;
 
   const total = purchases.reduce((sum, p) => sum + p.totalAmount, 0);
 

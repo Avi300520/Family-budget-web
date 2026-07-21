@@ -1,7 +1,7 @@
 "use client";
 
 import { MessageCircle, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Pingtally is WhatsApp-first, but a brand-new WEB signup has never messaged the
 // bot - so Meta's 24h customer-service window is closed and every free-form
@@ -43,6 +43,7 @@ const DISMISS_KEY = "pt-whatsapp-cta-dismissed";
 export function WhatsAppCtaBanner() {
   const link = botWhatsAppLink();
   const [dismissed, setDismissed] = useState(true);
+  const dismissedByUserRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -52,9 +53,28 @@ export function WhatsAppCtaBanner() {
     }
   }, []);
 
+  // The X button unmounts itself with the banner, which drops focus to <body>
+  // (2.4.3). Hand focus to the page's <main id="main"> landmark instead, the
+  // same target the site-wide skip link uses. This runs AFTER React commits the
+  // unmount, never synchronously in the handler: only once the X button is gone
+  // can we tell whether focus was really orphaned, so the guard below leaves a
+  // user who already moved on alone. preventScroll keeps a mid-page dismiss from
+  // rewinding the dashboard to the top of <main>.
+  useEffect(() => {
+    if (!dismissed || !dismissedByUserRef.current) return;
+    dismissedByUserRef.current = false;
+    const ae = document.activeElement;
+    if (ae && ae !== document.body) return;
+    const main = document.getElementById("main");
+    if (!main) return;
+    if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+    main.focus({ preventScroll: true });
+  }, [dismissed]);
+
   if (!link || dismissed) return null;
 
   function dismiss() {
+    dismissedByUserRef.current = true;
     setDismissed(true);
     try {
       window.localStorage.setItem(DISMISS_KEY, "1");
