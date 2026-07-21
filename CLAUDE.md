@@ -8,12 +8,66 @@
 
 ---
 
-## Accessibility follow-up — BATCH-GI (2026-07-21) — NOT DEPLOYED, owner-gated
+## Accessibility follow-up — BATCH-GI (2026-07-21) — **DEPLOYED to production**
 
-Branch `batch-gi/accessibility-fixes` (off `e136db4`, commit `16d1212`, pushed). Fixes the
-findings of three audit passes over the **deployed** BATCH-GH build: the Playwright harness
-(D1-D5) plus two Chrome-agent passes (visual + deep-interactive, F1-F14). **Frontend-only; no
-backend/DB/billing/flag change. Not merged** — merging FE `main` auto-promotes Vercel prod.
+Branch `batch-gi/accessibility-fixes` (off `e136db4`, code `16d1212` + docs `4b56e8e`),
+**fast-forward merged to `main` and deployed 2026-07-21** on owner approval. Fixes the findings of
+three audit passes over the BATCH-GH build: the Playwright harness (D1-D5) plus two Chrome-agent
+passes (visual + deep-interactive, F1-F14). **Frontend-only; no backend/DB/billing/flag change.**
+
+**The deployment that first carried this code: `dpl_3jRW9JA8C651Mv2NG85x5GqLZPsh`** (`4b56e8e`,
+READY, alias `pingtally.com` + `www.pingtally.com`). Admin rebuilt from the same commit:
+`dpl_9WyqFxebC71Cj2oNh3gZdzAn6QoP` (READY, `admin.pingtally.com`) — `apps/admin` and `packages/`
+are **untouched** by the diff, so the admin rebuild is a no-op re-publish.
+
+⚠️ **A docs-only commit to `main` re-promotes production too** — including the one you are reading,
+and including whatever lands next. So **this id is not "the current production deployment", it is
+the first deployment carrying this code**; a later docs-only re-promote ships byte-identical app
+source under a new id. Two consequences, both learned the hard way here: **(1) never quote a
+deployment id from a doc as if it were live — read the live alias** (Vercel marks the current and
+the immediately-previous production build `isRollbackCandidate: true`); **(2) the rollback target
+is unaffected by docs re-promotes** — it stays `dpl_J2TTkb9tZ9uUUxp7cLonMtuMqwk9` (`50d0816`),
+the last build *before* this code. The authoritative running record is the backend repo's
+`docs/audit/2026-07-06/TASK_INDEX.md`, which lives outside this build trigger.
+
+**ROLLBACK = re-point the Vercel production alias to `dpl_J2TTkb9tZ9uUUxp7cLonMtuMqwk9`**
+(`50d0816`, the last pre-BATCH-GI prod build). One action; reverts consumer + admin; no
+backend/DB/flag/env to undo. ⚠️ **Note the correction:** the pre-deploy brief named
+`dpl_CCXd8yKbWUQNm9d8gXzZ2LrK23M6` (`7cdbf2f`) as the rollback target, but production had since
+been re-promoted by the BATCH-GH docs commit — the alias was actually on `dpl_J2TT…`. **Always
+read the live alias before recording a rollback target; do not copy the previous batch's id.**
+
+**LIVE-MEASURED on production, before AND after, in a real browser (`getComputedStyle`, both
+engines) — the defects reproduced on prod first, so the fix is proven to have moved them:**
+| | before (`50d0816`) | after (`4b56e8e`) |
+|---|---|---|
+| **D1** focused skip link "דילוג לטופס ההרשמה", `/` + `/login` | `#3c474a` on `#0f766e` = **1.75:1 FAIL** | `#ffffff` on `#0f766e` = **5.47:1 PASS** |
+| **D2** `.pt-compare__tag` "בדיעבד", high-contrast mode | `#000000` on `#6b6b6b` = **3.94:1 FAIL** | `#000000` on `#ffffff` = **21:1 PASS** |
+
+D2's default-mode ratio also rose 4.80 → 5.35:1 (`#eae2d1` → `#f4eee1`), the expected side effect
+of moving the chip off the `--cream-3` boundary token. **D5 confirmed live:** `/auth/consume`
+renders `h1=1`. WebKit records no D1 sample because Safari does not Tab to links by default — same
+in the before and after runs, so it is a platform default, not a regression.
+
+**Post-deploy sweep on live prod:** all 8 public routes **200** · axe `wcag2a`+`wcag2aa`
+**64 scans that actually ran** (8 route-states × 4 menu modes × 2 engines) = **0 violations**,
+0 serious/critical · `h1=1` + `main#main=1` on **all 16** route-states · **no keyboard trap**
+(60 Tab stops, both engines) · a11y menu `aria-modal="false"`, Escape closes it and returns focus
+to the launcher · no horizontal overflow at 320px · CORS unchanged (`pingtally.com` → 204 +
+`access-control-allow-origin` + credentials; `*.vercel.app` → no ACAO, exactly as documented).
+
+⚠️ **A first sweep reported "0 violations" while axe had never run** — `AxeBuilder` throws on a
+page from `browser.newPage()` and demands `browser.newContext()`; the throw was swallowed and an
+empty array read as a pass. The probe now records `ran: true/false` per scan and reports the count
+that actually executed. **A scan that cannot fail is not a pass — always assert the scan ran.**
+
+**Not verifiable on live production (unchanged by deploying):** D4's launcher-vs-sticky-CTA
+geometry and the `/l` real-list states. Both surfaces need real state — an authenticated
+`/onboarding` wizard and a live share token — and minting one would touch production household
+data. `/onboarding` unauthenticated serves the marketing landing, which has no sticky CTA
+(`ctaBars=0`), so that probe proves nothing. The evidence for D4 and for `/l` names carrying
+quantity/partial/out-of-stock remains the **committed harness run at this exact commit**
+(152 passed, both engines); the deployed artifact is built from that identical source.
 
 **All five Playwright defects closed and RE-MEASURED in a real browser, both engines:**
 D1 skip link **1.75 → 5.47:1** · D2 `.pt-compare__tag` axe-serious → **0 violations** in
@@ -59,11 +113,9 @@ buttons + a labelled region instead). `confirm()` is not a WCAG 2.0 AA failure a
 site is outside the statement's scope; the real defect under it — focus loss after the confirmed
 action — is fixed independently.
 
-**Owner must eyeball before merge (legitimate but visible):** the `/l` sticky CTA is 72px
-narrower below 900px (that IS the D4 fix); the dashboard `ממתין` pill goes white → ink on coral;
-ActivityFeed row separators and the fallback avatar chip now RENDER for the first time (their
-tokens `--line-1`/`--surface-2` were undefined, so the declarations computed to `initial`); the
-two settings save bars show the saved state on a still-mounted button instead of a bare span.
+**Owner eyeball — see the post-deploy list further down this section** (this paragraph used to be
+the pre-merge copy of it and was removed on 2026-07-21 once the batch shipped; keeping two copies
+in different tenses is how a doc starts lying).
 
 **Verification:** typecheck · build (30 routes) · 83/83 unit tests · `eslint.a11y.config.mjs` ·
 Playwright harness **152 passed** both engines — axe **0 violations** across 13 route-states × 7
@@ -73,8 +125,38 @@ the committed BATCH-GH evidence from the deployed production commit (the D6 2.5.
 + the O2 flex-`<li>` question) — **pre-existing, for the auditor, not regressions.** Proven by
 running the same predicates over both evidence files.
 
-**Still NOT closed by this batch:** every manual/human gate below is unchanged. The accessibility
-statement still must not be published.
+**Still NOT closed by this batch — and DEPLOYING CLOSED NONE OF THEM.** This batch closes **code**
+gaps only. Every human/legal gate is unchanged: NVDA + VoiceOver voicing on each public route, the
+hand-run 200% zoom / 320px reflow walk, the physical keyboard walkthrough, real-device touch, the
+colour-blindness pass, the named accessibility coordinator, freshly authored statement text, and
+the certified **מורשה נגישות** review. **The accessibility statement still must NOT be published.**
+The split follow-up also remains open: F12 native `confirm()` → an accessible
+`role="alertdialog"`, and the full ARIA APG tabs pattern on `/insights`.
+
+**Owner eyeball on live prod (legitimate but visible; rollback one action away):** the `/l` sticky
+CTA is 72px narrower below 900px (that IS the D4 fix); the dashboard `ממתין` pill goes white → ink
+on coral; ActivityFeed row separators and the fallback avatar chip now RENDER for the first time
+(their tokens `--line-1`/`--surface-2` were undefined, so the declarations computed to `initial`);
+the two settings save bars show the saved state on a still-mounted button instead of a bare span.
+
+⚠️ **The four above are NOT the whole visible surface** — an adversarial re-read of the shipped
+diff (2026-07-21) found ~a dozen more legitimate but visible changes, every one of them a
+deliberate 1.4.3/1.4.11 fix and every one of them refuted as a defect, but the owner should not
+meet them cold. The one most likely to be mistaken for a bug: **a SECOND `ממתין` pill, on
+`/my-requests`, moved in the OPPOSITE direction to the dashboard one** (mustard → dark-olive fill,
+text stays white; `--amber` → `--warn`). Also: the busy/unavailable button look changed **repo-wide**
+from a 55% fade to a grey `--cream-3` fill; `/budget` dates render Hebrew long-form instead of raw
+ISO; visible page titles now appear in several loading/error states (removing a heading pop-in);
+fulfilled wishlist rows and inactive dashboard category rows lose their whole-row fade in favour of
+a darker text token; `/shopping-list` and `/budget` surface an inline red error strip instead of
+blanking the page. **The governing rule behind all of them: never `opacity` on text — it composites
+the text toward the background and silently drops contrast.**
+
+**One accepted consequence, recorded not hidden:** the `/budget` create-project-budget form gained
+`noValidate` (so the batch's own `aria-invalid` + `role="alert"` errors replace the AT-invisible
+native bubble). That drops the number input's implicit `step=1`, so a **fractional** `totalAmount`
+can now be submitted. `min=1`/`max=10000000` are reproduced faithfully in the JS check and the
+backend Zod schema is unchanged, so this is a widened-but-valid input, not a money defect.
 
 ---
 
@@ -85,9 +167,13 @@ the **public** web surface honestly WCAG 2.0 AA conformant so an Israeli accessi
 (הצהרת נגישות, תקנה 35) can be published truthfully. **Frontend-only.**
 
 **DEPLOYED to production 2026-07-20** — merged to `main` (ff to `7cdbf2f`), Vercel prod
-`dpl_CCXd8yKbWUQNm9d8gXzZ2LrK23M6`. **Rollback = re-point the prod alias to
-`dpl_7mVdz2q8Vb5TiMrvFMqxNUGEor2a`** (`f2bf0c5`, the last pre-a11y prod build); one action, no
-backend/DB/flag to undo. The owner reviewed on live prod rather than qa because
+`dpl_CCXd8yKbWUQNm9d8gXzZ2LrK23M6` **at the time**, superseded ~7 min later by the BATCH-GH *docs*
+commit `50d0816` (`dpl_J2TTkb9tZ9uUUxp7cLonMtuMqwk9`) and since by BATCH-GI (`4b56e8e`,
+`dpl_3jRW9JA8C651Mv2NG85x5GqLZPsh`) — **see the BATCH-GI block above for the current production
+deployment; this paragraph is history, not current state.** ⚠️ **Rollback to
+`dpl_7mVdz2q8Vb5TiMrvFMqxNUGEor2a`** (`f2bf0c5`, the last pre-a11y prod build) reverts **both**
+accessibility batches; to undo BATCH-GI alone the target is `dpl_J2TTkb9tZ9uUUxp7cLonMtuMqwk9`.
+Either is one action, with no backend/DB/flag to undo. The owner reviewed on live prod rather than qa because
 **`qa.pingtally.com` no longer exists** — it was decommissioned 2026-06-30 and is NXDOMAIN at
 Cloudflare with no Vercel domain, so a `*.vercel.app` preview is CORS-blocked by the API
 (verified: prod + qa origins get `Access-Control-Allow-Origin`, `*.vercel.app` gets none).
