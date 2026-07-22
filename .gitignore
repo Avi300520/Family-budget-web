@@ -7,3 +7,11 @@ coverage
 *.tsbuildinfo
 .env.local
 .vercel
+
+# Production secrets — never commit (WP-SEC-01, 2026-07-21 SEO/security audit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.zip
