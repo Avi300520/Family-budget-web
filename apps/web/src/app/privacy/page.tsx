@@ -3,6 +3,7 @@ import { LegalLayout } from "../../components/LegalLayout";
 export const metadata = {
   title: "מדיניות פרטיות | Pingtally",
   description: "מדיניות הפרטיות של Pingtally (קופה משפחתית) - אילו נתונים נאספים, כיצד הם נשמרים ומה הזכויות שלך.",
+  alternates: { canonical: "/privacy" },
 };
 
 const MAIL = "office@pingtally.com";

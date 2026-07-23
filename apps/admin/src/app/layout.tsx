@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Shopping Assistant Admin"
+  title: "Pingtally Admin"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

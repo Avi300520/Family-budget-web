@@ -3,6 +3,7 @@ import { LegalLayout } from "../../components/LegalLayout";
 export const metadata = {
   title: "תנאי שימוש | Pingtally",
   description: "תנאי השימוש של Pingtally (קופה משפחתית) - ההסכם המחייב בין המשתמש לבין השירות.",
+  alternates: { canonical: "/terms" },
 };
 
 const MAIL = "office@pingtally.com";
