@@ -1,9 +1,30 @@
 import { LegalLayout } from "../../components/LegalLayout";
 
+const TERMS_TITLE = "תנאי שימוש | Pingtally";
+const TERMS_DESC =
+  "תנאי השימוש של Pingtally (קופה משפחתית) - ההסכם המחייב בין המשתמש לבין השירות.";
+
+// WP-CRAWL-01: per-page OG so a shared /terms link unfurls with its own
+// title/description instead of inheriting the homepage card.
 export const metadata = {
-  title: "תנאי שימוש | Pingtally",
-  description: "תנאי השימוש של Pingtally (קופה משפחתית) - ההסכם המחייב בין המשתמש לבין השירות.",
+  title: TERMS_TITLE,
+  description: TERMS_DESC,
   alternates: { canonical: "/terms" },
+  openGraph: {
+    type: "article",
+    siteName: "Pingtally",
+    title: TERMS_TITLE,
+    description: TERMS_DESC,
+    url: "/terms",
+    locale: "he_IL",
+    images: [{ url: "/og-pingtally-v2.png", width: 1200, height: 630, alt: "Pingtally" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TERMS_TITLE,
+    description: TERMS_DESC,
+    images: ["/og-pingtally-v2.png"],
+  },
 };
 
 const MAIL = "office@pingtally.com";

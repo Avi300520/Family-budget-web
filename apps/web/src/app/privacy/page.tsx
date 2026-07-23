@@ -1,9 +1,30 @@
 import { LegalLayout } from "../../components/LegalLayout";
 
+const PRIVACY_TITLE = "מדיניות פרטיות | Pingtally";
+const PRIVACY_DESC =
+  "מדיניות הפרטיות של Pingtally (קופה משפחתית) - אילו נתונים נאספים, כיצד הם נשמרים ומה הזכויות שלך.";
+
+// WP-CRAWL-01: per-page OG so a shared /privacy link unfurls with its own
+// title/description instead of inheriting the homepage card.
 export const metadata = {
-  title: "מדיניות פרטיות | Pingtally",
-  description: "מדיניות הפרטיות של Pingtally (קופה משפחתית) - אילו נתונים נאספים, כיצד הם נשמרים ומה הזכויות שלך.",
+  title: PRIVACY_TITLE,
+  description: PRIVACY_DESC,
   alternates: { canonical: "/privacy" },
+  openGraph: {
+    type: "article",
+    siteName: "Pingtally",
+    title: PRIVACY_TITLE,
+    description: PRIVACY_DESC,
+    url: "/privacy",
+    locale: "he_IL",
+    images: [{ url: "/og-pingtally-v2.png", width: 1200, height: 630, alt: "Pingtally" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: PRIVACY_TITLE,
+    description: PRIVACY_DESC,
+    images: ["/og-pingtally-v2.png"],
+  },
 };
 
 const MAIL = "office@pingtally.com";
