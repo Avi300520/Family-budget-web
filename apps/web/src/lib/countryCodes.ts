@@ -278,6 +278,21 @@ export function countryByIso(iso2: string): Country | undefined {
   return BY_ISO.get(iso2);
 }
 
+// PERF-006: the short list shown in the country <select> BEFORE it is first
+// focused, so ~190 <option>s stay out of the initial DOM (the biggest single
+// contributor to the landing page's element count). PhoneInput swaps in the full
+// COUNTRIES list on first focus / pointer-down.
+const COMMON_ISOS = new Set(["IL", "US", "GB", "FR", "DE", "CA", "AU", "RU"]);
+
+/**
+ * Collapsed-selector list: the common countries (kept in COUNTRIES display order)
+ * plus `ensureIso` when given — so a pre-selected uncommon country still renders
+ * in the collapsed <select> and the field never shows blank.
+ */
+export function commonCountries(ensureIso?: string): Country[] {
+  return COUNTRIES.filter((c) => COMMON_ISOS.has(c.iso2) || c.iso2 === ensureIso);
+}
+
 /** Dial code (with "+") for an ISO code; falls back to the default country. */
 export function dialForIso(iso2: string): string {
   return (BY_ISO.get(iso2) ?? BY_ISO.get(DEFAULT_COUNTRY_ISO))!.dial;
