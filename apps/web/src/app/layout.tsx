@@ -48,13 +48,15 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     url: `${SITE_URL}/`,
     locale: "he_IL",
-    images: [{ url: "/og-pingtally.png", width: 1200, height: 630, alt: "Pingtally" }]
+    // og-pingtally-v2.png: lossless re-encode of the original (675KB -> 197KB, under
+    // WhatsApp's 600KB unfurl limit). New filename deliberately busts cached unfurls.
+    images: [{ url: "/og-pingtally-v2.png", width: 1200, height: 630, alt: "Pingtally" }]
   },
   twitter: {
     card: "summary_large_image",
     title: TITLE,
     description: DESCRIPTION,
-    images: ["/og-pingtally.png"]
+    images: ["/og-pingtally-v2.png"]
   }
 };
 
