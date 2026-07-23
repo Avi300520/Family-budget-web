@@ -16,6 +16,13 @@ import { redirectIfAuthed } from "../../lib/authRouting";
 export function SessionRedirect() {
   const router = useRouter();
   useEffect(() => {
+    // PERF-002: only probe /me when a client-side session hint exists. A logged-in
+    // session always leaves a csrfToken in localStorage (the api client stores it);
+    // a fresh anonymous visitor has none, so we skip the request entirely. That
+    // removes the GET /v1/me → 401 the browser logs to the console on every public
+    // landing hit, and drops one request from the critical render path. Returning
+    // visitors with a live session still have the token, so they're still sent in.
+    if (typeof window !== "undefined" && !window.localStorage.getItem("csrfToken")) return;
     let cancelled = false;
     void redirectIfAuthed(
       () => api.me(),

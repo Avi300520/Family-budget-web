@@ -1,6 +1,7 @@
 "use client";
 
-import { COUNTRIES, countryLabel } from "../lib/countryCodes";
+import { useState } from "react";
+import { COUNTRIES, commonCountries, countryLabel } from "../lib/countryCodes";
 
 interface PhoneInputProps {
   /** Selected country ISO 3166-1 alpha-2 code (e.g. "IL"). */
@@ -47,6 +48,11 @@ export function PhoneInput({
   invalid = false,
   describedById,
 }: PhoneInputProps) {
+  // PERF-006: render only the common countries until the user opens the selector;
+  // the full list is swapped in on first focus / pointer-down (before the native
+  // dropdown paints), so ~190 <option>s never enter the initial DOM.
+  const [expanded, setExpanded] = useState(false);
+  const countryOptions = expanded ? COUNTRIES : commonCountries(countryIso);
   return (
     <div className="phone-field">
       <input
@@ -69,9 +75,11 @@ export function PhoneInput({
         value={countryIso}
         aria-label={countryAriaLabel}
         disabled={disabled}
+        onFocus={() => setExpanded(true)}
+        onMouseDown={() => setExpanded(true)}
         onChange={(e) => onCountryChange(e.target.value)}
       >
-        {COUNTRIES.map((c) => (
+        {countryOptions.map((c) => (
           <option key={c.iso2} value={c.iso2}>
             {countryLabel(c)}
           </option>
