@@ -35,19 +35,15 @@ import type {
   SpendingByCategoryEntry,
   SpendingByMemberEntry,
   SpendingByWeekdayEntry,
+  SpendingPeriod,
   Subscription,
   User,
   WeeklyInsightsResponse,
+  MonthlyInsightsResponse,
   WishlistItem,
   WishlistItemPriority,
   OnboardingBaselineRequest,
-  SpendingPeriod,
-  MonthlyInsightsResponse,
-  BaselineAlerts,
-  BillingPlan,
-  BillingStatusDto,
-  Entitlement,
-  PaidPlanCode
+  BaselineAlerts
 } from "@shopping-assistant/shared-types";
 
 export interface ApiClientOptions {
@@ -270,42 +266,12 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ receipt: Receipt; purchase: Purchase; budget: BudgetCurrent }>(`/api/v1/receipts/${receiptId}/confirm`, {
         method: "POST"
       }),
-    // ── Billing (composition-tier model; pricebook is server-authoritative) ──
-    // The catalog of purchasable plans + the 20-day trial length. Render prices as
-    // ₪ = priceAgorot / 100. The server owns this list; never hardcode prices in the UI.
-    billingPlans: () =>
-      request<{ plans: BillingPlan[]; currency: "ILS"; trialDays: number }>("/api/v1/billing/plans"),
-    // Household billing status: raw subscription row, entitlements, and the computed
-    // BillingStatusDto (effectiveStatus / trialDaysRemaining / requiredTier / upgradeRequired).
-    billingStatus: () =>
-      request<{ subscription?: Subscription; entitlements: Entitlement[]; billing: BillingStatusDto }>(
-        "/api/v1/billing/subscription"
-      ),
-    // planCode is tightened to the 6 canonical paid codes — `trial`/legacy are not purchasable.
-    checkoutSession: (householdId: string, planCode: PaidPlanCode, billingEmail?: string) =>
+    checkoutSession: (householdId: string, planCode: string) =>
       request<{ checkoutUrl: string; checkoutSessionId: string }>(`/api/v1/billing/checkout-session`, {
-        method: "POST",
-        body: JSON.stringify({ householdId, planCode, ...(billingEmail ? { billingEmail } : {}) })
-      }),
-    // Household billing email (invoice/receipt address) — owner/admin only; used to prefill the
-    // checkout invoice field. NOT identity, NOT marketing.
-    billingProfile: () =>
-      request<{ billingEmail: string | null }>(`/api/v1/billing/profile`),
-    updateBillingProfile: (householdId: string, billingEmail: string) =>
-      request<{ billingEmail: string }>(`/api/v1/billing/profile`, {
-        method: "PUT",
-        body: JSON.stringify({ householdId, billingEmail })
-      }),
-    changePlan: (householdId: string, planCode: PaidPlanCode) =>
-      request<{ subscription: Subscription }>(`/api/v1/billing/change-plan`, {
         method: "POST",
         body: JSON.stringify({ householdId, planCode })
       }),
-    cancelSubscription: (householdId: string, immediate?: boolean) =>
-      request<{ subscription: Subscription }>(`/api/v1/billing/cancel`, {
-        method: "POST",
-        body: JSON.stringify({ householdId, ...(immediate !== undefined ? { immediate } : {}) })
-      }),
+    subscription: () => request<{ subscription?: Subscription }>("/api/v1/billing/subscription"),
     adminLogin: (token: string) =>
       request<{ csrfToken: string; adminSubject: string }>("/api/v1/admin/auth/login", {
         method: "POST",
@@ -366,42 +332,31 @@ export function createApiClient(options: ApiClientOptions) {
         body: JSON.stringify(reason ? { reason } : {})
       }),
     // ── Admin V2 — Household 360 ───────────────────────────────────────────
-    // ── Household-360 calls use the /h360/* alias, NOT /api/v1/admin/households/* ──────────
-    // Cloudflare Access 302s the literal /api/v1/admin/households* path at the admin.pingtally.com
-    // edge (proven: bare-path siblings reach Vercel 200, /households/search never reaches Vercel
-    // or the backend). The same-origin BFF maps /h360/* back to the real backend /households/*
-    // path server-side (apps/admin/src/lib/adminAlias.ts). Browser paths carry no "households"/
-    // "search" token, so the edge does not challenge them. Auth/JWT forwarding is unchanged.
     adminSearchHouseholds: (by: AdminHouseholdSearchBy, q: string, limit = 20) =>
-      request<{ households: AdminHouseholdSearchRow[] }>("/api/v1/admin/h360/find", {
-        method: "POST",
-        body: JSON.stringify({ by, q, limit })
-      }),
+      request<{ households: AdminHouseholdSearchRow[] }>(`/api/v1/admin/households/search?by=${by}&q=${encodeURIComponent(q)}&limit=${limit}`),
     adminGetHousehold: (householdId: string) =>
-      request<AdminHousehold360>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}`),
+      request<AdminHousehold360>(`/api/v1/admin/households/${encodeURIComponent(householdId)}`),
     adminHouseholdBilling: (householdId: string) =>
-      request<AdminBillingView>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/billing`),
-    adminHouseholdAudit: (householdId: string) =>
-      // No query string: the backend defaults limit=50 (identical to the prior default). The 360
-      // loads this eagerly, so keeping it bare-path avoids any query-string edge sensitivity.
-      request<{ audit: AdminAuditEntry[] }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/audit`),
+      request<AdminBillingView>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/billing`),
+    adminHouseholdAudit: (householdId: string, limit = 50) =>
+      request<{ audit: AdminAuditEntry[] }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/audit?limit=${limit}`),
     adminHouseholdNotes: (householdId: string) =>
-      request<{ notes: AdminSupportNoteView[] }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/notes`),
+      request<{ notes: AdminSupportNoteView[] }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/notes`),
     adminIntegrity: () => request<AdminIntegrityReport>("/api/v1/admin/integrity"),
     adminOverviewCounts: () => request<AdminOverviewCounts>("/api/v1/admin/overview/counts"),
     /** Audited FULL-phone reveal (reason recorded before the value returns; value never logged). */
     adminRevealPhone: (householdId: string, memberId: string, reason: string) =>
-      request<{ memberId: string; field: "phone"; value: string }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/reveal`, {
+      request<{ memberId: string; field: "phone"; value: string }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/reveal`, {
         method: "POST",
         body: JSON.stringify({ field: "phone", memberId, reason })
       }),
     adminGrant: (householdId: string, kind: AdminGrantKind, reason: string, endsAt?: string) =>
-      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/grant`, {
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/grant`, {
         method: "POST",
         body: JSON.stringify({ kind, reason, ...(endsAt ? { endsAt } : {}) })
       }),
     adminRevokeGrant: (householdId: string, correlationId: string, reason: string) =>
-      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/grant/${encodeURIComponent(correlationId)}/revoke`, {
+      request<{ correlationId: string; billing: AdminBillingView }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/grant/${encodeURIComponent(correlationId)}/revoke`, {
         method: "POST",
         body: JSON.stringify({ reason })
       }),
@@ -411,7 +366,7 @@ export function createApiClient(options: ApiClientOptions) {
         body: JSON.stringify({ householdId, body })
       }),
     adminRepairOwner: (householdId: string, memberId: string, reason: string) =>
-      request<{ ok: true; memberId: string; role: string }>(`/api/v1/admin/h360/${encodeURIComponent(householdId)}/repair-owner`, {
+      request<{ ok: true; memberId: string; role: string }>(`/api/v1/admin/households/${encodeURIComponent(householdId)}/repair-owner`, {
         method: "POST",
         body: JSON.stringify({ memberId, reason })
       }),

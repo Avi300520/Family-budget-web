@@ -751,6 +751,10 @@ export interface ExpenseCategoryLabel {
   systemBucket: Purchase["category"];
   /** 'active' = live; 'proposed' = adult suggestion awaiting a manager; 'archived' = soft-off. */
   status: "active" | "proposed" | "archived";
+  /** TASK-29 / WP-CONCEPT — the curated cross-language concept this label belongs to
+   *  (charity/elec/water…), stamped at creation and FROZEN (a later pack version never
+   *  re-links). null/absent = an opaque label (exact/alias matching only). Additive. */
+  conceptId?: string | null;
   createdBy?: string;
   source?: string;
   createdAt: string;
@@ -767,6 +771,9 @@ export interface CategoryAlias {
   normalizedAlias: string;
   /** 'candidate' = proposed (NOT auto-applied); 'approved' = manager-approved (active). */
   status: "candidate" | "approved";
+  /** TASK-29 / WP-CONCEPT — the language the alias surface was written in, PURE metadata
+   *  (never part of any uniqueness key — the script-agnostic fold is the dedup). Additive. */
+  language?: string | null;
   createdBy?: string;
   approvedBy?: string;
   source?: string;

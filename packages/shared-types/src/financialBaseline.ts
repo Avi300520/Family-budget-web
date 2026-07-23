@@ -248,6 +248,12 @@ export interface BaselineFixedExpense {
   isEstimate: boolean;
   alertOnChange: boolean;
   billingDay?: number | null;
+  /** WP-P3 (TASK-17): the last amount observed for this recurring bill via a matched
+   *  LOG_EXPENSE, and when (ISO). Server-set ONLY (never client-provided); absent until
+   *  the first match. The price-change detector compares a new observation against
+   *  `lastObservedAmount ?? amount`. Additive/optional so old JSONB rows round-trip fine. */
+  lastObservedAmount?: number | null;
+  lastObservedAt?: string | null;
   isActive: boolean;
 }
 

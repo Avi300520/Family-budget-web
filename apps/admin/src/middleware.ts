@@ -48,8 +48,9 @@ export default auth((req) => {
   return res;
 });
 
-// Protect everything except NextAuth's own routes and Next static assets. The OAuth callback
-// (/api/auth/callback/google) MUST be excluded or sign-in wedges.
+// Protect everything except NextAuth's own routes, Next static assets, and robots.txt. The OAuth
+// callback (/api/auth/callback/google) MUST be excluded or sign-in wedges; robots.txt must be
+// excluded or it 307s to /login instead of serving the disallow-all rules (WP-SEO-01).
 export const config = {
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"]
+  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|robots.txt).*)"]
 };

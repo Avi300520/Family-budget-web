@@ -8,6 +8,7 @@ import { SessionRedirect } from "../../components/auth/SessionRedirect";
 // ?next= from window.location.search at submit time. Canonical -> / so the two
 // URLs don't split SEO; /login is excluded from the sitemap.
 export const metadata: Metadata = {
+  title: "כניסה | Pingtally",
   alternates: { canonical: "/" },
 };
 

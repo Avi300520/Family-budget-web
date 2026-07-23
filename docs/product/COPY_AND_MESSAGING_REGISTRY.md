@@ -45,6 +45,9 @@ All other PENDING items go in release/product-copy-1 after owner approval.
 | B2 | (not found) | apps/web/src/app/layout.tsx | Open Graph / social share tags | Missing — no rich WhatsApp preview when link shared | Add og:title + og:description after copy approved | PENDING | PGS-007B | Optional; add after A2/A3 approved |
 | B3 | (not found) | apps/web/public/ | PWA manifest | No manifest.json | Not a blocker; add if PWA needed | PENDING | Future | |
 
+See also: [Unfurl-Cache Purge Runbook](./UNFURL_CACHE_RUNBOOK.md) — how to force a fresh link-preview
+card after changing any `og:` metadata above.
+
 ---
 
 ## Section C — WhatsApp Messages (Backend — apps/api/src/messages.ts)

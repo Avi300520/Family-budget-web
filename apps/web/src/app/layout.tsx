@@ -62,6 +62,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl" className={`${heebo.variable} ${jetbrains.variable}`}>
       <body>
+        {/* Next hoists rendered <link> tags into <head>; this shaves the TLS/DNS
+            handshake off the first API call (~300ms est., PageSpeed Insights). */}
+        <link rel="preconnect" href="https://api.pingtally.com" />
         {/* Skip link + accessibility menu. First child of <body> so the skip
             link is the first focusable element in the document (BATCH-GH). */}
         <A11yBar />
