@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     siteName: "Pingtally",
     title: "רשימת קניות משותפת",
     description:
-      "מישהו שיתף איתך רשימת קניות ב-Pingtally. פותחים, מסמנים מה שקנו — בלי הורדה ובלי הרשמה.",
+      "מישהו שיתף איתך רשימת קניות ב-Pingtally. פותחים ומסמנים מה שקנו, בלי הורדה ובלי הרשמה.",
     locale: "he_IL",
     images: [{ url: "/og-pingtally-v2.png", width: 1200, height: 630, alt: "Pingtally" }],
   },
