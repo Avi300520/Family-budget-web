@@ -1,0 +1,90 @@
+name: Discoverability monitor
+
+# WP-CRAWL-06 — weekly black-box check of the LIVE public site. It does NOT gate
+# deploys (Vercel does that); it catches silent regressions in crawl posture and
+# Core Web Vitals between deploys. Also runnable on demand.
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  crawl-matrix:
+    name: Bot-UA / cache / crawl posture
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl matrix
+        run: |
+          set -u
+          SITE="https://pingtally.com"
+          fail=0
+          expect() { # url  ua  label  want_code
+            code=$(curl -s -o /dev/null -w '%{http_code}' -A "$2" --max-time 20 "$1")
+            printf '  [%s] %-28s %s\n' "$code" "$3" "$1"
+            [ "$code" = "$4" ] || { echo "::error::$3 expected $4 got $code ($1)"; fail=1; }
+          }
+          echo "== AI + search crawlers must reach the homepage (200) =="
+          expect "$SITE/" "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" "Googlebot" 200
+          expect "$SITE/" "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)" "Bingbot" 200
+          expect "$SITE/" "Mozilla/5.0 (compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot)" "OAI-SearchBot" 200
+          expect "$SITE/" "Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)" "ChatGPT-User" 200
+          expect "$SITE/" "PerplexityBot/1.0 (+https://perplexity.ai/perplexitybot)" "PerplexityBot" 200
+          echo "== crawl-critical assets exist (200) =="
+          expect "$SITE/robots.txt" "curl" "robots.txt" 200
+          expect "$SITE/sitemap.xml" "curl" "sitemap.xml" 200
+          expect "$SITE/og-pingtally-v2.png" "curl" "OG image" 200
+          expect "$SITE/BingSiteAuth.xml" "curl" "Bing verify" 200
+
+          echo "== robots.txt must NOT re-add a /l Disallow (self-defeating), must keep dashboard blocked =="
+          robots=$(curl -s --max-time 20 "$SITE/robots.txt")
+          echo "$robots" | grep -qiE '^Disallow: /l$' && { echo "::error::robots.txt re-added 'Disallow: /l'"; fail=1; } || echo "  ok: no bare /l Disallow"
+          echo "$robots" | grep -qi '^Disallow: /dashboard' || { echo "::error::robots.txt no longer blocks /dashboard"; fail=1; }
+
+          echo "== /l share pages must be noindex via header =="
+          xr=$(curl -sI --max-time 20 "$SITE/l/monitor-probe" | tr -d '\r' | grep -i '^x-robots-tag:' || true)
+          echo "  $xr"
+          echo "$xr" | grep -qi noindex || { echo "::error::/l missing X-Robots-Tag: noindex"; fail=1; }
+
+          echo "== baseline security headers present on the homepage =="
+          hdrs=$(curl -sI --max-time 20 "$SITE/" | tr -d '\r')
+          for h in "x-content-type-options" "referrer-policy" "x-frame-options"; do
+            echo "$hdrs" | grep -qi "^$h:" || { echo "::error::missing header: $h"; fail=1; }
+          done
+
+          echo "== OG image under WhatsApp's 600KB unfurl cap =="
+          len=$(curl -sI --max-time 20 "$SITE/og-pingtally-v2.png" | tr -d '\r' | grep -i '^content-length:' | awk '{print $2}')
+          echo "  og image content-length: ${len:-unknown}"
+          if [ -n "${len:-}" ] && [ "$len" -gt 600000 ]; then echo "::error::OG image ${len}B > 600KB WhatsApp cap"; fail=1; fi
+
+          exit $fail
+
+  pagespeed:
+    name: PageSpeed CWV assert (mobile)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run PSI + assert
+        env:
+          # Optional: add a repo secret PAGESPEED_API_KEY to avoid the keyless
+          # daily quota. Without it the job warns and skips (never a false red).
+          PSI_KEY: ${{ secrets.PAGESPEED_API_KEY }}
+        run: |
+          set -u
+          key=""; [ -n "${PSI_KEY:-}" ] && key="&key=${PSI_KEY}"
+          url="https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://pingtally.com&strategy=mobile&category=performance${key}"
+          resp=$(curl -s --max-time 90 "$url")
+          # jq is preinstalled on ubuntu runners; `try/catch` yields -1 when the
+          # response lacks the score (quota error / transient), so we never false-red.
+          score=$(printf '%s' "$resp" | jq -r 'try (.lighthouseResult.categories.performance.score * 100 | round) catch -1')
+          [ -n "$score" ] || score=-1
+          echo "Performance score (mobile): $score"
+          if [ "$score" = "-1" ]; then
+            echo "::warning::PageSpeed unavailable (keyless quota or transient) — skipping assert"
+            exit 0
+          fi
+          # Hard-fail only on a real regression; warn in the caution band.
+          if [ "$score" -lt 50 ]; then echo "::error::performance score $score < 50"; exit 1; fi
+          if [ "$score" -lt 70 ]; then echo "::warning::performance score $score < 70"; fi
+          echo "ok"
