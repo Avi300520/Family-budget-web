@@ -84,6 +84,16 @@ jobs:
             echo "::warning::PageSpeed unavailable (keyless quota or transient) — skipping assert"
             exit 0
           fi
+          # PERF-001 tracking: surface the lab CWV numbers the run already fetched
+          # (LCP + its phase breakdown = the render-delay PERF-001 is about).
+          lcp=$(printf '%s' "$resp"  | jq -r 'try (.lighthouseResult.audits["largest-contentful-paint"].numericValue | round) catch "n/a"')
+          fcp=$(printf '%s' "$resp"  | jq -r 'try (.lighthouseResult.audits["first-contentful-paint"].numericValue  | round) catch "n/a"')
+          ttfb=$(printf '%s' "$resp" | jq -r 'try (.lighthouseResult.audits["server-response-time"].numericValue     | round) catch "n/a"')
+          echo "LCP (lab, ms): $lcp | FCP (ms): $fcp | TTFB (ms): $ttfb"
+          echo "LCP element phase breakdown (render delay = the PERF-001 lever):"
+          printf '%s' "$resp" | jq -c 'try (.lighthouseResult.audits["largest-contentful-paint-element"].details.items) catch "n/a"'
+          echo "metrics item[0] (LCP subpart timings):"
+          printf '%s' "$resp" | jq -c 'try (.lighthouseResult.audits.metrics.details.items[0] | {observedLargestContentfulPaint, largestContentfulPaint, lcpLoadStart, lcpLoadEnd}) catch "n/a"'
           # Hard-fail only on a real regression; warn in the caution band.
           if [ "$score" -lt 50 ]; then echo "::error::performance score $score < 50"; exit 1; fi
           if [ "$score" -lt 70 ]; then echo "::warning::performance score $score < 70"; fi

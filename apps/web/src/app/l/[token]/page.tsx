@@ -3,8 +3,11 @@ import { ShareList } from "./ShareList";
 
 // BATCH-BB — the no-login shopping-mode share page. A server component so it can set noindex
 // (a "use client" page can't export metadata); the interactive list is the client child.
-// noindex + /l in robots.ts disallow + excluded from sitemap.ts — this URL carries a bearer
-// token and must never be indexed. he-only (inherits the root <html lang="he" dir="rtl">).
+// noindex (metadata robots + the X-Robots-Tag: noindex response header) + excluded from
+// sitemap.ts — this URL carries a bearer token and must never be indexed. NOTE: /l is
+// deliberately NOT in robots.ts disallow (WP-CRAWL-02) — a Disallow would stop crawlers
+// fetching the page and ever seeing this noindex, which is self-defeating. he-only
+// (inherits the root <html lang="he" dir="rtl">).
 // WP-CRAWL-01: a STATIC, token-free share card so the link unfurls in WhatsApp as
 // "a shared shopping list" instead of the generic homepage. The bearer token lives
 // only in the URL path and must NEVER appear in an og:/twitter: tag — keeping this

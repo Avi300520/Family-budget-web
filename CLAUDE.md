@@ -377,7 +377,7 @@ Two independent codebases, independent deployments:
 
 ## Sync-Shared Script
 
-Location: Backend repo at `scripts/sync-shared.ps1` (Windows) or `scripts/sync-shared.sh` (Bash/Mac/Linux).
+Location: Backend repo at `scripts/sync-shared.mjs` (pure Node — one command on Windows/Mac/Linux, run via `pnpm sync:shared`).
 
 **When to run:**
 - After any change to Backend `packages/shared-types/src/` or `packages/api-client/src/`
@@ -393,7 +393,7 @@ Location: Backend repo at `scripts/sync-shared.ps1` (Windows) or `scripts/sync-s
 **Example:**
 ```powershell
 cd C:\Users\avrahamm\Desktop\Shopping assistant
-pnpm sync:shared  # or ./scripts/sync-shared.ps1
+pnpm sync:shared  # (runs node scripts/sync-shared.mjs)
 ```
 
 **If forgotten:** Frontend typecheck will fail with "Cannot find module '@shopping-assistant/shared-types'" or similar. Fix by manually running the script, then `pnpm typecheck` again.
@@ -469,7 +469,7 @@ pnpm sync:shared  # or ./scripts/sync-shared.ps1
 - `apps/web/src/styles/members.ts` — `colorFor(memberId)` function using FNV-1a hash for deterministic, SSR-stable member colours
 - `apps/web/src/app/globals.css` — import tokens + primitives, removed old palette
 - `apps/web/src/app/layout.tsx` — added Heebo + JetBrains Mono fonts
-- Backend: `scripts/sync-shared.ps1` + `scripts/sync-shared.sh` — cross-repo synchronization
+- Backend: `scripts/sync-shared.mjs` — cross-repo synchronization
 
 **Key principle:** No hex codes outside `tokens.css`. No numeric padding/margin. All design tokens centralized.
 
