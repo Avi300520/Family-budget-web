@@ -93,8 +93,24 @@ jobs:
           echo "LCP element phase breakdown (render delay = the PERF-001 lever):"
           printf '%s' "$resp" | jq -c 'try (.lighthouseResult.audits["largest-contentful-paint-element"].details.items) catch "n/a"'
           echo "metrics item[0] (LCP subpart timings):"
-          printf '%s' "$resp" | jq -c 'try (.lighthouseResult.audits.metrics.details.items[0] | {observedLargestContentfulPaint, largestContentfulPaint, lcpLoadStart, lcpLoadEnd}) catch "n/a"'
+          printf '%s' "$resp" | jq -c 'try (.lighthouseResult.audits.metrics.details.items[0] | {observedFirstContentfulPaint, observedLargestContentfulPaint, largestContentfulPaint, lcpLoadStart, lcpLoadEnd}) catch "n/a"'
+          # WP-LCP-06 (PERF-001 investigation, 2026-07-24): observedFCP alongside
+          # observedLCP distinguishes a single-paint page (the two are ~equal —
+          # today's regime, see FINDINGS.md LCP-001) from a real late-LCP tail
+          # (a growing gap — the LCP-004 font-swap signature, currently dormant).
+          # The element selector disambiguates which node PageSpeed measured.
+          echo "LCP element selector:"
+          printf '%s' "$resp" | jq -r 'try (.lighthouseResult.audits["largest-contentful-paint-element"].details.items[0].items[0].node.selector) catch "n/a"'
+          printf '%s' "$resp" > psi.json
           # Hard-fail only on a real regression; warn in the caution band.
           if [ "$score" -lt 50 ]; then echo "::error::performance score $score < 50"; exit 1; fi
           if [ "$score" -lt 70 ]; then echo "::warning::performance score $score < 70"; fi
           echo "ok"
+      - name: Upload PSI response
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: psi-response-${{ github.run_id }}
+          path: psi.json
+          retention-days: 90
+          if-no-files-found: ignore
