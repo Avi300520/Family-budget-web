@@ -392,7 +392,7 @@ function Faq() {
 /* ── Final CTA ────────────────────────────────────────────────────────────── */
 function FinalCta() {
   return (
-    <section className="pt-section">
+    <section id="final-cta" className="pt-section">
       <div className="pt-wrap">
         <div className="pt-final">
           <div>

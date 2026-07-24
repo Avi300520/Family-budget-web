@@ -173,6 +173,33 @@
 .pt-section { padding-block: clamp(48px, 4.5vw, 68px); }
 .pt-section--alt { background: var(--cream-1); }
 .pt-section--tight { padding-block: clamp(44px, 4vw, 60px); }
+
+/* PERF-001 (WP-LCP-01; see docs/audit/2026-07-24_perf-001-lcp-investigation/
+   in the backend repo, C:\Users\avrahamm\Desktop\Shopping assistant):
+   skip layout/paint of below-fold landing blocks until they approach the
+   viewport. The hero (section#top.pt-hero) is deliberately NOT matched here
+   -- it has no .pt-section class. A flat contain-intrinsic-size (e.g. 900px)
+   was measured to cause a real ~3.4kb / up to 694px single-step scrollHeight
+   jump on first scroll-through -- so every section gets its own value.
+   Values are the section's OWN observed getBoundingClientRect height on a
+   fresh load with content-visibility left ON (not a force-visible override,
+   which measures ~100-120px smaller per section here for reasons not fully
+   root-caused -- the in-situ number is what the browser actually needs, so
+   it's the one that matters), +~5px buffer, desktop-first with a mobile
+   override at the same <=600px breakpoint the section padding already uses. */
+section.pt-section,
+footer.pt-footer { content-visibility: auto; }
+#outcomes  { contain-intrinsic-size: auto 690px; }
+#how       { contain-intrinsic-size: auto 470px; }
+#why       { contain-intrinsic-size: auto 520px; }
+#compare   { contain-intrinsic-size: auto 650px; }
+#trust     { contain-intrinsic-size: auto 910px; }
+#who       { contain-intrinsic-size: auto 610px; }
+#get       { contain-intrinsic-size: auto 730px; }
+#pricing   { contain-intrinsic-size: auto 1050px; }
+#faq       { contain-intrinsic-size: auto 1270px; }
+#final-cta { contain-intrinsic-size: auto 660px; }
+footer.pt-footer { contain-intrinsic-size: auto 395px; }
 .pt-shead { max-width: 720px; }
 .pt-shead--center { margin: 0 auto; text-align: center; }
 .pt-shead h2 { font-size: clamp(28px, 3.4vw, 40px); margin-top: 14px; }
@@ -464,6 +491,20 @@
   .pt-final { padding: 28px 22px; }
   .pt-footer__meta { flex-direction: column; }
   .pt-price--feat { order: -1; }
+  /* PERF-001 (WP-LCP-01): mobile-measured contain-intrinsic-size (412px
+     viewport, the PSI mobile emulation width) -- single-column reflow makes
+     every section taller than its desktop value above. */
+  #outcomes  { contain-intrinsic-size: auto 1545px; }
+  #how       { contain-intrinsic-size: auto 1000px; }
+  #why       { contain-intrinsic-size: auto 710px; }
+  #compare   { contain-intrinsic-size: auto 840px; }
+  #trust     { contain-intrinsic-size: auto 1460px; }
+  #who       { contain-intrinsic-size: auto 970px; }
+  #get       { contain-intrinsic-size: auto 1350px; }
+  #pricing   { contain-intrinsic-size: auto 2080px; }
+  #faq       { contain-intrinsic-size: auto 1400px; }
+  #final-cta { contain-intrinsic-size: auto 810px; }
+  footer.pt-footer { contain-intrinsic-size: auto 565px; }
 }
 @media (max-width: 360px) {
   .pt-nav__cta a.pt-btn { display: none; }
