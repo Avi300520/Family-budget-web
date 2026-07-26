@@ -23,6 +23,11 @@ export function LandingJsonLd() {
         alternateName: "קופה משפחתית",
         url: `${SITE_URL}/`,
         logo: `${SITE_URL}/pingtally-icon.png`,
+        sameAs: [
+          "https://www.facebook.com/profile.php?id=61592711421756",
+          "https://www.instagram.com/pingtally_/",
+          "https://www.tiktok.com/@pingtally",
+        ],
         email: "office@pingtally.com",
         areaServed: "IL",
         contactPoint: {
