@@ -21,6 +21,7 @@ import type { HouseholdMember, WishlistItem } from "@shopping-assistant/shared-t
 import { AppShell } from "../../../components/AppShell";
 import { Avatar } from "../../../components/Avatar";
 import { LoadState } from "../../../components/LoadState";
+import { activeChildren } from "../../../lib/roster";
 import { api } from "../../../lib/api";
 
 type MemberLite = HouseholdMember & { displayName?: string; phoneE164?: string };
@@ -112,11 +113,9 @@ export default function FamilyWishlistsPage() {
     }
   }
 
-  // Children eligible to own a wish (the wishlist is a limited_member surface).
-  const children = useMemo(
-    () => members.filter((m) => m.role === "limited_member"),
-    [members],
-  );
+  // Children eligible to own a wish (the wishlist is a limited_member surface). A
+  // removed member must not be offered - role alone is not enough.
+  const children = useMemo(() => activeChildren(members), [members]);
 
   function toggleAdd() {
     setAddError(undefined);
