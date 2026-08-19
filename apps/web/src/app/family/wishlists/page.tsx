@@ -38,6 +38,8 @@ export default function FamilyWishlistsPage() {
   const [addChildId, setAddChildId] = useState("");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string>();
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [savingPriceId, setSavingPriceId] = useState<string>();
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +57,7 @@ export default function FamilyWishlistsPage() {
         if (!parent) return; // adult/limited never fetch — server would 403
 
         const [wishlistRes, membersRes] = await Promise.all([
-          api.householdWishlist(me.household.id),
+          api.householdWishlistGoals(me.household.id),
           api.listMembers(me.household.id).catch(() => ({ members: [] as MemberLite[] })),
         ]);
         if (cancelled) return;
@@ -113,6 +115,45 @@ export default function FamilyWishlistsPage() {
     }
   }
 
+  async function contribute(item: WishlistItem) {
+    const raw = window.prompt(`כמה להוסיף ל„${item.title}“?`);
+    if (!raw) return;
+    if (!/^\d+(?:[.,]\d{1,2})?$/.test(raw.trim()) || Number(raw.replace(",", ".")) <= 0 || Number(raw.replace(",", ".")) > 10_000_000) {
+      setError("נא להזין סכום חיובי עם עד שתי ספרות אחרי הנקודה.");
+      return;
+    }
+    const amount = Number(raw.replace(",", "."));
+    try {
+      const result = await api.contributeToWishlist(item.id, amount, crypto.randomUUID());
+      setItems((previous) => (previous ?? []).map((current) => current.id === item.id ? result.item : current));
+    } catch {
+      setError("לא הצלחנו להוסיף תרומה. נסו שוב.");
+    }
+  }
+
+  async function savePrice(item: WishlistItem) {
+    const raw = priceDrafts[item.id]?.trim() ?? "";
+    if (!/^\d+(?:[.,]\d{1,2})?$/.test(raw) || Number(raw.replace(",", ".")) <= 0 || Number(raw.replace(",", ".")) > 10_000_000) {
+      setError("נא להזין מחיר חיובי בש״ח, עם עד שתי ספרות אחרי הנקודה.");
+      return;
+    }
+    setSavingPriceId(item.id);
+    setError(undefined);
+    try {
+      const res = await api.updateWishlistItem(item.id, { priceEst: Number(raw.replace(",", ".")) });
+      setItems((previous) => (previous ?? []).map((current) => current.id === item.id ? res.item : current));
+      setPriceDrafts((previous) => {
+        const next = { ...previous };
+        delete next[item.id];
+        return next;
+      });
+    } catch {
+      setError("לא הצלחנו לעדכן את המחיר. נסו שוב.");
+    } finally {
+      setSavingPriceId(undefined);
+    }
+  }
+
   // Children eligible to own a wish (the wishlist is a limited_member surface). A
   // removed member must not be offered - role alone is not enough.
   const children = useMemo(() => activeChildren(members), [members]);
@@ -150,7 +191,7 @@ export default function FamilyWishlistsPage() {
     <AppShell>
       <div style={{ display: "grid", gap: "var(--sp-5)", maxWidth: 720 }}>
         <header style={{ display: "grid", gap: "var(--sp-2)" }}>
-          <h1 className="h1">משאלות הילדים 🎁</h1>
+          <h1 className="h1">משאלות 🎁</h1>
           <div className="muted" style={{ fontSize: 13 }}>
             מה הילדים היו רוצים. סמנו כנקנה אחרי שקניתם.
           </div>
@@ -345,7 +386,7 @@ export default function FamilyWishlistsPage() {
                         >
                           {/* De-emphasis for a fulfilled row is a token step on the
                               text (--text-2, still AA), never opacity. */}
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: fulfilled ? "var(--text-2)" : "var(--text-1)" }}>
+                          <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: fulfilled ? "var(--text-2)" : "var(--text-1)" }}>
                             {w.priority === "high" && <span aria-hidden="true">⭐ </span>}
                             <span style={{ textDecoration: fulfilled ? "line-through" : "none" }}>{w.title}</span>
                             {typeof w.priceEst === "number" && (
@@ -353,11 +394,54 @@ export default function FamilyWishlistsPage() {
                                 ₪{w.priceEst.toLocaleString("he-IL")}
                               </span>
                             )}
-                          </span>
+                            {typeof w.priceEst === "number" && (
+                              <span className="muted" style={{ display: "block", fontSize: 12, marginTop: 4 }}>
+                                נחסכו {(w.totalContributed ?? 0).toLocaleString("he-IL")} מתוך {w.priceEst.toLocaleString("he-IL")} ₪ ({w.fundedPercentage ?? 0}%)
+                              </span>
+                            )}
+                            {typeof w.priceEst !== "number" && !fulfilled && (
+                              <div
+                                style={{ display: "grid", gap: "var(--sp-2)", marginTop: "var(--sp-3)", maxWidth: 360 }}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <span className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
+                                  אני מבין שרוצים „{w.title}“. כמה זה עולה בערך?
+                                </span>
+                                <div style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center", flexWrap: "wrap" }}>
+                                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span className="sr-only">מחיר משוער עבור {w.title}</span>
+                                    <input
+                                      className="input"
+                                      inputMode="decimal"
+                                      placeholder="למשל 250"
+                                      value={priceDrafts[w.id] ?? ""}
+                                      onChange={(event) => setPriceDrafts((previous) => ({ ...previous, [w.id]: event.target.value }))}
+                                      onKeyDown={(event) => { if (event.key === "Enter") void savePrice(w); }}
+                                      style={{ width: 132 }}
+                                    />
+                                    <span className="muted" style={{ fontSize: 12 }}>₪</span>
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="btn sm"
+                                    disabled={savingPriceId === w.id || !(priceDrafts[w.id]?.trim())}
+                                    onClick={() => void savePrice(w)}
+                                  >
+                                    {savingPriceId === w.id ? "שומר…" : "עדכון מחיר"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                           {fulfilled ? (
                             <span className="status">נקנה ✓</span>
                           ) : (
                             <div style={{ display: "flex", gap: "var(--sp-2)", flexShrink: 0 }}>
+                              {typeof w.priceEst === "number" && (
+                                <button type="button" className="btn sm" onClick={() => contribute(w)}>
+                                  תרומה
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="btn sm primary"
