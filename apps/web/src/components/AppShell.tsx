@@ -41,7 +41,7 @@ const ALL_LINKS: NavLink[] = [
   // /budget (limited_member hidden client-side; server returns 403).
   { href: "/insights",         label: "תובנות וניתוח",  icon: Sparkles,        roles: ["owner", "admin", "adult_member"] },
   // Iteration 8 — children's wishlists (parent surface). Owner/admin ONLY.
-  { href: "/family/wishlists", label: "משאלות הילדים",   icon: Gift,            roles: ["owner", "admin"] },
+  { href: "/family/wishlists", label: "משאלות",   icon: Gift,            roles: ["owner", "admin"] },
   { href: "/settings",         label: "הגדרות",         icon: Settings,        roles: "all" }
 ];
 

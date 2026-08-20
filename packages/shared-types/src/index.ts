@@ -980,6 +980,24 @@ export interface WishlistItem {
   fulfilledAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** Savings-goal state. Undefined fields preserve compatibility with old rows. */
+  totalContributed?: number;
+  fundedPercentage?: number;
+  isFundedNow?: boolean;
+  goalReachedAt?: string;
+  highestMilestoneNotified?: 0 | 25 | 50 | 75 | 100;
+  ownerDisplayName?: string;
+  contributions?: WishlistContribution[];
+}
+
+export interface WishlistContribution {
+  id: string;
+  wishlistItemId: string;
+  householdId: string;
+  contributorUserId: string;
+  contributorDisplayName: string;
+  amount: number;
+  createdAt: string;
 }
 
 /** Iteration 9 — Member Activity Heatmap (owner/admin/adult_member only).

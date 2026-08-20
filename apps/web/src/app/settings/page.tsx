@@ -18,6 +18,7 @@ import {
 import { planForCode, type BillingTier, type Subscription } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
+import { activeMemberCount } from "../../lib/roster";
 import { api } from "../../lib/api";
 import { useViewer } from "../../lib/useViewer";
 import {
@@ -200,7 +201,9 @@ export default function SettingsPage() {
         setBanner((b) => ({ ...b, ...next }));
         try {
           const { members } = await api.listMembers(household.id);
-          if (!cancelled && Array.isArray(members)) setBanner((b) => ({ ...b, memberCount: members.length }));
+          // Count only "active" members - a raw array length also counts invited (not
+          // yet joined) and removed rows, which is not what the "👥" pill means.
+          if (!cancelled && Array.isArray(members)) setBanner((b) => ({ ...b, memberCount: activeMemberCount(members) }));
         } catch {
           // Member count unavailable — omit the "👥" pill.
         }

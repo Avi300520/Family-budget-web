@@ -483,6 +483,12 @@ export function createApiClient(options: ApiClientOptions) {
     myWishlist: () => request<{ items: WishlistItem[] }>("/api/v1/wishlist/me"),
     householdWishlist: (householdId: string) =>
       request<{ items: WishlistItem[] }>(`/api/v1/households/${householdId}/wishlist`),
+    householdWishlistGoals: (householdId: string) =>
+      request<{ items: WishlistItem[] }>(`/api/v1/households/${householdId}/wishlist/goals`),
+    contributeToWishlist: (itemId: string, amount: number, idempotencyKey: string) =>
+      request<{ item: WishlistItem; contribution: import("@shopping-assistant/shared-types").WishlistContribution; replayed: boolean }>(`/api/v1/wishlist/${itemId}/contributions`, {
+        method: "POST", body: JSON.stringify({ amount }), headers: { "Idempotency-Key": idempotencyKey }
+      }),
     updateWishlistItem: (
       itemId: string,
       body: { title?: string; note?: string | null; priceEst?: number | null; priority?: WishlistItemPriority; status?: "open" | "fulfilled" | "removed" }
