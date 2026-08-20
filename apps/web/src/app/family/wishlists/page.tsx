@@ -193,7 +193,7 @@ export default function FamilyWishlistsPage() {
         <header style={{ display: "grid", gap: "var(--sp-2)" }}>
           <h1 className="h1">משאלות 🎁</h1>
           <div className="muted" style={{ fontSize: 13 }}>
-            מה הילדים היו רוצים. סמנו כנקנה אחרי שקניתם.
+            משאלות של בני המשפחה, עם התקדמות החיסכון. סמנו כנקנה אחרי שקניתם.
           </div>
         </header>
 
