@@ -19,6 +19,11 @@ export default function ReceiptReviewPage() {
   const [purchaseDate, setPurchaseDate] = useState("");
   const [totalAmount, setTotalAmount] = useState(0);
   const [error, setError] = useState<string>();
+  // RCPTFIN — SEPARATE from `error`, deliberately. `error` short-circuits the whole render to
+  // <LoadState>, which is right for a failed LOAD and wrong for a failed SAVE: it would replace
+  // the form and throw away everything the user had just typed. A write failure has to appear
+  // NEXT TO the buttons, with the edits still on screen to retry.
+  const [saveError, setSaveError] = useState<string>();
 
   async function load() {
     try {
@@ -42,7 +47,12 @@ export default function ReceiptReviewPage() {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
   }
 
+  // RCPTFIN — a failed save must SAY so. With the OCR sentinel gone, an unreadable merchant
+  // arrives as "" and `receiptCorrectionSchema` requires a non-empty name, so a 400 is now
+  // reachable in an ordinary flow. Before this, the button simply did nothing and the user was
+  // left guessing — the same silence class as the confirm that booked ₪5,608.30 and told nobody.
   async function save() {
+    setSaveError(undefined);
     await api.updateReceiptCorrection(params.id, {
       merchantName,
       purchaseDate,
@@ -60,9 +70,26 @@ export default function ReceiptReviewPage() {
     await load();
   }
 
+  async function saveGuarded() {
+    try {
+      await save();
+      return true;
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "לא הצלחתי לשמור את התיקון");
+      return false;
+    }
+  }
+
   async function confirm() {
-    await save();
-    await api.confirmReceipt(params.id);
+    // The confirm still saves first, so a rejected correction must STOP it rather than book the
+    // stored parse behind the user's back — which is exactly how "לא זוהה" reached the feed.
+    if (!(await saveGuarded())) return;
+    try {
+      await api.confirmReceipt(params.id);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "לא הצלחתי לאשר את הקבלה");
+      return;
+    }
     router.push("/dashboard");
   }
 
@@ -81,14 +108,20 @@ export default function ReceiptReviewPage() {
           </label>
           <label>
             תאריך
-            <input className="input" dir="ltr" value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} />
+            {/* RCPTFIN — a native date input, not a free-text field. The owner spent several
+                attempts correcting a date by guessing the format until one was accepted; a
+                picker cannot emit a shape the API will reject, which turns the server-side
+                predicate into a backstop rather than the user's teacher. `dir="ltr"` is gone
+                deliberately: the native control owns its own direction and formatting. */}
+            <input className="input" type="date" value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} />
           </label>
           <label>
             סך הכל
             <input className="input" type="number" value={totalAmount} onChange={(event) => setTotalAmount(Number(event.target.value))} />
           </label>
+          {saveError && <div className="status error" role="alert">{saveError}</div>}
           <div className="row">
-            <button className="button secondary" onClick={save}>
+            <button className="button secondary" onClick={saveGuarded}>
               <Save size={18} aria-hidden />
               שמירה
             </button>
