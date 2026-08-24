@@ -9,6 +9,24 @@ import { LoadState } from "../../../../components/LoadState";
 import { api } from "../../../../lib/api";
 import { apiBaseUrl } from "../../../../lib/apiBase";
 
+/**
+ * The API speaks Hebrew to users and English to machines, and only one of those belongs on screen.
+ *
+ * A DomainError written for a person carries Hebrew copy — `receipt.missing_merchant` is
+ * "לא הצלחתי לקרוא את שם החנות בקבלה." and says exactly what to do next. A Zod rejection is
+ * `"Invalid request body"` and a server fault is `"Unexpected error"` (api/src/http.ts:290,301),
+ * both deliberately content-free so they cannot echo request data back. Showing those to a
+ * family in a Hebrew RTL form is a raw error code by another name.
+ *
+ * So: pass the backend's message through when it is Hebrew, and fall back otherwise. The test is
+ * the script, not a list of codes, because "user-facing copy is Hebrew" is a project rule and a
+ * code table would need editing every time the API grows an error.
+ */
+function userFacing(err: unknown, fallback: string): string {
+  const message = err instanceof Error ? err.message : "";
+  return /[֐-׿]/.test(message) ? message : fallback;
+}
+
 export default function ReceiptReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -75,7 +93,7 @@ export default function ReceiptReviewPage() {
       await save();
       return true;
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "לא הצלחתי לשמור את התיקון");
+      setSaveError(userFacing(err, "לא הצלחתי לשמור את התיקון. אפשר לנסות שוב."));
       return false;
     }
   }
@@ -87,7 +105,7 @@ export default function ReceiptReviewPage() {
     try {
       await api.confirmReceipt(params.id);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "לא הצלחתי לאשר את הקבלה");
+      setSaveError(userFacing(err, "לא הצלחתי לאשר את הקבלה. אפשר לנסות שוב."));
       return;
     }
     router.push("/dashboard");
