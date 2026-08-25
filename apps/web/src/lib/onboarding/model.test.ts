@@ -135,15 +135,17 @@ test("buildOnboardingPayload: managed budget → monthlyBudgetAmount; income sta
   assert.equal(p.baseline.budget?.income, 24000); // income NOT in monthlyBudgetAmount
   assert.equal(p.acceptTerms, true);
   assert.equal(p.defaultCity, "תל אביב");
-  // SEPACCT stage 1 / `OD-5` - THIS ASSERTION WAS INVERTED, AND THE OLD ONE PINNED THE DEFECT.
-  // It read `assert.equal("id" in fe, false)` and passed for the whole life of `S-166`: the
-  // wizard's failure to send the line's server uuid was the BUG, and this cell was holding it
-  // green. The payload now carries `id: f.key`, so a custom line keeps its uuid - and its
-  // price-observation history - across a `?mode=edit` save. See the round-trip cell below, which
-  // is the one that would actually catch a regression; this one only pins the field's presence.
+  // SEPACCT stage 1 / `OD-5`. This line is a BRAND-NEW custom expense - the server has never
+  // seen it and has therefore never named it - so no `id` key is sent and the server mints one.
+  // ABSENT, never null.
+  //
+  // ⚠️ The assertion reads the same as it did before this stage and it does NOT mean the same
+  // thing, which is why it is spelled out. Before, `buildOnboardingPayload` sent no id for ANY
+  // line, including one seeded from a persisted baseline, and this cell was pinning that defect
+  // green under the comment "fixed expense maps without a client id". The property that actually
+  // changed is in the round-trip cell below, and that is the cell that would catch a regression.
   const fe = p.baseline.fixedExpenses?.[0] as Record<string, unknown>;
-  assert.equal("id" in fe, true);
-  assert.equal(fe.id, s.fixed[0]!.key);
+  assert.equal("id" in fe, false);
   assert.equal(fe.reportCat, "subscriptions");
   assert.equal(fe.isActive, true);
   // zero / empty sub-budgets dropped

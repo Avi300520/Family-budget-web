@@ -113,6 +113,22 @@ export const KID_AGE_BRACKETS: ReadonlyArray<KidAgeBracket> = ["0-3", "4-6", "7-
 export interface WizardFixedExpense {
   /** Stable local React key. For a preset = preset id; for custom = generated id. */
   key: string;
+  /**
+   * SEPACCT stage 1 / `OD-5` - the SERVER-assigned uuid, present ONLY on a line that came back
+   * from a persisted baseline, and absent on a line the user has just added.
+   *
+   * ⚠️ IT IS A SEPARATE FIELD FROM `key` ON PURPOSE, and the first version of this change used
+   * `key` and was wrong. `key` is a LOCAL list key: `addCustom` sets it from `genId()`, which is
+   * `crypto.randomUUID()`, so sending `key` meant every brand-new custom line arrived carrying an
+   * identity the CLIENT chose. The server accepts any syntactic uuid, so it would have persisted
+   * it - turning "server-assigned uuid, stable per household instance" into a claim the code no
+   * longer honoured, and letting a manager re-point a new line onto an existing line's stored
+   * split and price history by supplying that line's uuid. Raised by a cold review of stage 1.
+   *
+   * A line with no `serverId` sends NO `id` key at all (absent, never null), and the server mints
+   * one - which is exactly the pre-existing behaviour for a line it has never seen.
+   */
+  serverId?: string;
   sourcePresetId: string | null;
   isCustom: boolean;
   /** Active (included) toggle. */
@@ -330,16 +346,19 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
         // (`lastObservedAmount`, matched on this id) was orphaned on every wizard edit. That is
         // `S-166`'s remaining half.
         //
-        // `f.key` already holds the server uuid whenever this line was seeded from a stored
-        // baseline (`fixedFromBaseline`); for a brand-new line it holds a preset id or a local
-        // scratch key. It is sent RAW and unvalidated on purpose: the server is the authority and
-        // already refuses anything that is not a syntactic uuid, and refuses a duplicate within
-        // one payload. Re-implementing that test here would be a second encoding of one rule.
+        // `f.serverId` is set ONLY by `fixedFromBaseline`, i.e. only for a line that came back
+        // from a persisted baseline. A line the user has just added has none and the key is
+        // OMITTED entirely - absent, never null - so the server mints a uuid exactly as before.
+        //
+        // ⚠️ IT IS DELIBERATELY NOT `f.key`, and the first version of this change used `f.key`
+        // and was wrong. `addCustom` sets `key` from `genId()`, which is `crypto.randomUUID()`,
+        // so `f.key` would have made every brand-new custom line arrive with a CLIENT-chosen
+        // identity that the server would then persist. Raised by a cold review of stage 1.
         //
         // NOTE - this half is inert on its own. Until this stage `fixedExpenseInputSchema`
         // destructured `id` out in a `z.preprocess` before zod ever saw it, so the field was
         // dropped one layer earlier. Both halves shipped together.
-        id: f.key,
+        ...(f.serverId ? { id: f.serverId } : {}),
         sourcePresetId: f.sourcePresetId,
         isCustom: f.isCustom,
         label: f.label.trim(),
@@ -545,6 +564,9 @@ function fixedFromBaseline(raw: unknown): WizardFixedExpense | null {
   return {
     // The wizard list key: prefer the server uuid, then the preset id, then a fresh local key.
     key: typeof raw.id === "string" && raw.id ? raw.id : sourcePresetId ?? `f_${Math.random().toString(36).slice(2)}`,
+    // SEPACCT stage 1 / `OD-5`: the server's own id, kept separately from the list key so that
+    // only a line the SERVER has already named can send one back. See `WizardFixedExpense`.
+    ...(typeof raw.id === "string" && raw.id ? { serverId: raw.id } : {}),
     sourcePresetId,
     isCustom: raw.isCustom === true,
     // Baseline persists `isActive` (the wizard toggle is `on`). Default to on when absent.

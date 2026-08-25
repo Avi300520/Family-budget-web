@@ -390,7 +390,16 @@ export interface BaselineBudget {
 }
 
 export interface BaselineFixedExpense {
-  /** Server-assigned uuid (stable per household instance). */
+  /**
+   * Server-assigned uuid, stable per household instance.
+   *
+   * ⚠️ SEPACCT stage 1 / `OD-5`: "server-assigned" still holds, and it was checked rather than
+   * assumed. The wizard may now send an `id` back, but only one this server assigned - the client
+   * carries it in a field populated solely from a persisted baseline, and a line the user has just
+   * added sends no `id` key at all. The server remains the only minter: it accepts a supplied id
+   * only when it is a syntactic uuid and is not already used by an earlier line in the same
+   * payload, and mints a fresh one otherwise.
+   */
   id: string;
   /** Preset key when derived from a preset; null/undefined for custom items. */
   sourcePresetId?: string | null;
@@ -428,6 +437,15 @@ export interface BaselineFixedExpense {
    * AND `fixedExpenseInputSchema` deleted one if it arrived, so a custom line's uuid was
    * regenerated on every save. Both halves are closed by this stage; a preset line was always
    * stable because `sourcePresetId` is sent and preserved.
+   *
+   * ⚠️ A `limited_member` NEVER APPEARS HERE either (`OD-10` (a)) - this rung and
+   * `profile.defaultSplit` are the two halves of one resolution ladder and the rule binds both.
+   * ⚠️ **NOT ENFORCED AT THIS WRITE, and stated rather than left to be discovered.**
+   * `normalizeFinancialBaseline` is a pure function with no store access, so it cannot resolve a
+   * role; the request schema validates `userId` as a bare uuid and nothing checks membership.
+   * It is inert here - stage 1 stores this and reads it nowhere, and with zero `purchase_splits`
+   * rows every share is 0 - but the stage that RESOLVES a default into rows must refuse a
+   * `limited_member`, and refusing it only at the route would be the N-1-of-N miss.
    *
    * ⚠️ Absent, never `null`; stripped while `HOUSEHOLD_SEPARATE_ACCOUNTS_ENABLED` is off.
    */
