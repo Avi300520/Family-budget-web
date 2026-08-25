@@ -135,9 +135,15 @@ test("buildOnboardingPayload: managed budget → monthlyBudgetAmount; income sta
   assert.equal(p.baseline.budget?.income, 24000); // income NOT in monthlyBudgetAmount
   assert.equal(p.acceptTerms, true);
   assert.equal(p.defaultCity, "תל אביב");
-  // fixed expense maps without a client id; reportCat preserved
+  // SEPACCT stage 1 / `OD-5` - THIS ASSERTION WAS INVERTED, AND THE OLD ONE PINNED THE DEFECT.
+  // It read `assert.equal("id" in fe, false)` and passed for the whole life of `S-166`: the
+  // wizard's failure to send the line's server uuid was the BUG, and this cell was holding it
+  // green. The payload now carries `id: f.key`, so a custom line keeps its uuid - and its
+  // price-observation history - across a `?mode=edit` save. See the round-trip cell below, which
+  // is the one that would actually catch a regression; this one only pins the field's presence.
   const fe = p.baseline.fixedExpenses?.[0] as Record<string, unknown>;
-  assert.equal("id" in fe, false);
+  assert.equal("id" in fe, true);
+  assert.equal(fe.id, s.fixed[0]!.key);
   assert.equal(fe.reportCat, "subscriptions");
   assert.equal(fe.isActive, true);
   // zero / empty sub-budgets dropped
@@ -284,6 +290,30 @@ function fullBaseline(): FinancialBaseline {
     alerts: { cat80: false, cat100: true, billUp: false, unusual: true, monthly: false, weekly: true }
   };
 }
+
+test("SEPACCT OD-5: a stored line's server uuid survives baseline -> wizard -> payload", () => {
+  // THE ROUND TRIP IS THE PROPERTY, and a one-directional cell cannot see it. `?mode=edit`
+  // re-enters the wizard from a PERSISTED baseline and POSTs a whole-document overwrite, so the
+  // uuid has to survive two hops: `buildStateFromBaseline` must park it somewhere
+  // (`WizardFixedExpense.key`), and `buildOnboardingPayload` must send it back out.
+  //
+  // WHAT THIS CATCHES that the presence cell above cannot: a payload builder that sends
+  // `id: genId()`, or `id: f.sourcePresetId`, or that sends the key for preset lines only. All
+  // three satisfy `"id" in fe === true`. Only the CUSTOM line (`uuid-x`, `sourcePresetId: null`)
+  // discriminates them, because it is the line with no second axis to fall back on - which is
+  // exactly why `SEPACCT_SPEC` 8.3 says preset lines were always stable and custom ones were not.
+  const state = buildStateFromBaseline(
+    { financialBaseline: fullBaseline(), name: "בית כהן", monthlyBudgetAmount: 9000, defaultCity: "תל אביב", budgetCycleDay: 5 },
+    "אבי"
+  );
+  // The inactive custom line is `on: false` and `buildOnboardingPayload` filters those out, so
+  // turn it on: the question is whether the uuid survives, not whether the line is active.
+  for (const f of state.fixed) f.on = true;
+  const sent = buildOnboardingPayload(state).baseline.fixedExpenses ?? [];
+  const ids = new Map(sent.map((f) => [(f as Record<string, unknown>).label, (f as Record<string, unknown>).id]));
+  assert.equal(ids.get("שכירות"), "uuid-rent");
+  assert.equal(ids.get("חוג שחייה"), "uuid-x");
+});
 
 test("buildStateFromBaseline: round-trips a full baseline into wizard state", () => {
   const s = buildStateFromBaseline(

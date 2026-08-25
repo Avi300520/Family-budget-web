@@ -3,7 +3,7 @@ export * from "./financialBaseline";
 export * from "./billing";
 
 import type { ShoppingCategoryId } from "./shoppingCategories";
-import type { FinancialBaseline } from "./financialBaseline";
+import type { FinancialBaseline, HouseholdProfileType } from "./financialBaseline";
 import type { EffectiveBillingStatus } from "./billing";
 
 export type Currency = "ILS";
@@ -62,6 +62,27 @@ export interface Household {
    *  budget lives in `monthlyBudgetAmount`; raw income (if any) is only in
    *  `financialBaseline.budget.income`. */
   financialBaseline?: FinancialBaseline;
+  /**
+   * **A4 / OD-2 (a) — the household type as a first-class API fact.**
+   *
+   * DERIVED, never stored: there is no `households.household_type` column (owner decision 5d
+   * forbids one) and A4 applies no migration. This is computed at the DTO boundary from
+   * `financialBaseline.profile.type` by `withHouseholdType` in `packages/db`, and it exists
+   * so a `limited_member` can learn their own household's type — `redactHouseholdForRole`
+   * strips `financialBaseline` wholesale for that role, so the type was unreachable at 4 of
+   * the 16 (role x type) cells. TOP-LEVEL on purpose: the redactor's field axis is a
+   * rest-spread denylist over three named keys, so a top-level field survives it while the
+   * finances do not.
+   *
+   * OPTIONAL and ADDITIVE on purpose (`S-57`): `pnpm sync:shared` is NOT run in the build
+   * run, so the frontend's un-synced copy of this file must stay valid. Absent when the
+   * household has no baseline profile, and absent in every response while
+   * `HOUSEHOLD_TYPE_ENABLED` is off.
+   *
+   * NEVER present on the UNAUTHENTICATED invite preview: that endpoint builds an explicit
+   * `{id, name}` pick and does not project this type. Do not change that.
+   */
+  householdType?: HouseholdProfileType;
   createdAt: string;
   updatedAt: string;
 }
@@ -751,6 +772,10 @@ export interface ExpenseCategoryLabel {
   systemBucket: Purchase["category"];
   /** 'active' = live; 'proposed' = adult suggestion awaiting a manager; 'archived' = soft-off. */
   status: "active" | "proposed" | "archived";
+  /** TASK-29 / WP-CONCEPT — the curated cross-language concept this label belongs to
+   *  (charity/elec/water…), stamped at creation and FROZEN (a later pack version never
+   *  re-links). null/absent = an opaque label (exact/alias matching only). Additive. */
+  conceptId?: string | null;
   createdBy?: string;
   source?: string;
   createdAt: string;
@@ -767,6 +792,9 @@ export interface CategoryAlias {
   normalizedAlias: string;
   /** 'candidate' = proposed (NOT auto-applied); 'approved' = manager-approved (active). */
   status: "candidate" | "approved";
+  /** TASK-29 / WP-CONCEPT — the language the alias surface was written in, PURE metadata
+   *  (never part of any uniqueness key — the script-agnostic fold is the dedup). Additive. */
+  language?: string | null;
   createdBy?: string;
   approvedBy?: string;
   source?: string;
@@ -795,6 +823,59 @@ export type AnalyticsEventName =
   // RECEIPTS_ABUSE_CAP_MONTHLY. NEVER blocks — telemetry only (cost visibility during the
   // unlimited-trial period). Emitted per over-cap scan so the event count = the overage.
   | "receipt_abuse_cap_exceeded"
+  // WP-MEAS-01 — the expense_type correction rate. Emitted ONLY when a correction
+  // actually moves the scope (household <-> personal), never on a category-only edit.
+  // `via` discriminates a re-typed sentence from the one-tap affordance A3 adds; without
+  // it the two are permanently indistinguishable in the data, and A3's exit criterion is
+  // a before/after comparison across exactly that change.
+  | "expense_type_corrected"
+  // A4 slice C / MUST-BE-TRUE #26 (OD-8 (a)). A household MANAGER changed the stored
+  // household type through `PATCH /households/:id/household-type`. Payload is CATEGORICAL and
+  // exactly three keys — `{type, previousType, at}`: no shekel figure, no free text, no phone,
+  // no household name. Emitted on SUCCESS only; every refusal on that route happens before the
+  // store is reached and writes neither this row nor the paired `household.type_changed` audit
+  // row.
+  //
+  // ⚠️ `onboarding_step_viewed` is deliberately NOT added (OD-8 (a)). It has no backend emit
+  // site — the step view happens in the onboarding wizard, which OD-1 puts out of scope — and
+  // `WP-A4-04`'s claim that "neither event name exists in the union" is HALF FALSE:
+  // `onboarding_completed` is right above.
+  | "household_type_selected"
+  // A9 piece 5c / OD-8 (a). The ONCE-PER-(user, household) marker for the scope-default
+  // explainer. It is a MARKER, not telemetry: `analytics_events` is used because it already
+  // carries `(household_id, user_id, name)` and a new column or table would be a MIGRATION,
+  // which A9 is forbidden (high-water stays 0046 and `name` is a plain `text` column since
+  // 0001, so this union member is a TypeScript-only change with no DDL behind it).
+  //
+  // ⚠️ IT IS NOT IN ANY DENOMINATOR. `EXPENSE_SCOPE_DENOMINATOR` keeps its three members and
+  // the five `ExpenseScopeDecidedBy` spellings are untouched — this is a different event NAME,
+  // never a sixth `decidedBy` value (A9_SPEC §2, and §4 forbids the sixth spelling outright).
+  //
+  // Query bound, stated because no gate can measure production latency (A9_SPEC §3): one
+  // `select 1 … where household_id = $1 and user_id = $2 and name = $3 limit 1` per qualifying
+  // expense. `analytics_events` carries only `idx_analytics_household_created` (migration
+  // 0003); there is no `(user_id, name)` index and A9 may not add one, so the plan is an index
+  // scan of ONE household's events with a filter — bounded by that household's event count,
+  // and it runs at most once more per user after the first hit stops the caller.
+  | "scope_default_explainer_sent"
+  // A10 / OD-A10-2 (c). The ONCE-PER-HOUSEHOLD marker for the WhatsApp household-type ask.
+  // Written at the moment the ask is EMITTED, which is a strict superset of "declined": a
+  // household that answered is recognised by `profile.typeConfirmedAt` (the fact and its
+  // marker are then the same object and cannot skew), and a household that declined, ignored,
+  // or let the ask expire is recognised by this row. One event name therefore satisfies "asked
+  // at most once, ever" in all four of those endings, with no second marker to keep in step.
+  //
+  // ⚠️ IT IS READ HOUSEHOLD-SCOPED, NOT USER-SCOPED. The composition of a home is a property
+  // of the HOUSEHOLD, so a second manager must not be re-asked after the first has answered.
+  // `hasUserAnalyticsEvent(householdId, userId, name)` cannot express that, which is why A10
+  // adds `hasHouseholdAnalyticsEvent(householdId, name)` to BOTH stores.
+  //
+  // ⚠️ NOT IN ANY DENOMINATOR. `EXPENSE_SCOPE_DENOMINATOR` keeps its three members and the five
+  // `ExpenseScopeDecidedBy` spellings are untouched — this is an event NAME.
+  //
+  // NO MIGRATION: `analytics_events.name` is plain `text` (migration 0001), so this union
+  // member is a TypeScript-only change. High-water stays 0046.
+  | "household_type_ask_sent"
   | "checkout_started"
   | "subscription_activated";
 

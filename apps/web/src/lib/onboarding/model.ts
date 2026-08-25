@@ -320,6 +320,26 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
     fixedExpenses: state.fixed
       .filter((f) => f.on)
       .map((f) => ({
+        // SEPACCT stage 1 / `OD-5` (`SEPACCT_SPEC` 8.3) - SEND THE LINE'S SERVER ID BACK.
+        //
+        // `POST /onboarding/complete` is a WHOLE-DOCUMENT overwrite and serves `?mode=edit` as
+        // well as first run. The server's `normalizeFinancialBaseline` PRESERVES a supplied id
+        // and mints a fresh uuid only when none arrives - so with no id sent, every line's uuid
+        // was regenerated on every save. Preset lines survived anyway because `sourcePresetId`
+        // is sent and preserved; CUSTOM lines did not, and their price-observation history
+        // (`lastObservedAmount`, matched on this id) was orphaned on every wizard edit. That is
+        // `S-166`'s remaining half.
+        //
+        // `f.key` already holds the server uuid whenever this line was seeded from a stored
+        // baseline (`fixedFromBaseline`); for a brand-new line it holds a preset id or a local
+        // scratch key. It is sent RAW and unvalidated on purpose: the server is the authority and
+        // already refuses anything that is not a syntactic uuid, and refuses a duplicate within
+        // one payload. Re-implementing that test here would be a second encoding of one rule.
+        //
+        // NOTE - this half is inert on its own. Until this stage `fixedExpenseInputSchema`
+        // destructured `id` out in a `z.preprocess` before zod ever saw it, so the field was
+        // dropped one layer earlier. Both halves shipped together.
+        id: f.key,
         sourcePresetId: f.sourcePresetId,
         isCustom: f.isCustom,
         label: f.label.trim(),
