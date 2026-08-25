@@ -390,10 +390,9 @@ export interface BaselineBudget {
 }
 
 export interface BaselineFixedExpense {
+  /** Server-assigned uuid (stable per household instance). */
   /**
-   * Server-assigned uuid, stable per household instance.
-   *
-   * ⚠️ SEPACCT stage 1 / `OD-5`: "server-assigned" still holds, and it was checked rather than
+   * ⚠️ SEPACCT stage 1 / `OD-5`: "server-assigned" above still holds, and it was checked rather than
    * assumed. The wizard may now send an `id` back, but only one this server assigned - the client
    * carries it in a field populated solely from a persisted baseline, and a line the user has just
    * added sends no `id` key at all. The server remains the only minter: it accepts a supplied id
