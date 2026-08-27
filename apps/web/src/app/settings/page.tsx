@@ -19,6 +19,7 @@ import {
 import { planForCode, type BillingTier, type Subscription } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
+import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
 import { activeMemberCount } from "../../lib/roster";
 import { api } from "../../lib/api";
 import { useViewer } from "../../lib/useViewer";
@@ -83,7 +84,9 @@ const GROUPS: SettingGroup[] = [
         description: "בחירה איך לחלק הוצאות משותפות בין שני חברים בוגרים.",
         icon: Split,
         tint: "plum",
-        can: canViewHouseholdSettings
+        // Dormant with the rest of SEPACCT: no card while the flag is off, so the hub never
+        // points at a route that renders as absent.
+        can: (caps) => SEPACCT_UI_ENABLED && canViewHouseholdSettings(caps)
       }
     ]
   },

@@ -260,9 +260,14 @@ export function effectiveCycleDay(state: WizardState): number {
 // ── Validation (per step) ───────────────────────────────────────────────────────
 export type StepKey = "welcome" | "profile" | "separate" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
 
-export const STEP_ORDER: ReadonlyArray<StepKey> = [
+// The separate-accounts step ships DORMANT with the rest of SEPACCT: with the flag off the wizard
+// has no such step and asks no household about a feature whose every route answers 404.
+// The env read is inlined rather than imported from ../sepacct because this module is deliberately
+// runtime-import-free (see the header); ../sepacct.SEPACCT_UI_ENABLED is the same expression and is
+// what every other call site uses.
+export const STEP_ORDER: ReadonlyArray<StepKey> = ([
   "welcome", "profile", "separate", "cycle", "income", "fixed", "budget", "alerts", "done"
-];
+] as StepKey[]).filter((step) => step !== "separate" || process.env.NEXT_PUBLIC_SEPACCT_UI === "1");
 
 /** Returns null when the step is valid, or a Hebrew error message when it is not. */
 export function validateStep(step: StepKey, state: WizardState): string | null {
