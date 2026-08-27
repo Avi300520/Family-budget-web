@@ -39,15 +39,18 @@ export function SplitControl({
       <legend className={styles.legend}>חלוקת ההוצאה</legend>
       <p className={styles.help}>הסכום נשמר באגורות. שינוי כאן משפיע על ההוצאה הזו בלבד.</p>
 
+      {/* A READOUT, not a label. These were <label htmlFor> and gave each percent field a SECOND
+          label (axe form-field-multiple-labels): the accessible name became the readout plus the
+          field's own label, and it changed on every drag because the readout carries a live value. */}
       <div className={styles.people}>
-        <label className={styles.person} htmlFor={`${id}-first`}>
+        <p className={styles.person}>
           <span>{first.displayName}</span>
           <span className={styles.value} dir="ltr">{percentage(safe)}%</span>
-        </label>
-        <label className={styles.person} htmlFor={`${id}-second`}>
+        </p>
+        <p className={styles.person}>
           <span>{second.displayName}</span>
           <span className={styles.value} dir="ltr">{percentage(secondShareBp)}%</span>
-        </label>
+        </p>
       </div>
 
       <label className={styles.rangeLabel} htmlFor={`${id}-range`}>

@@ -54,6 +54,9 @@
  *   A11Y_SKIP_BUILD=1 pnpm a11y            # reuse an existing apps/web/.next build
  *   A11Y_BASE_URL=http://localhost:3000 pnpm a11y   # scan an already-running server
  *   A11Y_ENGINE=jsdom pnpm a11y            # force the weak engine even if playwright exists
+ *   A11Y_SCOPE=sepacct pnpm a11y          # scan the SEPACCT surfaces instead of the public 8
+ *                                          (needs NEXT_PUBLIC_SEPACCT_UI=1 to see anything but 404)
+ *   A11Y_VIEWPORT=375 pnpm a11y            # same scan at the mobile width ([browser] engine only)
  *
  * BACKEND
  * -------
@@ -76,7 +79,7 @@ const WEB_DIR = path.join(REPO_ROOT, "apps", "web");
 const IS_WIN = process.platform === "win32";
 
 /** Public routes under the accessibility statement (audit §1.1). */
-const ROUTES = [
+const PUBLIC_ROUTES = [
   { path: "/", name: "/ (landing)", coverage: "full" },
   { path: "/login", name: "/login", coverage: "full" },
   {
@@ -102,6 +105,28 @@ const ROUTES = [
   { path: "/privacy", name: "/privacy", coverage: "full" },
   { path: "/terms", name: "/terms", coverage: "full" },
 ];
+
+/**
+ * SEPACCT (2026-08-27). NOT public routes and NOT under the accessibility statement - opt in with
+ * A11Y_SCOPE=sepacct so the eight-route public contract above stays exactly what it was.
+ *
+ * Only meaningful with NEXT_PUBLIC_SEPACCT_UI=1: while the feature is disarmed all four render the
+ * 404 page, which is the point (see SEPACCT_FRONTEND_SPEC.md section 3), and `state=dormant` scans
+ * that same rendering with the flag ON. The pages are mock-backed and need no session or backend,
+ * so unlike the public list every state below is real UI, not an error branch.
+ */
+const SEPACCT_ROUTES = ["settings/separate-accounts", "shared-expenses", "my-income", "my-record"].flatMap((route) =>
+  ["populated", "empty", "error", "dormant"].map((state) => ({
+    path: `/${route}?state=${state}`,
+    name: `/${route.split("/").pop()} ${state}`,
+    coverage: `${state} state (local mock; no session or backend needed)`,
+  })),
+);
+
+const ROUTES = process.env.A11Y_SCOPE === "sepacct" ? SEPACCT_ROUTES : PUBLIC_ROUTES;
+
+/** A11Y_VIEWPORT=375 runs the same scan at the mobile width. [browser] engine only. */
+const VIEWPORT = { width: Number(process.env.A11Y_VIEWPORT || 1280), height: 900 };
 
 const AXE_OPTIONS = { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] } };
 
@@ -160,7 +185,7 @@ async function loadBrowserEngine() {
 async function scanWithBrowser({ AxeBuilder, chromium }, baseUrl) {
   const browser = await chromium.launch();
   // @axe-core/playwright requires a Page created from an explicit BrowserContext.
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: VIEWPORT });
   const results = [];
   try {
     for (const route of ROUTES) {
@@ -211,25 +236,25 @@ function report(engine, results) {
   const pad = (s, n) => String(s) + " ".repeat(Math.max(0, n - String(s).length));
   log("");
   log("=".repeat(96));
-  log(`  axe-core WCAG 2.0 A/AA scan - engine: [${engine}]`);
+  log(`  axe-core WCAG 2.0 A/AA scan - engine: [${engine}]  scope: ${process.env.A11Y_SCOPE || "public"}  viewport: ${VIEWPORT.width}`);
   if (engine === "jsdom") {
     log("  WARNING: jsdom fallback. No layout, no computed colour-contrast, no client-side");
     log("  hydration. A clean result here is NOT a WCAG 2.0 AA conformance claim.");
   }
   log("=".repeat(96));
-  log(`  ${pad("ROUTE", 22)}${pad("VIOLATIONS", 12)}${pad("INCOMPLETE", 12)}COVERAGE`);
+  log(`  ${pad("ROUTE", 30)}${pad("VIOLATIONS", 12)}${pad("INCOMPLETE", 12)}COVERAGE`);
   log("-".repeat(96));
   let total = 0;
   let errored = 0;
   for (const r of results) {
     if (r.error) {
       errored += 1;
-      log(`  ${pad(r.route.name, 22)}${pad("ERROR", 12)}${pad("-", 12)}${r.error}`);
+      log(`  ${pad(r.route.name, 30)}${pad("ERROR", 12)}${pad("-", 12)}${r.error}`);
       continue;
     }
     total += r.violations.length;
     log(
-      `  ${pad(r.route.name, 22)}${pad(r.violations.length, 12)}${pad(r.incomplete.length, 12)}${r.route.coverage}`,
+      `  ${pad(r.route.name, 30)}${pad(r.violations.length, 12)}${pad(r.incomplete.length, 12)}${r.route.coverage}`,
     );
   }
   log("-".repeat(96));
