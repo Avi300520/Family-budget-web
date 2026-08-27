@@ -155,6 +155,8 @@ export interface WizardState {
   householdName: string;
   city: string; // doubles as defaultCity (required by the backend contract)
   cars: number;
+  /** The household's declaration; the named default is selected after a second adult joins. */
+  separateAccounts: boolean;
   acceptTerms: boolean;
   acceptPrivacy: boolean;
   // cycle
@@ -192,6 +194,7 @@ export function createDefaultState(): WizardState {
     householdName: "",
     city: "",
     cars: 1,
+    separateAccounts: false,
     // Consent is captured passively at /login (browse-wrap per the /privacy page) and the backend
     // stamps consent_terms_at/consent_privacy_at unconditionally on completeOnboarding. Seed true so
     // the legacy consent gate in validateStep('profile') and the hardcoded acceptTerms/acceptPrivacy
@@ -255,10 +258,10 @@ export function effectiveCycleDay(state: WizardState): number {
 }
 
 // ── Validation (per step) ───────────────────────────────────────────────────────
-export type StepKey = "welcome" | "profile" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
+export type StepKey = "welcome" | "profile" | "separate" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
 
 export const STEP_ORDER: ReadonlyArray<StepKey> = [
-  "welcome", "profile", "cycle", "income", "fixed", "budget", "alerts", "done"
+  "welcome", "profile", "separate", "cycle", "income", "fixed", "budget", "alerts", "done"
 ];
 
 /** Returns null when the step is valid, or a Hebrew error message when it is not. */
@@ -319,7 +322,8 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
       kids: state.kids,
       kidAges: state.kids > 0 ? state.kidAges : [],
       region: state.city.trim() || undefined,
-      cars: state.cars
+      cars: state.cars,
+      separateAccounts: state.separateAccounts || undefined
     },
     cycle: {
       basis: state.basis,
@@ -505,6 +509,7 @@ export function coerceDraftState(raw: unknown): WizardState | null {
   if (typeof raw.householdName === "string") s.householdName = raw.householdName;
   if (typeof raw.city === "string") s.city = raw.city;
   s.cars = finiteNumber(raw.cars, s.cars);
+  if (typeof raw.separateAccounts === "boolean") s.separateAccounts = raw.separateAccounts;
   // Consent is no longer a wizard field — a stale draft must not re-introduce a false consent and
   // re-block the profile step (the seeded `true` default always wins). See createDefaultState.
   if (inEnum(raw.basis, BUDGET_BASES)) s.basis = raw.basis;
@@ -611,6 +616,7 @@ export function buildStateFromBaseline(source: BaselineEditSource | undefined, d
     if (Array.isArray(p.kidAges)) s.kidAges = p.kidAges.filter((a): a is KidAgeBracket => inEnum(a, KID_AGE_BRACKETS));
     if (typeof p.region === "string" && p.region) s.city = p.region;
     s.cars = finiteNumber(p.cars, s.cars);
+    if (typeof p.separateAccounts === "boolean") s.separateAccounts = p.separateAccounts;
   }
   if (isPlainObject(b.cycle)) {
     const c = b.cycle;

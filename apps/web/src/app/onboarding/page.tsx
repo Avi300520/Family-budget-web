@@ -7,13 +7,14 @@ import { computeTotals, type StepKey } from "../../lib/onboarding/model";
 import { WhatsAppCtaButton, botWhatsAppLink } from "../../components/WhatsAppCta";
 import { useOnboardingWizard } from "./useOnboardingWizard";
 import {
-  WelcomeStep, ProfileStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
+  WelcomeStep, ProfileStep, SeparateAccountsStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
 } from "./steps";
 import styles from "./onboarding.module.css";
 
 const STEP_META: Record<StepKey, { title: string; sub: string }> = {
   welcome: { title: "ברוכים הבאים לפינגטלי", sub: "כמה שאלות קצרות ונכין תקציב שמתנהל בוואטסאפ." },
   profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
+  separate: { title: "איך הכספים מתנהלים", sub: "אפשר להפריד כספים ועדיין לנהל הוצאות משותפות." },
   cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
   income: { title: "כמה כסף נכנס - וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
   fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות - שכירות, חשבונות, מנויים ועוד." },
@@ -25,6 +26,7 @@ const STEP_META: Record<StepKey, { title: string; sub: string }> = {
 const STEP_COMPONENTS: Record<Exclude<StepKey, "done">, (props: StepProps) => ReactElement> = {
   welcome: WelcomeStep,
   profile: ProfileStep,
+  separate: SeparateAccountsStep,
   cycle: CycleStep,
   income: IncomeStep,
   fixed: FixedStep,

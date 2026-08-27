@@ -109,6 +109,31 @@ export function ProfileStep({ state, set }: StepProps) {
 }
 
 // ── Budget cycle ─────────────────────────────────────────────────────────────────
+export function SeparateAccountsStep({ state, set }: StepProps) {
+  const eligible = state.adults >= 2;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <Field label="איך הכספים מתנהלים בבית">
+        <OptionCards
+          value={state.separateAccounts ? "separate" : "together"}
+          onChange={(id) => set({ separateAccounts: id === "separate" })}
+          options={[
+            { id: "together", emoji: "🏠", title: "ביחד", sub: "הוצאות משותפות מנוהלות יחד" },
+            { id: "separate", emoji: "↔️", title: "בנפרד", sub: "כל אחד רואה את החלק שלו בהוצאה משותפת" }
+          ]}
+        />
+      </Field>
+      {state.separateAccounts && (
+        <section className="panel">
+          <h2>ברירת מחדל: חצי חצי</h2>
+          <p className="muted">אפשר לבחור יחס אחר בהגדרות. היחס המדויק נקבע אחרי ששני חברים בוגרים מצטרפים.</p>
+          {!eligible && <p className="status">נוסיף את בחירת היחס לאחר צירוף חבר בוגר נוסף.</p>}
+        </section>
+      )}
+    </div>
+  );
+}
+
 export function CycleStep({ state, set }: StepProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>

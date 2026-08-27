@@ -1,0 +1,87 @@
+.control {
+  min-width: 0;
+  margin: 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-3);
+  background: var(--cream-1);
+}
+
+.legend {
+  padding: 0 var(--sp-1);
+  color: var(--text-0);
+  font-weight: 700;
+}
+
+.help {
+  margin: 0 0 var(--sp-4);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.people,
+.entryRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+.person {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--r-2);
+  background: var(--cream-2);
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--teal-dark);
+}
+
+.rangeLabel,
+.entry label {
+  display: block;
+  margin-top: var(--sp-4);
+  margin-bottom: var(--sp-2);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--teal);
+}
+
+.entry label { margin-top: var(--sp-3); }
+
+.percentInput {
+  position: relative;
+}
+
+.percentInput input { padding-inline-end: var(--sp-8); }
+
+.percentInput span {
+  position: absolute;
+  inset-inline-end: var(--sp-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-2);
+  pointer-events: none;
+}
+
+.control > .button { margin-top: var(--sp-4); }
+
+@media (max-width: 420px) {
+  .people,
+  .entryRow { grid-template-columns: 1fr; }
+  .entry label { margin-top: var(--sp-2); }
+}

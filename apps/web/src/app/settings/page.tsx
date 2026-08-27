@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Rocket,
   ShieldCheck,
+  Split,
   Users,
   Wallet
 } from "lucide-react";
@@ -75,6 +76,14 @@ const GROUPS: SettingGroup[] = [
         icon: Users,
         tint: "coral",
         can: canViewHouseholdMembers
+      },
+      {
+        href: "/settings/separate-accounts",
+        title: "הפרדת כספים",
+        description: "בחירה איך לחלק הוצאות משותפות בין שני חברים בוגרים.",
+        icon: Split,
+        tint: "plum",
+        can: canViewHouseholdSettings
       }
     ]
   },
