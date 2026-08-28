@@ -107,21 +107,24 @@ const PUBLIC_ROUTES = [
 ];
 
 /**
- * SEPACCT (2026-08-27). NOT public routes and NOT under the accessibility statement - opt in with
+ * SEPACCT (2026-08-28). NOT public routes and NOT under the accessibility statement - opt in with
  * A11Y_SCOPE=sepacct so the eight-route public contract above stays exactly what it was.
  *
- * Only meaningful with NEXT_PUBLIC_SEPACCT_UI=1: while the feature is disarmed all four render the
- * 404 page, which is the point (see SEPACCT_FRONTEND_SPEC.md section 3), and `state=dormant` scans
- * that same rendering with the flag ON. The pages are mock-backed and need no session or backend,
- * so unlike the public list every state below is real UI, not an error branch.
+ * These four pages now talk to the API. Which STATE each one renders is therefore decided on the
+ * other side of NEXT_PUBLIC_API_URL, not by a query parameter: point the app at
+ * `apps/web/e2e/sepacct-stub.mjs` and set its --mode (populated / empty / window / error /
+ * dormant / forbidden / off). `apps/web/e2e/sepacct-measure.mjs` drives all of them.
+ *
+ * Needs NEXT_PUBLIC_SEPACCT_UI=1 at BUILD time; without it all four render the 404 page, which is
+ * the point (see SEPACCT_FRONTEND_SPEC.md section 3).
  */
-const SEPACCT_ROUTES = ["settings/separate-accounts", "shared-expenses", "my-income", "my-record"].flatMap((route) =>
-  ["populated", "empty", "error", "dormant"].map((state) => ({
-    path: `/${route}?state=${state}`,
-    name: `/${route.split("/").pop()} ${state}`,
-    coverage: `${state} state (local mock; no session or backend needed)`,
-  })),
-);
+const SEPACCT_ROUTES = [
+  { path: "/settings/separate-accounts", name: "/separate-accounts", coverage: "arrangement; state set by the stub's --mode" },
+  { path: "/shared-expenses?purchaseId=26fabb47-5ff7-48fb-ab15-8589a5ec3b2d", name: "/shared-expenses", coverage: "one expense's split; state set by the stub's --mode" },
+  { path: "/shared-expenses", name: "/shared-expenses (no id)", coverage: "reached without a purchase id" },
+  { path: "/my-income", name: "/my-income", coverage: "own income; state set by the stub's --mode" },
+  { path: "/my-record", name: "/my-record", coverage: "two routes, two windows; state set by the stub's --mode" },
+];
 
 const ROUTES = process.env.A11Y_SCOPE === "sepacct" ? SEPACCT_ROUTES : PUBLIC_ROUTES;
 

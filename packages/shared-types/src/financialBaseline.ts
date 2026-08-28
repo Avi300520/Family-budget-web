@@ -350,6 +350,27 @@ export interface BaselineProfile {
    */
   separateAccounts?: boolean;
   /**
+   * **`AMENDMENT_10` §A39 — WHEN THIS HOUSEHOLD'S ARRANGEMENT BEGAN, and the origin of every
+   * member's window.**
+   *
+   * ⚠️ SERVER-SET ONLY, EXACTLY LIKE `typeConfirmedAt`. `financialBaselineRequestSchema.profile`
+   * does not declare this key and is a NON-STRICT `z.object`, so a client that sends one has it
+   * silently stripped at the HTTP boundary. A caller must never be able to supply the instant its
+   * own window opens at — that would be a client choosing which of its history counts.
+   *
+   * ⚠️ IT IS WRITTEN IN THE SAME SPREAD AS `separateAccounts`, so there is no shape of a
+   * successful declaration that lands the answer without its date. `mergeHouseholdType` writes
+   * `typeConfirmedAt` beside `type` for the identical reason and says so in the same words.
+   *
+   * ⚠️ ABSENT, NEVER `null` — the discipline the three fields above already carry. A `null` is
+   * indistinguishable from a value for any `!== undefined` check.
+   *
+   * ⚠️ Stripped while `HOUSEHOLD_SEPARATE_ACCOUNTS_ENABLED` is off, and CARRIED across the
+   * whole-document baseline overwrite while it is on — both in `carrySeparateAccounts`, beside the
+   * two fields it already handles.
+   */
+  separateAccountsDeclaredAt?: string;
+  /**
    * **SEPACCT stage 1 — the household's DEFAULT division of a shared expense (`SEPACCT_SPEC` §4.2).**
    *
    * Basis points per member, the household-wide fallback in the resolution ladder

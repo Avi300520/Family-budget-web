@@ -6,65 +6,93 @@ import { useCallback, useEffect, useState } from "react";
 import { SplitControl } from "../../components/SplitControl";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
+import { api } from "../../lib/api";
 import { ilsFromAgorot } from "../../lib/format";
-import { isAbsent, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
-import {
-  MOCK_HOUSEHOLD_ID, MOCK_PURCHASE_ID, MOCK_UNSPLIT_PURCHASE_ID, MOCK_VIEWER_ID,
-  previewState, sepacctMock, type PurchaseSplitDto, type SepacctMemberDto
-} from "../../lib/sepacctMock";
+import { heDate } from "../../lib/format";
+import { isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../lib/sepacct";
+import { sepacct, type PurchaseSplitDto } from "../../lib/sepacctApi";
+import { useViewer } from "../../lib/useViewer";
 
 const TITLE = "הוצאה משותפת";
-const nameOf = (members: SepacctMemberDto[], userId: string) =>
-  members.find((member) => member.userId === userId)?.displayName.trim() || "חבר/ה";
+
+/**
+ * §6 #1 — a split share carries a `userId` and no name, so the name has to be joined in. The
+ * arrangement's `members` is one source but its GET is MANAGER-ONLY (§1), and the payer of an
+ * expense need not be a manager; `/members` is the roster every role can already read, so the join
+ * happens against that and a missing name degrades to a neutral label rather than a UUID.
+ */
+type Names = Map<string, string>;
+const nameOf = (names: Names, userId: string) => names.get(userId)?.trim() || "חבר/ה";
 
 export default function SharedExpensesPage() {
   if (!SEPACCT_UI_ENABLED) notFound();
 
+  const viewer = useViewer();
   const [split, setSplit] = useState<PurchaseSplitDto>();
-  const [members, setMembers] = useState<SepacctMemberDto[]>([]);
+  const [names, setNames] = useState<Names>(new Map());
   const [draftBp, setDraftBp] = useState<number>();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
   const [absent, setAbsent] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const params = typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
-  const preview = previewState(params?.get("state") ?? null);
-  // A split is always ABOUT a purchase (§6 #3); the ids come from /my-record. The `??` branch is
-  // mock-only convenience so every ?state= preview is reachable, and dies with the mock.
-  const purchaseId = params?.get("purchaseId") ?? (preview === "empty" ? MOCK_UNSPLIT_PURCHASE_ID : MOCK_PURCHASE_ID);
+  // A split is always ABOUT a purchase (§6 #3) and the ids come from /my-record. Without one there
+  // is nothing to fetch - that is not an error and not an absence, just a page reached sideways.
+  const purchaseId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("purchaseId");
+  const householdId = viewer.householdId;
 
   const load = useCallback(async () => {
+    if (!householdId || !purchaseId) return;
     try {
-      const [next, config] = await Promise.all([
-        sepacctMock.getSplit(MOCK_HOUSEHOLD_ID, purchaseId),
-        // §6 #1 — shares carry a userId and no name. The names come from the arrangement.
-        sepacctMock.getConfig()
+      const [next, roster] = await Promise.all([
+        sepacct.getSplit(householdId, purchaseId),
+        // The roster is a nice-to-have: a name that will not load must not hide the money.
+        api.listMembers(householdId).catch(() => ({ members: [] as Array<{ userId: string; displayName?: string }> }))
       ]);
       setSplit(next);
-      setMembers(config.members);
+      setNames(new Map(roster.members.map((member) => [member.userId, member.displayName ?? ""])));
       setDraftBp(undefined);
       setLoaded(true);
     } catch (cause) {
+      // §3 — a child gets `404 split.not_found` on this route, the same answer a disabled feature
+      // gives, deliberately. Absent, never "forbidden", never a retry.
       if (isAbsent(cause)) setAbsent(true);
+      else if (cause instanceof SepacctError && cause.code === "purchase.not_found") setAbsent(true);
       else setError("לא הצלחנו לטעון את ההוצאה. נסו שוב.");
     }
-  }, [purchaseId]);
+  }, [householdId, purchaseId]);
 
   useEffect(() => {
-    if (preview === "loading") return;
-    if (preview === "dormant") { setAbsent(true); return; }
-    if (preview === "error") { setError("לא הצלחנו לטעון את ההוצאה. נסו שוב."); return; }
+    if (viewer.status !== "ready") return;
+    if (!householdId) { setAbsent(true); return; }
+    if (!purchaseId) { setLoaded(true); return; }
     void load();
-  }, [preview, load]);
+  }, [viewer.status, householdId, purchaseId, load]);
 
   if (absent) notFound();
+  if (viewer.status === "error") {
+    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות את החשבון. נסו לרענן." /></AppShell>;
+  }
   if (error) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
-  if (!loaded || !split) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
+  if (!loaded) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
+
+  if (!purchaseId || !split) {
+    return (
+      <AppShell>
+        <h1 className="page-title">{TITLE}</h1>
+        <section className="panel" style={{ maxWidth: 680 }}>
+          <h2>לא נבחרה הוצאה</h2>
+          <p className="muted">חלוקה נקבעת תמיד על הוצאה מסוימת. בחרו אותה מרשימת ההוצאות שנרשמו.</p>
+          <Link className="button secondary" href="/my-record">מה שנרשם</Link>
+        </section>
+      </AppShell>
+    );
+  }
 
   const { purchase, allocation } = split;
   const merchant = purchase.merchantNameRaw?.trim() || TITLE;
-  const recordedBy = purchase.userId === null ? null : nameOf(members, purchase.userId);
+  const recordedBy = purchase.userId === null ? null : nameOf(names, purchase.userId);
+  const purchaseDate = heDate(purchase.purchaseDate) ?? purchase.purchaseDate;
 
   // §2 — `allocation: null` is NORMAL for a purchase with no split rows, not a failure.
   if (!allocation) {
@@ -73,7 +101,7 @@ export default function SharedExpensesPage() {
         <h1 className="page-title">{TITLE}</h1>
         <section className="panel" style={{ maxWidth: 680 }}>
           <h2>{merchant}</h2>
-          <p className="muted"><bdi dir="ltr">{purchase.purchaseDate}</bdi>{recordedBy ? ` · נרשם על ידי ${recordedBy}` : ""}</p>
+          <p className="muted"><bdi dir="ltr">{purchaseDate}</bdi>{recordedBy ? ` · נרשם על ידי ${recordedBy}` : ""}</p>
           <p>עדיין לא נקבעה חלוקה להוצאה הזו.</p>
           <Link className="button secondary" href="/settings/separate-accounts">לקבוע יחס ברירת מחדל</Link>
         </section>
@@ -81,8 +109,8 @@ export default function SharedExpensesPage() {
     );
   }
 
-  const mine = allocation.shares.find((share) => share.userId === MOCK_VIEWER_ID);
-  const other = allocation.shares.find((share) => share.userId !== MOCK_VIEWER_ID);
+  const mine = allocation.shares.find((share) => share.userId === viewer.userId);
+  const other = allocation.shares.find((share) => share.userId !== viewer.userId);
   if (!mine || !other || allocation.shares.length !== 2) {
     return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="החלוקה אינה בין שני חברים ולכן לא נציג אותה כאן." /></AppShell>;
   }
@@ -95,20 +123,37 @@ export default function SharedExpensesPage() {
   const save = async () => {
     if (saving) return;
     setSaving(true);
+    setError(undefined);
     try {
-      setSplit(await sepacctMock.setSplit(MOCK_HOUSEHOLD_ID, purchase.id, [
+      setSplit(await sepacct.setSplit(viewer.householdId!, purchase.id, [
         { userId: mine.userId, shareBp: editedBp },
         { userId: other.userId, shareBp: 10000 - editedBp }
       ]));
       setDraftBp(undefined);
-    } catch (cause) { if (isAbsent(cause)) setAbsent(true); else setError("לא הצלחנו לשמור את החלוקה. נסו שוב."); }
-    finally { setSaving(false); }
+    } catch (cause) {
+      if (isAbsent(cause)) setAbsent(true);
+      // §2 — a child is `403 split.child_excluded` on the PUT even though the GET 404s. Both mean
+      // the same thing to a reader: this is not theirs to change.
+      else if (cause instanceof SepacctError && cause.code === "split.child_excluded") setAbsent(true);
+      else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setError("רק מי שרשם את ההוצאה או מנהלי הבית יכולים לשנות את החלוקה.");
+      else if (cause instanceof SepacctError && cause.code === "purchase.not_found") setAbsent(true);
+      else if (cause instanceof SepacctError && cause.code === "split.invalid") setError("החלוקה אינה תקינה. נסו שוב.");
+      else setError("לא הצלחנו לשמור את החלוקה. נסו שוב.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // §6 #4 — the dispute returns nothing at all, so the allocation is re-read afterwards.
+  // §6 #4 — the dispute returns NOTHING at all, so the allocation is re-read afterwards.
   const dispute = async () => {
-    try { await sepacctMock.disputeMyShare(MOCK_HOUSEHOLD_ID, purchase.id); await load(); }
-    catch (cause) { if (isAbsent(cause)) setAbsent(true); else setError("לא הצלחנו לסמן את ההסתייגות. נסו שוב."); }
+    try {
+      await sepacct.disputeMyShare(viewer.householdId!, purchase.id);
+      await load();
+    } catch (cause) {
+      if (isAbsent(cause)) setAbsent(true);
+      else if (cause instanceof SepacctError && cause.code === "split.child_excluded") setAbsent(true);
+      else setError("לא הצלחנו לסמן את ההסתייגות. נסו שוב.");
+    }
   };
 
   return (
@@ -116,14 +161,14 @@ export default function SharedExpensesPage() {
       <h1 className="page-title">{TITLE}</h1>
       <section className="panel" style={{ maxWidth: 680 }}>
         <div className="row between"><h2>{merchant}</h2><span className="mono" dir="ltr">{ilsFromAgorot(allocation.totalAgorot)}</span></div>
-        <p className="muted"><bdi dir="ltr">{purchase.purchaseDate}</bdi>{recordedBy ? ` · נרשם על ידי ${recordedBy}` : ""}</p>
+        <p className="muted"><bdi dir="ltr">{purchaseDate}</bdi>{recordedBy ? ` · נרשם על ידי ${recordedBy}` : ""}</p>
         <div className="grid two" style={{ marginBottom: "var(--sp-4)" }}>
           <div className="panel"><span className="label">נרשם</span><strong className="mono" dir="ltr">{ilsFromAgorot(allocation.totalAgorot)}</strong></div>
           <div className="panel"><span className="label">חלקך לפי החלוקה השמורה</span><strong className="mono" dir="ltr">{ilsFromAgorot(mine.agorot)}</strong></div>
         </div>
         <SplitControl
-          first={{ userId: mine.userId, displayName: nameOf(members, mine.userId) }}
-          second={{ userId: other.userId, displayName: nameOf(members, other.userId) }}
+          first={{ userId: mine.userId, displayName: nameOf(names, mine.userId) }}
+          second={{ userId: other.userId, displayName: nameOf(names, other.userId) }}
           firstShareBp={editedBp}
           onChange={setDraftBp}
         />

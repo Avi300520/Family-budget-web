@@ -5,39 +5,41 @@ import { useEffect, useState } from "react";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
 import { ilsFromAgorot } from "../../lib/format";
-import { agorotFromInput, inputFromAgorot, isAbsent, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
-import { MOCK_HOUSEHOLD_ID, previewState, sepacctMock } from "../../lib/sepacctMock";
+import { agorotFromInput, inputFromAgorot, isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../lib/sepacct";
+import { sepacct } from "../../lib/sepacctApi";
+import { useViewer } from "../../lib/useViewer";
 
 const TITLE = "ההכנסה שלי";
 
 export default function MyIncomePage() {
   if (!SEPACCT_UI_ENABLED) notFound();
 
+  const viewer = useViewer();
   const [saved, setSaved] = useState<number | null>(null);
   const [value, setValue] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
   const [absent, setAbsent] = useState(false);
   const [saving, setSaving] = useState(false);
-  const preview = typeof window === "undefined" ? "populated" : previewState(new URLSearchParams(window.location.search).get("state"));
 
   useEffect(() => {
-    if (preview === "loading") return;
-    if (preview === "dormant") { setAbsent(true); return; }
-    if (preview === "error") { setError("לא הצלחנו לטעון את ההכנסה. נסו שוב."); return; }
-    void sepacctMock.getOwnIncome(MOCK_HOUSEHOLD_ID).then((data) => {
+    if (viewer.status !== "ready") return;
+    if (!viewer.householdId) { setAbsent(true); return; }
+    void sepacct.getOwnIncome(viewer.householdId).then((data) => {
       // §3 — `monthlyAgorot` is explicitly null when unset, and null for a child. Never absent.
-      const next = preview === "empty" ? null : data.monthlyAgorot;
-      setSaved(next);
-      setValue(inputFromAgorot(next));
+      setSaved(data.monthlyAgorot);
+      setValue(inputFromAgorot(data.monthlyAgorot));
       setLoaded(true);
     }).catch((cause) => {
       if (isAbsent(cause)) setAbsent(true);
       else setError("לא הצלחנו לטעון את ההכנסה. נסו שוב.");
     });
-  }, [preview]);
+  }, [viewer.status, viewer.householdId]);
 
   if (absent) notFound();
+  if (viewer.status === "error") {
+    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות את החשבון. נסו לרענן." /></AppShell>;
+  }
   if (error) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
   if (!loaded) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
 
@@ -46,10 +48,19 @@ export default function MyIncomePage() {
   const save = async () => {
     if (saving || !parsed.ok) return;
     setSaving(true);
+    setError(undefined);
     // An empty field is `null` — the wire's "clear it" — not an omitted field (§3).
-    try { setSaved((await sepacctMock.saveOwnIncome(MOCK_HOUSEHOLD_ID, parsed.agorot)).monthlyAgorot); }
-    catch (cause) { if (isAbsent(cause)) setAbsent(true); else setError("לא הצלחנו לשמור את ההכנסה. נסו שוב."); }
-    finally { setSaving(false); }
+    try {
+      setSaved((await sepacct.saveOwnIncome(viewer.householdId!, parsed.agorot)).monthlyAgorot);
+    } catch (cause) {
+      if (isAbsent(cause)) setAbsent(true);
+      // The parser above sends only `null` or a non-negative integer, so this is the wire refusing
+      // something the client thought was fine — say so plainly rather than swallowing it.
+      else if (cause instanceof SepacctError && cause.code === "income.invalid") setError("הסכום לא התקבל. אפשר להזין מספר עם עד שתי ספרות אחרי הנקודה.");
+      else setError("לא הצלחנו לשמור את ההכנסה. נסו שוב.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

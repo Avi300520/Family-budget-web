@@ -876,6 +876,24 @@ export type AnalyticsEventName =
   // NO MIGRATION: `analytics_events.name` is plain `text` (migration 0001), so this union
   // member is a TypeScript-only change. High-water stays 0046.
   | "household_type_ask_sent"
+  // SEPACCT `P1.3`. A demotion to `limited_member` was refused because the member holds a share on
+  // an expense a FROZEN figure already covers — the state in which `A5.1` forbids every remedy
+  // (edit, void) that `A11`'s other refusal would name, so the member cannot be demoted at all and
+  // no in-product act can change that.
+  //
+  // ⚠️ IT EXISTS TO BE COUNTED, AND THE COUNT IS THE WHOLE POINT. `AMENDMENT_04` and the stage 0
+  // ledger both rule that NO MECHANISM is built for this deadlock, because the one mechanism this
+  // sprint built on a hypothetical produced four defects in a round. Resolving it needs a ruling
+  // that trades `A5.1` against `OD-10`, and that trade is only worth making if the state is ever
+  // reached. Measured reachability at the time of writing: ZERO rows — it needs `0049` applied,
+  // both SEPACCT flags armed, a completed self-leave and an allocation spanning it.
+  //
+  // Payload is EMPTY on purpose: the occurrence is the datum, and `householdId`/`userId` are
+  // already columns. No shekel figure, no role, no name.
+  //
+  // NO MIGRATION: `analytics_events.name` is plain `text` (migration `0001`), so this union member
+  // is a TypeScript-only change.
+  | "sepacct.demotion_deadlocked"
   | "checkout_started"
   | "subscription_activated";
 
