@@ -8,7 +8,7 @@ import { bootstrapErrorAction } from "../../lib/authRouting";
 import {
   createDefaultState, computeTotals, validateStep, buildOnboardingPayload,
   buildStateFromBaseline, suggestedManagedBudget, loadDraft, saveDraft, clearDraft,
-  humanizeOnboardingError, STEP_ORDER, type StepKey, type WizardState
+  humanizeOnboardingError, incomeRefusedNotice, STEP_ORDER, type StepKey, type WizardState
 } from "../../lib/onboarding/model";
 
 // Steps where an empty answer is acceptable and a "skip" affordance is offered.
@@ -38,6 +38,12 @@ export interface WizardController {
   /** True when re-entered via ?mode=edit to update an existing baseline (owner/admin). */
   editMode: boolean;
   error?: string;
+  /**
+   * SEPACCT §A60. A save that SUCCEEDED but did not store everything that was sent. Rendered as a
+   * status, not as an error, because both halves of that sentence are true — and never as silence,
+   * because "a refusal that looks like success is worse than either accepting or rejecting".
+   */
+  notice?: string;
   working: boolean;
   householdType: WizardState["householdType"];
   next: () => void;
@@ -53,6 +59,7 @@ export function useOnboardingWizard(): WizardController {
   const [state, setState] = useState<WizardState>(createDefaultState);
   const [index, setIndex] = useState(0); // index into STEP_ORDER
   const [error, setError] = useState<string | undefined>();
+  const [notice, setNotice] = useState<string | undefined>();
   const [working, setWorking] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const userIdRef = useRef<string | null>(null);
@@ -131,6 +138,7 @@ export function useOnboardingWizard(): WizardController {
 
   const set = useCallback((partial: Partial<WizardState>) => {
     setError(undefined);
+    setNotice(undefined);
     setState((s) => ({ ...s, ...partial }));
   }, []);
 
@@ -139,6 +147,7 @@ export function useOnboardingWizard(): WizardController {
 
   const goTo = useCallback((nextIndex: number) => {
     setError(undefined);
+    setNotice(undefined);
     // Entering the managed-budget step in income mode: prefill the suggestion once.
     const target = STEP_ORDER[nextIndex];
     setState((s) => {
@@ -159,11 +168,26 @@ export function useOnboardingWizard(): WizardController {
     }
     setWorking(true);
     setError(undefined);
+    setNotice(undefined);
     try {
       const payload = buildOnboardingPayload(state);
       // Same endpoint for first-time and edit: the backend UPSERTs the existing household
       // in place (no duplicate), keeps members/invites/expenses, and re-redacts the result.
-      await api.completeOnboarding(payload);
+      const saved = await api.completeOnboarding(payload);
+      // SEPACCT §A60 — the save landed, and one field of it may not have. This happens when the
+      // arrangement was declared between our prefill and this POST (a partner in WhatsApp, another
+      // tab): the income we sent was refused and the response came back redacted. Say so ON THE
+      // STEP WHERE THEY TYPED IT, and adopt the redaction so the next save carries the mark rather
+      // than rebuilding a zero over the stored figure. Deliberately does NOT navigate away — in
+      // edit mode a `replace("/dashboard")` here would be the silence this ruling forbids.
+      const refused = incomeRefusedNotice(payload, saved.household);
+      if (refused) {
+        setState((s) => ({ ...s, incomeRedacted: true, income: "" }));
+        setNotice(refused);
+        setIndex(STEP_ORDER.indexOf("income"));
+        if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+        return;
+      }
       if (editMode) {
         // Baseline updated — return to the dashboard (no first-time "done" celebration).
         router.replace("/dashboard");
@@ -215,6 +239,7 @@ export function useOnboardingWizard(): WizardController {
     primaryLabel,
     editMode,
     error,
+    notice,
     working,
     householdType: state.householdType,
     next,

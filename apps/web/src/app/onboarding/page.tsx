@@ -122,6 +122,9 @@ export default function OnboardingPage() {
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           {wizard.error && <div className="status error" role="alert" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.error}</div>}
+          {/* SEPACCT §A60 — a save that succeeded and did not store everything. A status, not an
+              error: the rest really was saved. `role="status"` so it is announced without the alarm. */}
+          {wizard.notice && <div className="status" role="status" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.notice}</div>}
           <div className={`${styles.footerRow} a11y-sticky-cta`}>
             {wizard.stepIndex > 1 ? (
               <button type="button" className="button secondary" onClick={wizard.back} disabled={wizard.working}>חזרה</button>

@@ -168,6 +168,20 @@ export interface WizardState {
   // income / managed budget
   budgetMode: BudgetMode;
   income: number | "";
+  /**
+   * SEPACCT / `AMENDMENT_15` §A56 + `AMENDMENT_16` §A60 — **THE SERVED READ HID `budget.income`.**
+   *
+   * The server sets `budget.incomeRedacted: true` on every read of an ARRANGED household's
+   * baseline and removes `income` from it. Two things follow, and both are load-bearing:
+   *
+   *  1. `income` above is `""` because the figure was withheld, NOT because anybody emptied the
+   *     field. `buildOnboardingPayload` must therefore send no `income` at all — a rebuilt `0` is
+   *     the exact write that destroyed ₪20,000 in run 14 — and must send the MARK back, which is
+   *     what the server refuses on when the arrangement ended between the read and this save.
+   *  2. The income step renders read-only: the server will not store what is typed there, and a
+   *     refusal that looks like success is the defect §A60 rules out.
+   */
+  incomeRedacted: boolean;
   managedBudget: number | "";
   /** Whether the user has manually edited the managed budget (so we stop auto-prefilling). */
   managedTouched: boolean;
@@ -208,6 +222,7 @@ export function createDefaultState(): WizardState {
     incomeCount: 1,
     budgetMode: "income",
     income: "",
+    incomeRedacted: false,
     managedBudget: "",
     managedTouched: false,
     fixed: [],
@@ -339,8 +354,25 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
     },
     budget: {
       mode: state.budgetMode,
-      income: state.budgetMode === "income" ? num(state.income) : null,
-      managedMonthlyBudget: managed
+      managedMonthlyBudget: managed,
+      // ── SEPACCT `AMENDMENT_15` §A56 / `AMENDMENT_16` §A60 — A REDACTED READ IS NOT AN EMPTY
+      //    FIELD, AND THIS IS THE HALF THAT LIVES IN THIS REPOSITORY ──────────────────────────
+      //
+      // `POST /onboarding/complete` is a WHOLE-DOCUMENT overwrite. Under separate accounts the
+      // server removes `budget.income` from every read — including the owner's — and this wizard
+      // rebuilds `budget` from named fields rather than spreading the served document. So the gap
+      // rendered as an empty number input and posted back an explicit `0`: measured over HTTP on
+      // run 14, ₪20,000 → 0, permanent.
+      //
+      // 🔑 **BOTH HALVES, AND NEITHER IS THE OTHER'S BACKUP.** Omitting `income` means there is no
+      // rebuilt zero to refuse in the first place. Carrying `incomeRedacted` is what makes the
+      // server refuse a write that arrives AFTER the arrangement ended — by then its own
+      // `sepacctArranged(existing)` answers "no", which is a different question from "was the
+      // document I am being handed derived from a redacted read". `A56-15` measured that gap and
+      // this is the client side of closing it: §A60 ships the two repositories as one release.
+      ...(state.incomeRedacted
+        ? { incomeRedacted: true as const }
+        : { income: state.budgetMode === "income" ? num(state.income) : null })
     },
     fixedExpenses: state.fixed
       .filter((f) => f.on)
@@ -392,6 +424,35 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
     acceptPrivacy: true,
     baseline
   };
+}
+
+/**
+ * ── SEPACCT `AMENDMENT_16` §A60 — **THE REFUSAL THE CLIENT COULD NOT SEE** ────────────────────
+ *
+ * `POST /onboarding/complete` answers `200 OK` and returns the household it stored. When the
+ * household is under separate accounts it REFUSES the incoming `budget.income` and keeps the
+ * stored figure — a legitimate protection, and until now an invisible one: everything else the
+ * person edited was saved, one field was not, and nothing said so.
+ *
+ * `IncomeStep` already prevents the common case: a read that came back marked renders no income
+ * input, and `buildOnboardingPayload` then sends no figure. This closes the one the client cannot
+ * prevent — **the arrangement was declared between our read and our save** (a partner in WhatsApp,
+ * a second tab). We sent a figure believing it writable; the response comes back REDACTED, which
+ * is exactly the state in which the write path refuses. Returns the sentence to show, or null.
+ *
+ * ⚠️ It asks the RESPONSE, never the request, and never a stored/sent comparison: under the
+ * arrangement the response carries no `income` to compare against — that is the whole point of it.
+ */
+export const INCOME_REFUSED_NOTICE =
+  "השאר נשמר. ההכנסה לא עודכנה: בינתיים הוגדר בבית שהחשבונות מנוהלים בנפרד, ואז אין הכנסה משותפת לשמור. ההכנסה של כל אחד פרטית ונשמרת אצלו.";
+
+export function incomeRefusedNotice(sent: OnboardingPayload, servedHousehold: unknown): string | null {
+  const sentBudget = sent.baseline?.budget as { income?: unknown } | undefined;
+  // We sent no figure (an already-marked read, or no baseline at all) — nothing was refused.
+  if (!sentBudget || !("income" in sentBudget)) return null;
+  const back = (servedHousehold as { financialBaseline?: { budget?: { incomeRedacted?: unknown } } | null } | undefined)
+    ?.financialBaseline?.budget;
+  return back?.incomeRedacted === true ? INCOME_REFUSED_NOTICE : null;
 }
 
 // ── Sub-budget auto-split (round to ₪50, last bucket absorbs remainder) ──────────
@@ -524,6 +585,10 @@ export function coerceDraftState(raw: unknown): WizardState | null {
   s.incomeCount = finiteNumber(raw.incomeCount, s.incomeCount);
   if (inEnum(raw.budgetMode, BUDGET_MODES)) s.budgetMode = raw.budgetMode;
   s.income = numberOrEmpty(raw.income);
+  // Drafts are first-run only (edit mode deliberately never sets `userIdRef`, so it neither saves
+  // nor restores one), so today this can only ever be `false` — carried anyway because the field it
+  // guards is a stored income, and a silently dropped `true` is how that figure gets destroyed.
+  if (typeof raw.incomeRedacted === "boolean") s.incomeRedacted = raw.incomeRedacted;
   s.managedBudget = numberOrEmpty(raw.managedBudget);
   if (typeof raw.managedTouched === "boolean") s.managedTouched = raw.managedTouched;
   if (Array.isArray(raw.fixed)) {
@@ -635,6 +700,9 @@ export function buildStateFromBaseline(source: BaselineEditSource | undefined, d
     const bg = b.budget;
     if (inEnum(bg.mode, BUDGET_MODES)) s.budgetMode = bg.mode;
     s.income = numberOrEmpty(bg.income);
+    // §A56: the server hid the figure rather than the household emptying it. Carried so the save
+    // does not rebuild a `0` over it, and so the step can say so instead of pretending to accept.
+    if (bg.incomeRedacted === true) s.incomeRedacted = true;
     if (typeof bg.managedMonthlyBudget === "number" && Number.isFinite(bg.managedMonthlyBudget)) {
       s.managedBudget = bg.managedMonthlyBudget;
       s.managedTouched = true;

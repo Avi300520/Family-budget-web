@@ -22,6 +22,8 @@ import {
   DRAFT_TTL_MS,
   humanizeOnboardingError,
   buildStateFromBaseline,
+  incomeRefusedNotice,
+  INCOME_REFUSED_NOTICE,
   type WizardState,
   type WizardFixedExpense
 } from "./model.ts";
@@ -433,4 +435,76 @@ test("saveDraft does NOT persist income / budget-amount / household name to loca
 
 test("DRAFT_TTL_MS is at most 24h (was 14 days)", () => {
   assert.ok(DRAFT_TTL_MS <= 24 * 60 * 60 * 1000, `TTL ${DRAFT_TTL_MS}ms exceeds 24h`);
+});
+
+// =============================================================================
+// SEPACCT `AMENDMENT_15` §A56 / `AMENDMENT_16` §A60 - the client half of `A56-15`.
+//
+// The backend cell `apps/api/src/sepacct-income-roundtrip.gate.test.ts` measures the ROUND TRIP.
+// It can only replay a payload SHAPE, because the wizard lives in this repository. These cells
+// pin that the shape it replays is the one this wizard actually builds - the two together are the
+// property, and either alone is the "unit test of one half" §A56 rules out.
+// =============================================================================
+
+const REDACTED_READ = {
+  version: 1, mode: "quick",
+  profile: { type: "couple", adults: 2, kids: 0, kidAges: [], cars: 1, separateAccounts: true },
+  cycle: { basis: "calendar", startDay: 1, salaryDay: 10, incomeCount: 1 },
+  // What the server serves an ARRANGED household: no `income` key at all, plus the mark.
+  budget: { mode: "income", managedMonthlyBudget: 8000, incomeRedacted: true },
+  fixedExpenses: [], subBudgets: {}, alerts: undefined
+} as unknown as FinancialBaseline;
+
+test("SEPACCT A56: a redacted read hydrates as redacted, and the empty income is the SERVER's gap", () => {
+  const s = buildStateFromBaseline({ financialBaseline: REDACTED_READ, monthlyBudgetAmount: 8000 }, "אבי");
+  assert.equal(s.incomeRedacted, true);
+  assert.equal(s.income, "");            // withheld, NOT emptied by anyone
+  assert.equal(s.separateAccounts, true);
+});
+
+test("SEPACCT A56: the mark travels back and NO rebuilt income is posted over the stored figure", () => {
+  const s = buildStateFromBaseline({ financialBaseline: REDACTED_READ, monthlyBudgetAmount: 8000 }, "אבי");
+  s.householdName = "בית"; s.city = "חיפה";
+  const b = buildOnboardingPayload(s).baseline.budget as Record<string, unknown>;
+  // 🔴 THE DEFECT, AS AN ASSERTION. `income` used to be rebuilt from flat state as `num("") === 0`
+  //    and posted over a stored ₪20,000. There must be no key at all - absent, never null, never 0.
+  assert.equal("income" in b, false, "a redacted read posted an income back - this is the ₪20,000 write");
+  assert.equal(b.incomeRedacted, true, "the mark did not travel - the server cannot refuse a save that arrives after the arrangement ends");
+  assert.equal(b.managedMonthlyBudget, 8000);
+});
+
+test("SEPACCT A56 negative control: an UNREDACTED read still sends the figure and no mark", () => {
+  const s = createDefaultState();
+  s.displayName = "א"; s.householdName = "ב"; s.city = "ג";
+  s.budgetMode = "income"; s.income = 0; s.managedBudget = 9000;
+  const b = buildOnboardingPayload(s).baseline.budget as Record<string, unknown>;
+  // An honest zero from a read that was never redacted still lands - §A56 forbids a rule that
+  // fires on the VALUE, and the backend cell `A56-2` is the other side of this one.
+  assert.equal(b.income, 0);
+  assert.equal("incomeRedacted" in b, false);
+});
+
+test("SEPACCT A60: a 200 that refused the income is reported, and only then", () => {
+  const s = createDefaultState();
+  s.displayName = "א"; s.householdName = "ב"; s.city = "ג";
+  s.budgetMode = "income"; s.income = 33000; s.managedBudget = 9000;
+  const sent = buildOnboardingPayload(s);
+  // The arrangement was declared between our prefill and this POST: the response comes back
+  // REDACTED, which is exactly the state in which the write path refused what we sent.
+  assert.equal(
+    incomeRefusedNotice(sent, { financialBaseline: { budget: { mode: "income", managedMonthlyBudget: 9000, incomeRedacted: true } } }),
+    INCOME_REFUSED_NOTICE
+  );
+  // An ordinary save says nothing.
+  assert.equal(incomeRefusedNotice(sent, { financialBaseline: { budget: { mode: "income", income: 33000, managedMonthlyBudget: 9000 } } }), null);
+  // …and a save that KNEW it was redacted sent no figure, so there is nothing to report and no
+  // nag on every subsequent save of an arranged household.
+  const redacted = buildStateFromBaseline({ financialBaseline: REDACTED_READ, monthlyBudgetAmount: 8000 }, "א");
+  redacted.householdName = "ב"; redacted.city = "ג";
+  assert.equal(
+    incomeRefusedNotice(buildOnboardingPayload(redacted), { financialBaseline: { budget: { mode: "income", managedMonthlyBudget: 8000, incomeRedacted: true } } }),
+    null
+  );
+  // A degraded save (no baseline persisted at all) is not a refusal either.
+  assert.equal(incomeRefusedNotice(sent, { financialBaseline: null }), null);
 });

@@ -406,6 +406,33 @@ export interface BaselineBudget {
   mode: BudgetMode;
   /** Income-mode only; OPTIONAL; baseline-only — NEVER written to monthly_budget_amount. */
   income?: number | null;
+  /**
+   * ── `AMENDMENT_15` §A56 — **THE REDACTION MARK. A PROPERTY OF A READ, CARRIED ON THE DOCUMENT.**
+   *
+   * `true` on a DTO whose `income` was removed by `stripSharedIncomeUnderSeparateAccounts`. It is
+   * never stored: `carryOwnIncome` deletes it on the way in, and `normalizeFinancialBaseline`'s
+   * output never carries it.
+   *
+   * 🔴 **IT EXISTS BECAUSE INFERRING THE REDACTION AT WRITE TIME IS A DIFFERENT PREDICATE, AND
+   * `R-1` MEASURED THE DIFFERENCE.** The first cut of §A56 asked *is this household arranged NOW*
+   * instead of *was the document I am being handed derived from a redacted read*. They agree only
+   * while the arrangement does not change between the read and the write — so `declare → read →
+   * un-declare → save` destroyed the income again, and the disarmed lever the same run added made
+   * that sequence reachable with every flag off. §A56 said this in advance: *"the write path
+   * refuses a document derived from a redacted read, by marking the field redacted rather than
+   * absent."*
+   *
+   * ⚠️ IT IS A HINT, NOT AN AUTHORITY. A client that drops the key does not get a write it should
+   * not have — the stored arrangement is still checked as well, and either condition refuses.
+   *
+   * 🔑 **`AMENDMENT_16` §A60 — IT IS ALSO THE CLIENT'S ONLY WAY TO KNOW THE FIELD IS UNWRITABLE,
+   * AND IT IS THEREFORE PRESENT ON EVERY ARRANGED READ**, whether or not a figure was there to
+   * hide. The write path refuses an incoming `income` for every arranged household; a read that
+   * carried no mark left the wizard rendering an editable field whose value was dropped behind a
+   * `200 OK`. The client reads this key to render the income step read-only, and to tell the person
+   * — on the step where they tried — when a save it thought was writable came back redacted.
+   */
+  incomeRedacted?: boolean;
   /** The user-confirmed MANAGED monthly budget. Mirrors household.monthlyBudgetAmount. */
   managedMonthlyBudget: number;
 }

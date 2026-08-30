@@ -175,6 +175,24 @@ export function CycleStep({ state, set }: StepProps) {
 
 // ── Income / managed budget ──────────────────────────────────────────────────────
 export function IncomeStep({ state, set }: StepProps) {
+  // ── SEPACCT `AMENDMENT_15` §A56 / `AMENDMENT_16` §A60 ──────────────────────────────────────
+  // Under separate accounts the server removes `budget.income` from every read — the owner's
+  // included, because nothing in the data says whose money it is — and refuses every write of it.
+  // Rendering the input anyway posts a figure the product will not store, behind a `200 OK`:
+  // "a refusal that looks like success is worse than either accepting or rejecting". So the person
+  // is told HERE, on the step where they would have typed it, and edits the shared budget instead.
+  if (state.incomeRedacted) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <p className="status" style={{ display: "block" }}>
+          בבית הזה החשבונות מנוהלים בנפרד, ולכן אין הכנסה משותפת לשמור כאן. ההכנסה של כל אחד פרטית ונשמרת אצלו בלבד.
+        </p>
+        <Field label="תקציב חודשי לניהול" hint="הסכום המשותף שתרצו לנהל מדי חודש.">
+          <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder="10,000" autoFocus ariaLabel="תקציב חודשי לניהול" />
+        </Field>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <OptionCards
