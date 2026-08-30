@@ -24,13 +24,25 @@ const TITLE = "הוצאה משותפת";
 type Names = Map<string, string>;
 const nameOf = (names: Names, userId: string) => names.get(userId)?.trim() || "חבר/ה";
 
+/**
+ * The two people a split is between. ACTIVE and non-child, per the server's own rule: the PUT
+ * looks every named share up in `household_members … status = 'active'` and refuses a
+ * `limited_member`. `roster.ts` exists because `GET /members` returns invited and removed rows too.
+ */
+type RosterMember = { userId: string; displayName?: string; role?: string; status?: string };
+const adultsOf = (members: ReadonlyArray<RosterMember>) =>
+  members.filter((m) => m.status === "active" && m.role !== "limited_member");
+
 export default function SharedExpensesPage() {
   if (!SEPACCT_UI_ENABLED) notFound();
 
   const viewer = useViewer();
   const [split, setSplit] = useState<PurchaseSplitDto>();
   const [names, setNames] = useState<Names>(new Map());
+  const [roster, setRoster] = useState<RosterMember[]>([]);
   const [draftBp, setDraftBp] = useState<number>();
+  /** The FIRST split's ratio. Separate from `draftBp`, which edits a SAVED one. */
+  const [newBp, setNewBp] = useState(5000);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
   const [absent, setAbsent] = useState(false);
@@ -47,10 +59,11 @@ export default function SharedExpensesPage() {
       const [next, roster] = await Promise.all([
         sepacct.getSplit(householdId, purchaseId),
         // The roster is a nice-to-have: a name that will not load must not hide the money.
-        api.listMembers(householdId).catch(() => ({ members: [] as Array<{ userId: string; displayName?: string }> }))
+        api.listMembers(householdId).catch(() => ({ members: [] as RosterMember[] }))
       ]);
       setSplit(next);
       setNames(new Map(roster.members.map((member) => [member.userId, member.displayName ?? ""])));
+      setRoster(roster.members as RosterMember[]);
       setDraftBp(undefined);
       setLoaded(true);
     } catch (cause) {
@@ -91,6 +104,56 @@ export default function SharedExpensesPage() {
 
   const { purchase, allocation } = split;
   const merchant = purchase.merchantNameRaw?.trim() || TITLE;
+
+  // ── THE FIRST SPLIT. `R-1` STOPPED THE PREVIOUS RUN BECAUSE THIS DID NOT EXIST. ───────────────
+  //
+  // The page returned above `SplitControl` whenever `allocation === null`, so the ONLY state in
+  // which a household can begin was the one state with no control on it - "the capability
+  // bootstraps only from a state it cannot reach". `PUT …/split` has always created from nothing;
+  // nothing on this side called it.
+  //
+  // The pair is the household's two active adults, ordered PAYER FIRST so the slider's
+  // "חלקה של X" names the person the expense is currently recorded against. Exactly two, because
+  // the server resolves an allocation into shares this page then requires to be a pair, and a
+  // one-member split of 10000bp would pass `splitRejection` and render as "not between two".
+  //
+  // ⚠️ SEEDED AT 50/50, NOT FROM `profile.defaultSplit`. The arrangement GET is MANAGER-ONLY, and
+  // the payer of an expense need not be a manager - reading it here would work for one role and
+  // 403 for the other. The ratio is on screen and unsaved until the button is pressed, so nothing
+  // is decided behind the reader's back. `F-3` also still holds: the stored default is read by no
+  // allocator, so seeding from it would give it an authority the product does not implement.
+  const adults = adultsOf(roster);
+  const [adultA, adultB] = adults;
+  const firstSplitPair: [RosterMember, RosterMember] | null =
+    adults.length === 2 && adultA && adultB
+      ? (adultB.userId === purchase.userId ? [adultB, adultA] : [adultA, adultB])
+      : null;
+
+  const createSplit = async () => {
+    if (saving || !firstSplitPair) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      setSplit(await sepacct.setSplit(viewer.householdId!, purchase.id, [
+        { userId: firstSplitPair[0].userId, shareBp: newBp },
+        { userId: firstSplitPair[1].userId, shareBp: 10000 - newBp }
+      ]));
+    } catch (cause) {
+      if (isAbsent(cause)) setAbsent(true);
+      else if (cause instanceof SepacctError && cause.code === "split.child_excluded") setAbsent(true);
+      // The two 409s the door on /dashboard/spending is built to never show. Mapped anyway: this
+      // page is also reachable by a pasted link, and a generic "try again" would be a lie for a
+      // refusal that will never succeed.
+      else if (cause instanceof SepacctError && cause.code === "split.no_payer") setError("להוצאה הזו אין משלם רשום, ולכן אי אפשר לחלק אותה.");
+      else if (cause instanceof SepacctError && cause.code === "split.before_arrangement") setError("ההוצאה הזו נרשמה לפני שהתחלתם לנהל חשבונות נפרדים, ולכן אי אפשר לחלק אותה.");
+      else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setError("רק מי שרשם את ההוצאה או מנהלי הבית יכולים לקבוע את החלוקה.");
+      else if (cause instanceof SepacctError && cause.code === "split.not_a_member") setError("אחד המשתתפים אינו חבר בוגר פעיל בבית. רעננו את העמוד ונסו שוב.");
+      else if (cause instanceof SepacctError && cause.code === "split.invalid") setError("החלוקה אינה תקינה. נסו שוב.");
+      else setError("לא הצלחנו לשמור את החלוקה. נסו שוב.");
+    } finally {
+      setSaving(false);
+    }
+  };
   const recordedBy = purchase.userId === null ? null : nameOf(names, purchase.userId);
   const purchaseDate = heDate(purchase.purchaseDate) ?? purchase.purchaseDate;
 
@@ -114,10 +177,32 @@ export default function SharedExpensesPage() {
               this identical page. Both this and the "set a default ratio" button it replaced
               pointed at a no-op. What is left is only what is true in either ruling. */}
           <p>עדיין לא נקבעה חלוקה להוצאה הזו, ולכן היא רשומה במלואה על מי שרשם אותה.</p>
-          <div className="row">
-            <Link className="button secondary" href="/my-record">חזרה למה שנרשם</Link>
-            <Link className="button secondary" href="/settings/separate-accounts">הגדרות ההסדר</Link>
-          </div>
+          {firstSplitPair
+            ? (
+              <>
+                <SplitControl
+                  first={{ userId: firstSplitPair[0].userId, displayName: nameOf(names, firstSplitPair[0].userId) }}
+                  second={{ userId: firstSplitPair[1].userId, displayName: nameOf(names, firstSplitPair[1].userId) }}
+                  firstShareBp={newBp}
+                  onChange={setNewBp}
+                />
+                <div className="row" style={{ marginTop: "var(--sp-3)" }}>
+                  <button type="button" className="button" onClick={() => void createSplit()} aria-busy={saving}>
+                    {saving ? "שומרים..." : "שמירת חלוקה"}
+                  </button>
+                  <Link className="button secondary" href="/dashboard/spending">חזרה להוצאות החודש</Link>
+                </div>
+              </>
+            )
+            : (
+              <>
+                <p className="muted">חלוקה נקבעת בין שני חברים בוגרים בבית. כרגע אין שניים כאלה, ולכן אי אפשר לחלק את ההוצאה הזו.</p>
+                <div className="row">
+                  <Link className="button secondary" href="/dashboard/spending">חזרה להוצאות החודש</Link>
+                  <Link className="button secondary" href="/settings/separate-accounts">הגדרות ההסדר</Link>
+                </div>
+              </>
+            )}
         </section>
       </AppShell>
     );

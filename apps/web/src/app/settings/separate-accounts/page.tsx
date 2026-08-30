@@ -45,13 +45,18 @@ const nameOf = (displayName: string) => displayName.trim() || "חבר/ה";
  *      excluded.** "Both sides are notified" — which the onboarding step used to say — is false for
  *      the one person reading this screen.
  */
-const WHAT_CHANGES: ReadonlyArray<string> = [
+const WHAT_CHANGES: ReadonlyArray<React.ReactNode> = [
   "ההכנסה המשותפת מפסיקה להופיע במסכי הבית. הסכום שכבר נשמר אינו נמחק, הוא רק מפסיק להיות מוצג, וחוזר אם מכבים את ההסדר.",
   "מכאן כל אחד שומר את ההכנסה שלו בעמוד ״ההכנסה שלי״, והיא נראית רק לו.",
-  // `R-1` — the second sentence is the load-bearing one and it stays; the first used to name the
-  // expense page as where a split is set, which no reader can currently reach. Stated as a fact
-  // about the mechanism, not as an instruction to go and do it.
-  "שום הוצאה לא מתחלקת מעצמה, גם לא לפי היחס שנקבע כאן. חלוקה נקבעת על כל הוצאה בנפרד.",
+  // `R-1` — the second half named the expense page, and was withheld for one run because no
+  // reader could reach it. The door on /dashboard/spending exists now, so it is restored: the
+  // sentence is true AND followable. The first half is unchanged and still the load-bearing one.
+  // `R-1` F1 — THE DESTINATION WAS NAMED IN QUOTE MARKS AND LINKED NOWHERE. The rendered `<main>`
+  // of this screen carried exactly three hrefs, none of them here, and no sidebar item is called
+  // "הוצאות החודש": the only way there is a ghost button labelled `פירוט` on a CATEGORIES card,
+  // three screens away. Naming a place a reader cannot find is the same defect as naming an action
+  // they cannot take - the one that stopped the previous run - one degree weaker.
+  <>שום הוצאה לא מתחלקת מעצמה, גם לא לפי היחס שנקבע כאן. את החלוקה קובעים על כל הוצאה בנפרד, מתוך <Link href="/dashboard/spending">הוצאות החודש</Link>.</>,
   "הסיכום השבועי שמגיע בוואטסאפ יציג רק את ההוצאות שלכם. הוא נשלח בימי ראשון, אז זה ייראה בפעם הבאה שהוא מגיע.",
   "בן או בת הזוג יקבלו הודעה בוואטסאפ על ההפעלה ועל הכיבוי. אתם לא מקבלים אותה, כי אתם עושים את השינוי כאן."
 ];
@@ -62,7 +67,7 @@ function WhatChanges({ heading, lead }: { heading: string; lead: string }) {
       <h2>{heading}</h2>
       <p className="muted">{lead}</p>
       <ul style={{ margin: 0, paddingInlineStart: "1.2em", display: "grid", gap: "var(--sp-2)" }}>
-        {WHAT_CHANGES.map((line) => <li key={line}>{line}</li>)}
+        {WHAT_CHANGES.map((line, i) => <li key={i}>{line}</li>)}
       </ul>
     </section>
   );
@@ -200,7 +205,16 @@ export default function SeparateAccountsSettingsPage() {
         <h2>איך מחלקים הוצאות משותפות</h2>
         {/* `F-3` again: this ratio is a DEFAULT that no allocator reads. Saying it "applies to new
             expenses" is the same promise, one panel down, and it was equally untrue. */}
-        <p className="muted">היחס נשמר כברירת המחדל של הבית. הוא אינו מוחל מעצמו על אף הוצאה, וכל הוצאה נחלקת בנפרד.</p>
+        {/* `R-1` F3 — "ברירת המחדל של הבית" IS WHAT THE WORD MEANS IN HEBREW UI: the value that
+            appears unless you change it. It is not that. `defaultSplit` is written by this route and
+            read only to echo back into this screen's own GET (`flags.ts`: *"Stage 1 stores them and
+            nothing reads them"*), and the expense page deliberately seeds at 50/50 because the
+            arrangement GET is manager-only and the payer need not be a manager. So a couple could
+            set 70/30 here, open an expense, and find the slider at half - `ואפשר לבחור יחס אחר`
+            made it worse, because *אחר* implies one was already there.
+            Seeding from it would work for one role and 403 for the other, so the copy tells the
+            truth instead and names the number they will actually see. */}
+        <p className="muted">היחס הזה נשמר יחד עם ההסדר, אבל הוא עדיין לא מוחל מעצמו על אף הוצאה. את החלוקה של כל הוצאה קובעים בעמוד ההוצאה, ושם מתחילים תמיד מחצי חצי ואפשר לשנות.</p>
         {first && second
           ? <SplitControl
               first={{ userId: first.userId, displayName: nameOf(first.displayName) }}

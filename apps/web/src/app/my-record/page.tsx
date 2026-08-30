@@ -94,7 +94,13 @@ export default function MyRecordPage() {
   // "pick an expense from the list below and set its ratio" pointed at a list that is guaranteed
   // empty in exactly that state. Every sentence below is true under BOTH candidate rulings, so it
   // is safe to ship ahead of one; nothing here claims splitting is available, or that it is not.
-  const nothingSplitYet = totals.shareAgorot === 0 && totals.recordedAgorot > 0;
+  // `R-1` F2 — `&& totals.recordedAgorot > 0` USED TO BE HERE AND IT DEAD-ENDED THE EXACT PERSON
+  // THIS EMPTY STATE EXISTS FOR. A partner who has paid for nothing yet has recorded 0 AND share 0,
+  // so the guidance was skipped and they got two ₪0.00 tiles and, measured, ZERO links in <main> -
+  // no explanation and no way out. And they reach it by pressing `מה שנרשם`, the button the
+  // declaration screen offers them. The `חלקך 0₪` defect this state was written to remove,
+  // surviving one case over. The guidance is true whenever nothing has been split, full stop.
+  const nothingSplitYet = totals.shareAgorot === 0;
 
   return (
     <AppShell>
@@ -113,7 +119,13 @@ export default function MyRecordPage() {
               <Component label="נרשם" agorot={totals.recordedAgorot} />
             </div>
             <p style={{ marginTop: "var(--sp-3)" }}>עדיין לא חולקה אף הוצאה, ולכן אין עדיין חלק משלכם להציג.</p>
+            {/* The next step exists now (the door on /dashboard/spending), so this says it. It does
+                NOT say "pick one from the list below": that list still shows only expenses that
+                already HAVE a split, so it is still empty in this exact state. Restoring the
+                sentence with its original destination would have re-created the dead end with
+                better grammar. `וגם ההעברות` stays OUT - SETTLE is still 0 on the live process. */}
             <p className="muted">ההוצאות ממשיכות להירשם כרגיל. הרשימה שלמטה מציגה הוצאות שכבר נקבעה בהן חלוקה, ולכן היא ריקה כרגע.</p>
+            <p>כדי לחלק הוצאה, פותחים אותה מתוך <Link href="/dashboard/spending">הוצאות החודש</Link> וקובעים בה את היחס. אחרי החלוקה הראשונה יופיע כאן גם החלק שלכם.</p>
           </>
         ) : (
           <div className="grid two">
