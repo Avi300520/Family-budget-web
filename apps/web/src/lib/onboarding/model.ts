@@ -420,9 +420,20 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
         // so `f.key` would have made every brand-new custom line arrive with a CLIENT-chosen
         // identity that the server would then persist. Raised by a cold review of stage 1.
         //
-        // NOTE - this half is inert on its own. Until this stage `fixedExpenseInputSchema`
-        // destructured `id` out in a `z.preprocess` before zod ever saw it, so the field was
-        // dropped one layer earlier. Both halves shipped together.
+        // 🔴 **THIS IS NO LONGER INERT, AND THE SENTENCE THAT USED TO SIT HERE SAID IT WAS.**
+        // `R-2` caught it. The old note read *"this half is inert on its own ... both halves
+        // shipped together"*, which was true when written and is false now: the BACKEND half is
+        // DEPLOYED (`fixedExpenseInputSchema` accepts `id` at `packages/validation/src/index.ts`,
+        // and `6d48240` is an ancestor of the live `41680ca`), while this frontend half is not
+        // merged. They did not ship together and they are not shipping together.
+        //
+        // ⚠️ SO THIS IS THE ONE SEPACCT-BRANCH CHANGE THAT ALTERS LIVE BEHAVIOUR WITH
+        // `NEXT_PUBLIC_SEPACCT_UI` UNSET, AND IT IS REACHABLE TODAY. Any owner or admin re-saving
+        // the wizard through `?mode=edit` posts a key `origin/main` never posted, and the deployed
+        // server acts on it (`normalizeFinancialBaseline`: `supplied ?? randomUUID()`). The effect
+        // is the intended fix - custom lines keep their uuid instead of orphaning their price
+        // history every save - but it is a behavioural difference from `origin/main`, not a
+        // no-op, and the dormancy claim has to name it rather than assume it away.
         ...(f.serverId ? { id: f.serverId } : {}),
         sourcePresetId: f.sourcePresetId,
         isCustom: f.isCustom,
