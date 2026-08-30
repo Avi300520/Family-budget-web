@@ -228,7 +228,20 @@ export default function HouseholdSettingsPage() {
   }
 
   const baseline = household?.financialBaseline;
-  const incomeMode = baseline?.budget?.mode === "income";
+  // ── SEPACCT `AMENDMENT_16` §A60 — **A LABEL THAT NO LONGER DESCRIBES ITS NUMBER IS THE SAME
+  //    DEFECT AS A REFUSAL THAT LOOKS LIKE SUCCESS.** `R-2` found this after the arming.
+  //
+  // Under separate accounts the server DELETES `budget.income` from every read and marks the
+  // document `incomeRedacted`. It deliberately leaves `budget.mode` alone — the mode is how the
+  // household set its budget up, not a claim about what is readable — so `mode === "income"` stays
+  // true while the figure is gone, and the `??` below then fell through to `monthlyBudgetAmount`.
+  // The page went on rendering "הכנסה חודשית נטו" over the MANAGED BUDGET: measured ₪20,000 →
+  // ₪8,000 with no notice, and `פנוי לניהול` wrong by the same substitution.
+  //
+  // 🔑 Reading the mark makes the page tell the truth with no new copy: a redacted household is
+  // rendered exactly as a budget-mode household, because that is what its readable figures ARE.
+  const incomeRedacted = baseline?.budget?.incomeRedacted === true;
+  const incomeMode = baseline?.budget?.mode === "income" && !incomeRedacted;
   const income = baseline?.budget?.income ?? household?.monthlyBudgetAmount ?? 0;
   const fixedMonthly = baseline ? totalMonthlyFixed(baseline.fixedExpenses) : 0;
   const available = Math.max(0, income - fixedMonthly);
@@ -293,6 +306,12 @@ export default function HouseholdSettingsPage() {
       <section className="panel" style={{ maxWidth: 480, marginBottom: 16 }}>
         {baseline ? (
           <>
+            {/* §A60: say that a figure is being withheld rather than quietly showing another one. */}
+            {incomeRedacted && (
+              <p className="status" style={{ display: "block", marginBottom: 14 }}>
+                כשהחשבונות בבית מנוהלים בנפרד, אין הכנסה משותפת להציג כאן. ההכנסה של כל אחד פרטית ונשמרת אצלו.
+              </p>
+            )}
             <div className="grid three" style={{ marginBottom: 18 }}>
               <StatTile label={incomeMode ? "הכנסה" : "תקציב"} value={nis(income)} />
               <StatTile label="הוצאות קבועות" value={nis(fixedMonthly)} minus sub={`${activeFixed.length} חשבונות`} />

@@ -69,6 +69,9 @@ export default function CategoryBudgetsPage() {
 
   const [householdId, setHouseholdId] = useState<string>();
   const [income, setIncome] = useState<number | null>(null);
+  // SEPACCT §A60: the income is not "unknown", it is WITHHELD while the accounts are separate.
+  // The distinction is the whole ruling, so the tile says which one it is.
+  const [incomeRedacted, setIncomeRedacted] = useState(false);
   // Server-loaded caps (category → monthlyLimit) — the diff baseline for save.
   const [server, setServer] = useState<Record<string, number>>({});
   // Local row state: a string (incl. "") = capped/input mode; null/absent = uncapped.
@@ -110,8 +113,16 @@ export default function CategoryBudgetsPage() {
         const { household } = await api.currentHousehold();
         if (cancelled) return;
         setHouseholdId(household.id);
-        const inc = household.financialBaseline?.budget?.income ?? household.monthlyBudgetAmount;
+        // ── SEPACCT `AMENDMENT_16` §A60 (`R-2`) — **DO NOT SUBSTITUTE THE MANAGED BUDGET FOR A
+        //    REDACTED INCOME.** Under separate accounts the server deletes `budget.income` and
+        //    marks the document; without this check the `??` fell through and every figure on this
+        //    page labelled "הכנסה" — the ceiling tile, "% מההכנסה" on each cap, and the
+        //    over-income warning — was silently computed against the MANAGED BUDGET instead.
+        //    `null` is the page's own "not known", and it already renders that honestly.
+        const redacted = household.financialBaseline?.budget?.incomeRedacted === true;
+        const inc = redacted ? null : (household.financialBaseline?.budget?.income ?? household.monthlyBudgetAmount);
         setIncome(typeof inc === "number" ? inc : null);
+        setIncomeRedacted(redacted);
         const { budgets } = await api.categoryBudgets(household.id);
         if (cancelled) return;
         seed(budgets);
@@ -248,8 +259,13 @@ export default function CategoryBudgetsPage() {
 
       {/* Ceiling summary — income vs. total caps */}
       <section className="panel" style={{ marginBottom: "var(--sp-5)" }}>
+        {incomeRedacted && (
+          <p className="status" style={{ display: "block", marginBottom: "var(--sp-4)" }}>
+            כשהחשבונות בבית מנוהלים בנפרד, אין הכנסה משותפת להשוות אליה. התקרות עצמן עובדות כרגיל.
+          </p>
+        )}
         <div className="grid three">
-          <StatTile label="הכנסה חודשית" value={incomeKnown ? nis(inc) : "לא הוגדר"} />
+          <StatTile label="הכנסה חודשית" value={incomeKnown ? nis(inc) : incomeRedacted ? "פרטית" : "לא הוגדר"} />
           <StatTile
             label="סך התקרות"
             value={nis(allocated)}
