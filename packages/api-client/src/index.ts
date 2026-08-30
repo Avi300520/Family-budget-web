@@ -215,7 +215,23 @@ export function createApiClient(options: ApiClientOptions) {
       // budget; if a baseline is sent its budget.managedMonthlyBudget MUST equal it.
       baseline?: OnboardingBaselineRequest;
     }) =>
-      request<{ user: User; household: Household }>("/api/v1/onboarding/complete", {
+      request<{
+        user: User;
+        household: Household;
+        /**
+         * `AMENDMENT_16` §A60 — **THE SAVE LANDED AND `baseline.budget.income` DID NOT.**
+         *
+         * An arranged household cannot set the shared income; the rest of the whole-document write
+         * is stored as asked. Present (and `true`) ONLY when an `income` was actually sent and
+         * actually dropped — omitted otherwise, so the response is unchanged for every household
+         * that is not under separate accounts.
+         *
+         * ⚠️ The client must NOT re-derive this from the returned household's redaction mark: a
+         * household that declares in this same save is arranged in the response and was not in the
+         * request, and that inference fires on every declaration. Read this key.
+         */
+        incomeRefused?: boolean;
+      }>("/api/v1/onboarding/complete", {
         method: "POST",
         body: JSON.stringify(body)
       }),

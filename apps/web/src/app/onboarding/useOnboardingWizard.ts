@@ -176,11 +176,15 @@ export function useOnboardingWizard(): WizardController {
       const saved = await api.completeOnboarding(payload);
       // SEPACCT §A60 — the save landed, and one field of it may not have. This happens when the
       // arrangement was declared between our prefill and this POST (a partner in WhatsApp, another
-      // tab): the income we sent was refused and the response came back redacted. Say so ON THE
+      // tab): the income we sent was dropped, and the SERVER says so on the response. Say it ON THE
       // STEP WHERE THEY TYPED IT, and adopt the redaction so the next save carries the mark rather
       // than rebuilding a zero over the stored figure. Deliberately does NOT navigate away — in
       // edit mode a `replace("/dashboard")` here would be the silence this ruling forbids.
-      const refused = incomeRefusedNotice(payload, saved.household);
+      //
+      // ⚠️ `incomeRefused` is the SERVER's own answer and this must never go back to inferring one
+      // from the returned household: a save that DECLARES the arrangement is redacted in its own
+      // response and refused nothing, and `R-1` measured that inference firing on 100% of them.
+      const refused = incomeRefusedNotice(saved);
       if (refused) {
         setState((s) => ({ ...s, incomeRedacted: true, income: "" }));
         setNotice(refused);

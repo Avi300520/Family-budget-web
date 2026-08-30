@@ -230,6 +230,18 @@ The frontend can persist `separateAccounts` in onboarding, but cannot truthfully
 split until a second adult exists. Either persist a pending ratio explicitly or apply the selected
 ratio atomically when the second adult joins; do not invent a placeholder UUID.
 
+> **RESOLVED 2026-08-30 by `SEPACCT_SPEC_AMENDMENT_16` §A60, in the third direction: onboarding no
+> longer persists it.** `R-1` measured both halves of the hazard above. Turning the arrangement OFF
+> from the wizard was impossible (`state.separateAccounts || undefined` drops a `false`, so the save
+> returned `200` and changed nothing), and turning it ON landed an answer with no
+> `separateAccountsDeclaredAt` — which the income strip honours and the arrangement route does not,
+> so `/settings/separate-accounts` reported "joint" while every member's income was hidden, and the
+> household held an arrangement the announcing `PUT` would have refused for exactly the reason R4
+> gives. `buildOnboardingPayload` now omits `profile.separateAccounts` entirely;
+> `carrySeparateAccounts` then carries the stored answer forward in both directions, so the
+> whole-document write cannot change the arrangement at all. The onboarding step asks the question
+> and names `/settings/separate-accounts`, which validates the split, mints the stamp and announces.
+
 ## WhatsApp turn sequence
 
 1. Ask: `האם אתם מפרידים כספים?`

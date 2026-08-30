@@ -109,27 +109,30 @@ export function ProfileStep({ state, set }: StepProps) {
 }
 
 // ── Budget cycle ─────────────────────────────────────────────────────────────────
-export function SeparateAccountsStep({ state, set }: StepProps) {
-  const eligible = state.adults >= 2;
+// ── SEPACCT `AMENDMENT_16` §A60 — THIS STEP TELLS THE HOUSEHOLD WHERE THE ANSWER IS MADE ──────
+//
+// It used to offer two cards and write `state.separateAccounts`, and `buildOnboardingPayload` sent
+// it. `R-1` measured what that did: "ביחד" was a one-way door that returned `200 OK` and changed
+// nothing, and "בנפרד" landed an arrangement with no declaration stamp — hidden income on one
+// surface, "joint" on the other, no start notice, and a split the announcing route would have
+// refused. §A60's own rule is that a refusal which looks like success is worse than either
+// outcome; a CONTROL that looks like a decision and is not is the same defect one layer up.
+//
+// So the wizard asks the question and names the surface that answers it. The declaration lives on
+// `/settings/separate-accounts`, which validates the split, mints the stamp and announces itself.
+// See the long note in `buildOnboardingPayload` for why sending the boolean honestly is worse.
+export function SeparateAccountsStep({ state }: StepProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <Field label="איך הכספים מתנהלים בבית">
-        <OptionCards
-          value={state.separateAccounts ? "separate" : "together"}
-          onChange={(id) => set({ separateAccounts: id === "separate" })}
-          options={[
-            { id: "together", emoji: "🏠", title: "ביחד", sub: "הוצאות משותפות מנוהלות יחד" },
-            { id: "separate", emoji: "↔️", title: "בנפרד", sub: "כל אחד רואה את החלק שלו בהוצאה משותפת" }
-          ]}
-        />
-      </Field>
-      {state.separateAccounts && (
-        <section className="panel">
-          <h2>ברירת מחדל: חצי חצי</h2>
-          <p className="muted">אפשר לבחור יחס אחר בהגדרות. היחס המדויק נקבע אחרי ששני חברים בוגרים מצטרפים.</p>
-          {!eligible && <p className="status">נוסיף את בחירת היחס לאחר צירוף חבר בוגר נוסף.</p>}
-        </section>
-      )}
+      <section className="panel">
+        <h2>{state.separateAccounts ? "בבית הזה החשבונות מנוהלים בנפרד" : "אפשר לנהל את הכספים ביחד או בנפרד"}</h2>
+        <p className="muted">
+          בנפרד, כל אחד רואה את החלק שלו בהוצאה משותפת וההכנסה של כל אחד נשארת פרטית. ברירת המחדל היא חצי חצי, ואפשר לבחור יחס אחר.
+        </p>
+        <p className="status" style={{ display: "block" }}>
+          את ההסדר קובעים בהגדרות, אחרי שיש שני חברים בוגרים בבית. שם גם בוחרים את יחס החלוקה, וכל השינויים מוכרזים לשני הצדדים.
+        </p>
+      </section>
     </div>
   );
 }

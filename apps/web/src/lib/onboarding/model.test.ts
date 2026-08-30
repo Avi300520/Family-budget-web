@@ -484,27 +484,35 @@ test("SEPACCT A56 negative control: an UNREDACTED read still sends the figure an
   assert.equal("incomeRedacted" in b, false);
 });
 
-test("SEPACCT A60: a 200 that refused the income is reported, and only then", () => {
-  const s = createDefaultState();
-  s.displayName = "א"; s.householdName = "ב"; s.city = "ג";
-  s.budgetMode = "income"; s.income = 33000; s.managedBudget = 9000;
-  const sent = buildOnboardingPayload(s);
-  // The arrangement was declared between our prefill and this POST: the response comes back
-  // REDACTED, which is exactly the state in which the write path refused what we sent.
-  assert.equal(
-    incomeRefusedNotice(sent, { financialBaseline: { budget: { mode: "income", managedMonthlyBudget: 9000, incomeRedacted: true } } }),
-    INCOME_REFUSED_NOTICE
-  );
-  // An ordinary save says nothing.
-  assert.equal(incomeRefusedNotice(sent, { financialBaseline: { budget: { mode: "income", income: 33000, managedMonthlyBudget: 9000 } } }), null);
-  // …and a save that KNEW it was redacted sent no figure, so there is nothing to report and no
-  // nag on every subsequent save of an arranged household.
-  const redacted = buildStateFromBaseline({ financialBaseline: REDACTED_READ, monthlyBudgetAmount: 8000 }, "א");
-  redacted.householdName = "ב"; redacted.city = "ג";
-  assert.equal(
-    incomeRefusedNotice(buildOnboardingPayload(redacted), { financialBaseline: { budget: { mode: "income", managedMonthlyBudget: 8000, incomeRedacted: true } } }),
-    null
-  );
-  // A degraded save (no baseline persisted at all) is not a refusal either.
-  assert.equal(incomeRefusedNotice(sent, { financialBaseline: null }), null);
+test("SEPACCT A60: the notice reads the SERVER's answer, and never infers one from the response", () => {
+  // R-1, run 16. The first cut asked whether the RESPONSE was redacted. A household that DECLARES
+  // in the same whole-document save is arranged in the response and refused nothing - carryOwnIncome
+  // asks the state BEFORE the write. Measured over HTTP: the notice fired for 100% of households
+  // choosing separate accounts, on a money surface, in Hebrew, saying an income that HAD been
+  // stored was not - and in first run it short-circuited the completion step and kept the draft.
+  assert.equal(incomeRefusedNotice({ incomeRefused: true }), INCOME_REFUSED_NOTICE);
+  // The declaring save: the server stored the income and says so by omitting the key.
+  assert.equal(incomeRefusedNotice({}), null);
+  assert.equal(incomeRefusedNotice(undefined), null);
+  assert.equal(incomeRefusedNotice({ incomeRefused: false }), null);
+});
+
+test("SEPACCT A60: the wizard can never change the arrangement, in EITHER direction", () => {
+  // R-1, run 16, Finding 1. `separateAccounts: state.separateAccounts || undefined` made the
+  // together card a one-way door - `false || undefined` drops the key - so the card moved, the save
+  // returned 200, and the arrangement that hides every member's income stayed on. Sending the
+  // boolean honestly is worse: carrySeparateAccounts refuses it for a STAMPED household (silently)
+  // and lands an UNSTAMPED one otherwise, which /settings/separate-accounts then reports as joint
+  // while the income step says separate. The key is not sent at all, and with it absent the server
+  // carries the stored answer forward in both directions.
+  const off = createDefaultState();
+  off.displayName = "a"; off.householdName = "b"; off.city = "c"; off.managedBudget = 9000;
+  const on: WizardState = { ...off, separateAccounts: true };
+  for (const [label, st] of [["together", off], ["separate", on]] as const) {
+    const profile = buildOnboardingPayload(st).baseline.profile as Record<string, unknown>;
+    assert.equal("separateAccounts" in profile, false, `the wizard sent an arrangement answer (${label})`);
+  }
+  // Non-vacuity: the rest of the profile is still built from the same state, so the assertions
+  // above are not green merely because `profile` came back empty.
+  assert.equal((buildOnboardingPayload(on).baseline.profile as Record<string, unknown>).type, "family");
 });

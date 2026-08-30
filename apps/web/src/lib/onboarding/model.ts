@@ -342,8 +342,32 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
       kids: state.kids,
       kidAges: state.kids > 0 ? state.kidAges : [],
       region: state.city.trim() || undefined,
-      cars: state.cars,
-      separateAccounts: state.separateAccounts || undefined
+      cars: state.cars
+      // ── SEPACCT `AMENDMENT_16` §A60 — **THE WIZARD ASKS; IT DOES NOT DECIDE.**
+      //    `separateAccounts` IS DELIBERATELY NOT SENT, AND `R-1` MEASURED BOTH REASONS.
+      //
+      // It used to send `state.separateAccounts || undefined`, which is a one-way door in the most
+      // literal sense: `false || undefined` drops the key, so the wizard could turn an arrangement
+      // ON and was PHYSICALLY INCAPABLE of turning it off. Clicking "ביחד" and saving returned
+      // `200 OK`, moved the card, and changed nothing — the exact silent refusal §A60 forbids, on
+      // the setting that hides every member's income and re-attributes every shared expense.
+      //
+      // And sending the boolean honestly is WORSE, not better. `carrySeparateAccounts` makes a
+      // STAMPED household's stored answer win, so `false` would still be refused — silently — for
+      // exactly the households that have really declared. Where it is NOT refused it lands an
+      // UNSTAMPED answer (`AR-5`): the income strip fires on the raw boolean while the arrangement
+      // route reports `sepacctDeclared`, which needs the stamp — so `/settings/separate-accounts`
+      // says the accounts are joint in the same second this wizard's income step says they are
+      // separate, no start notice fires, and the household holds an arrangement the `PUT` would
+      // have REJECTED (no second adult, no validated split). The wizard cannot mint a declaration
+      // instant and must not pretend to.
+      //
+      // 🔑 **THE ARRANGEMENT HAS A SURFACE AND THIS IS NOT IT**: `/settings/separate-accounts`
+      // posts the announcing `PUT`, which validates the split, refuses a child or a non-member,
+      // mints the stamp and fires the start notice. With the key ABSENT, `carrySeparateAccounts`
+      // carries the stored answer forward in BOTH directions, so this whole-document write cannot
+      // change the arrangement at all — which is the property. The step now says where the answer
+      // is made instead of offering a control that cannot make it.
     },
     cycle: {
       basis: state.basis,
@@ -437,22 +461,26 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
  * `IncomeStep` already prevents the common case: a read that came back marked renders no income
  * input, and `buildOnboardingPayload` then sends no figure. This closes the one the client cannot
  * prevent — **the arrangement was declared between our read and our save** (a partner in WhatsApp,
- * a second tab). We sent a figure believing it writable; the response comes back REDACTED, which
- * is exactly the state in which the write path refuses. Returns the sentence to show, or null.
+ * a second tab). We sent a figure believing it writable and the server dropped it.
  *
- * ⚠️ It asks the RESPONSE, never the request, and never a stored/sent comparison: under the
- * arrangement the response carries no `income` to compare against — that is the whole point of it.
+ * 🔴 **IT READS THE SERVER'S OWN ANSWER (`incomeRefused`) AND MUST NOT INFER ONE. `R-1` MEASURED
+ * WHAT INFERRING COSTS.** The first cut asked whether the RESPONSE was redacted — which is a
+ * different question from *was the value I sent dropped*, and the two disagree in exactly one case
+ * that is not a race: **the save that declares the arrangement itself.** `carryOwnIncome` refuses
+ * on the state BEFORE the write, and a household that declares in the same whole-document save is
+ * arranged AFTER it. So the notice fired for **every** household that chose "בנפרד", first run and
+ * edit alike, telling them in Hebrew on a money surface that an income which HAD been stored was
+ * not — and in first run it also short-circuited the completion step and left the draft behind.
+ *
+ * 🔑 **A refusal signal that fires on non-refusals is worse than no signal: it trains people to
+ * dismiss the one that means something.** The server now reports the refusal it performed, from
+ * the one predicate that knows (`ownIncomeWriteRefused`, asked of the PRIOR household).
  */
 export const INCOME_REFUSED_NOTICE =
-  "השאר נשמר. ההכנסה לא עודכנה: בינתיים הוגדר בבית שהחשבונות מנוהלים בנפרד, ואז אין הכנסה משותפת לשמור. ההכנסה של כל אחד פרטית ונשמרת אצלו.";
+  "השאר נשמר. ההכנסה לא נשמרה: בבית הזה החשבונות מנוהלים בנפרד, ואין הכנסה משותפת לשמור. ההכנסה של כל אחד פרטית ונשמרת אצלו.";
 
-export function incomeRefusedNotice(sent: OnboardingPayload, servedHousehold: unknown): string | null {
-  const sentBudget = sent.baseline?.budget as { income?: unknown } | undefined;
-  // We sent no figure (an already-marked read, or no baseline at all) — nothing was refused.
-  if (!sentBudget || !("income" in sentBudget)) return null;
-  const back = (servedHousehold as { financialBaseline?: { budget?: { incomeRedacted?: unknown } } | null } | undefined)
-    ?.financialBaseline?.budget;
-  return back?.incomeRedacted === true ? INCOME_REFUSED_NOTICE : null;
+export function incomeRefusedNotice(saved: { incomeRefused?: boolean } | undefined): string | null {
+  return saved?.incomeRefused === true ? INCOME_REFUSED_NOTICE : null;
 }
 
 // ── Sub-budget auto-split (round to ₪50, last bucket absorbs remainder) ──────────
@@ -585,9 +613,12 @@ export function coerceDraftState(raw: unknown): WizardState | null {
   s.incomeCount = finiteNumber(raw.incomeCount, s.incomeCount);
   if (inEnum(raw.budgetMode, BUDGET_MODES)) s.budgetMode = raw.budgetMode;
   s.income = numberOrEmpty(raw.income);
-  // Drafts are first-run only (edit mode deliberately never sets `userIdRef`, so it neither saves
-  // nor restores one), so today this can only ever be `false` — carried anyway because the field it
-  // guards is a stored income, and a silently dropped `true` is how that figure gets destroyed.
+  // Carried because `redactDraftForStorage` spreads the whole state, so this flag really does
+  // reach `localStorage` and a silently dropped `true` is how a stored income gets destroyed.
+  // ⚠️ The first cut of this comment claimed the value "can only ever be `false`" on the grounds
+  // that drafts are first-run only. `R-1` was right that the reason was wrong even where the line
+  // was harmless: the refusal branch in `useOnboardingWizard` sets it, and stating a safety case
+  // that does not hold is how the next reader deletes the line.
   if (typeof raw.incomeRedacted === "boolean") s.incomeRedacted = raw.incomeRedacted;
   s.managedBudget = numberOrEmpty(raw.managedBudget);
   if (typeof raw.managedTouched === "boolean") s.managedTouched = raw.managedTouched;
