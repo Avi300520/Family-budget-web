@@ -81,7 +81,9 @@ const GROUPS: SettingGroup[] = [
       {
         href: "/settings/separate-accounts",
         title: "הפרדת כספים",
-        description: "בחירה איך לחלק הוצאות משותפות בין שני חברים בוגרים.",
+        // 2d — the hub is where an adult who has heard the product supports this has to FIND it.
+        // The old description named the ratio, which is the second question; this names the thing.
+        description: "ניהול כספים בנפרד: כל אחד רואה את החלק שלו בהוצאה משותפת וההכנסה נשארת פרטית.",
         icon: Split,
         tint: "plum",
         // Dormant with the rest of SEPACCT: no card while the flag is off, so the hub never

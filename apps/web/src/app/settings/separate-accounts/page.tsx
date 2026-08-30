@@ -16,6 +16,58 @@ const TITLE = "הפרדת כספים";
 /** §1 — `displayName` may be "". */
 const nameOf = (displayName: string) => displayName.trim() || "חבר/ה";
 
+/**
+ * ── BRIEF 2c + 2d — WHAT DECLARING ACTUALLY DOES, AND NOTHING ELSE. ──────────────────────────
+ *
+ * The wizard no longer declares, so THIS is the only door into the arrangement, and until now it
+ * opened on a bare checkbox: a person could tick it without being told a single consequence, and
+ * the one consequence it did state afterwards was false.
+ *
+ * ONE list, rendered TWICE — before the box is ticked, so nobody agrees to something they were not
+ * told, and again after the household has declared, so the surface they declared on shows what
+ * changed. The second rendering is the whole of 2c: the arrangement's only outward evidence is the
+ * weekly summary, that summary is a SUNDAY fan-out, and a family that declared on a Monday would
+ * otherwise watch a product that behaves identically for six days after being told it changed.
+ *
+ * 🔴 EVERY CLAUSE MEASURED AGAINST THE DEPLOYED BACKEND (`41680ca`), NOT AGAINST THE SPEC:
+ *   1. `stripSharedIncomeUnderSeparateAccounts` keys on the raw arrangement and deletes
+ *      `budget.income` from EVERY read; `carryOwnIncome` carries the STORED key back verbatim on a
+ *      refused write, so "not deleted, only hidden" is true and reversible — turning the
+ *      arrangement off un-strips the same figure.
+ *   2. `F-3`, and it is still the sharpest thing on this screen. `profile.defaultSplit` is written
+ *      by this route and read by exactly ONE surface — the arrangement DTO this page renders.
+ *      `flags.ts` says it plainly: *"Stage 1 stores them and nothing reads them."* The line this
+ *      list replaced promised *"new shared expenses will be split according to the ratio below"*,
+ *      which is the same false promise `F-3` already took out of the WhatsApp notice once.
+ *   3. `apps/workers/src/index.ts` — `if (now.getUTCDay() !== 0) return;`, 06:00–10:00 UTC. Sunday,
+ *      and no other day. So the notice's one true promise is up to six days from being visible.
+ *   4. The fan-out at `household-routes.ts` skips `peer.userId === auth.user.id`: **the actor is
+ *      excluded.** "Both sides are notified" — which the onboarding step used to say — is false for
+ *      the one person reading this screen.
+ */
+const WHAT_CHANGES: ReadonlyArray<string> = [
+  "ההכנסה המשותפת מפסיקה להופיע במסכי הבית. הסכום שכבר נשמר אינו נמחק, הוא רק מפסיק להיות מוצג, וחוזר אם מכבים את ההסדר.",
+  "מכאן כל אחד שומר את ההכנסה שלו בעמוד ״ההכנסה שלי״, והיא נראית רק לו.",
+  // `R-1` — the second sentence is the load-bearing one and it stays; the first used to name the
+  // expense page as where a split is set, which no reader can currently reach. Stated as a fact
+  // about the mechanism, not as an instruction to go and do it.
+  "שום הוצאה לא מתחלקת מעצמה, גם לא לפי היחס שנקבע כאן. חלוקה נקבעת על כל הוצאה בנפרד.",
+  "הסיכום השבועי שמגיע בוואטסאפ יציג רק את ההוצאות שלכם. הוא נשלח בימי ראשון, אז זה ייראה בפעם הבאה שהוא מגיע.",
+  "בן או בת הזוג יקבלו הודעה בוואטסאפ על ההפעלה ועל הכיבוי. אתם לא מקבלים אותה, כי אתם עושים את השינוי כאן."
+];
+
+function WhatChanges({ heading, lead }: { heading: string; lead: string }) {
+  return (
+    <section className="panel" style={{ maxWidth: 680, marginTop: "var(--sp-4)" }}>
+      <h2>{heading}</h2>
+      <p className="muted">{lead}</p>
+      <ul style={{ margin: 0, paddingInlineStart: "1.2em", display: "grid", gap: "var(--sp-2)" }}>
+        {WHAT_CHANGES.map((line) => <li key={line}>{line}</li>)}
+      </ul>
+    </section>
+  );
+}
+
 export default function SeparateAccountsSettingsPage() {
   // Dormant until armed: the route is registered and renders as absent, exactly as the API does.
   if (!SEPACCT_UI_ENABLED) notFound();
@@ -91,6 +143,9 @@ export default function SeparateAccountsSettingsPage() {
   const setEnabled = (separateAccounts: boolean) => setData({ ...data, separateAccounts });
 
   const blocked = data.separateAccounts && !pair;
+  // 2c — "מה השתנה" is a claim about the STORED arrangement, so it needs the server's own stamp and
+  // not the checkbox: an unsaved tick would otherwise announce a change that has not happened.
+  const declared = data.separateAccounts && Boolean(declaredAt);
 
   const save = async () => {
     if (saving || blocked) return;
@@ -117,6 +172,9 @@ export default function SeparateAccountsSettingsPage() {
       <h1 className="page-title">{TITLE}</h1>
       <section className="panel" style={{ maxWidth: 680 }}>
         <h2>ההסדר של הבית</h2>
+        {/* 2d — the entry point. This is the ONLY place a household can start, so the question is
+            answered here before the control is offered, not after it is used. */}
+        <p>בהסדר הזה כל אחד רואה את החלק שלו בהוצאה משותפת, וההכנסה של כל אחד נשארת פרטית.</p>
         <p>
           <label>
             <input type="checkbox" checked={data.separateAccounts} onChange={(event) => setEnabled(event.target.checked)} />
@@ -124,14 +182,25 @@ export default function SeparateAccountsSettingsPage() {
           </label>
         </p>
         {declaredAt && <p className="muted">{"ההסדר נרשם ב־"}<bdi dir="ltr">{declaredAt}</bdi>.</p>}
-        {data.separateAccounts
-          ? <p className="muted">הוצאות משותפות חדשות ייחלקו לפי היחס שלמטה.</p>
-          : <p className="status">כיבוי עוצר את החלוקה של הוצאות חדשות. הוצאות שכבר חולקו נשארות כפי שנרשמו, וגם התאריך שבו ההסדר נרשם נשמר. אפשר להפעיל שוב בכל עת.</p>}
+        {/* 🔴 `F-3` — the line that stood here said "new shared expenses will be split according to
+            the ratio below". Nothing in this product does that, and the ratio is stored and read by
+            nobody. The consequences now live in one measured list, in BOTH states. */}
+        {!data.separateAccounts && (
+          <p className="status">כיבוי עוצר את היכולת לקבוע חלוקה על הוצאות חדשות. הוצאות שכבר חולקו נשארות כפי שנרשמו, וגם התאריך שבו ההסדר נרשם נשמר. אפשר להפעיל שוב בכל עת.</p>
+        )}
       </section>
+
+      {/* 2c — after declaring, the surface they declared on says what changed. Before declaring,
+          the same list is what they are agreeing to. The heading is the only difference. */}
+      {declared
+        ? <WhatChanges heading="מה השתנה" lead="ההסדר פעיל. אלה הדברים שהשתנו בפועל, ומתי כל אחד מהם נראה." />
+        : <WhatChanges heading="מה קורה כשמפעילים" lead="כדאי לקרוא לפני שמסמנים. אלה כל השינויים, ואין אחרים." />}
 
       <section className="panel" style={{ maxWidth: 680, marginTop: "var(--sp-4)" }}>
         <h2>איך מחלקים הוצאות משותפות</h2>
-        <p className="muted">החלוקה חלה על הוצאות חדשות בלבד. הוצאה שכבר חולקה נשארת כפי שנרשמה.</p>
+        {/* `F-3` again: this ratio is a DEFAULT that no allocator reads. Saying it "applies to new
+            expenses" is the same promise, one panel down, and it was equally untrue. */}
+        <p className="muted">היחס נשמר כברירת המחדל של הבית. הוא אינו מוחל מעצמו על אף הוצאה, וכל הוצאה נחלקת בנפרד.</p>
         {first && second
           ? <SplitControl
               first={{ userId: first.userId, displayName: nameOf(first.displayName) }}
@@ -153,11 +222,17 @@ export default function SeparateAccountsSettingsPage() {
         </div>
       </section>
 
-      <section className="panel" style={{ maxWidth: 680, marginTop: "var(--sp-4)" }}>
-        <h2>כך נשאל בוואטסאפ</h2>
-        <p>״האם אתם מפרידים כספים?״</p>
-        <p className="muted">אם כן: ״איך לחלק הוצאות משותפות? חצי חצי, או יחס אחר?״</p>
-      </section>
+      {/* 🔴 `R-1` — A PANEL HEADED "כך נשאל בוואטסאפ" STOOD HERE, QUOTING TWO QUESTIONS THE BOT
+          ASKS. IT ASKS NEITHER. `grep -rn "מפרידים כספים\|הפרדת כספים" apps/api/src` returns
+          nothing, and the complete set of sepacct message builders in `messages.ts` is the two
+          notices, the components line, the conclusion line, the balance reply and the
+          nothing-recorded line. There is no ask, and there is no plan in this release to add one.
+
+          It cost twice over: a reader could leave this screen believing the decision would come
+          back to them in WhatsApp - so they would wait for a message that never arrives - and its
+          second line re-promised the very thing `F-3` had already been taken out of the notice
+          for, that a ratio governs how expenses divide. Deleted rather than reworded: there is no
+          true version of a panel about a conversation that does not happen. */}
     </AppShell>
   );
 }

@@ -102,8 +102,22 @@ export default function SharedExpensesPage() {
         <section className="panel" style={{ maxWidth: 680 }}>
           <h2>{merchant}</h2>
           <p className="muted"><bdi dir="ltr">{purchaseDate}</bdi>{recordedBy ? ` · נרשם על ידי ${recordedBy}` : ""}</p>
-          <p>עדיין לא נקבעה חלוקה להוצאה הזו.</p>
-          <Link className="button secondary" href="/settings/separate-accounts">לקבוע יחס ברירת מחדל</Link>
+          {/* ── BRIEF 2b — WHAT TO DO NEXT, AND IT MUST BE SOMETHING THAT ACTUALLY DOES IT. ──
+              The button here used to read "set a default ratio" and go to the arrangement screen.
+              `F-3`: `profile.defaultSplit` is stored by that screen and read by no allocator —
+              `flags.ts`, *"Stage 1 stores them and nothing reads them"* — so following it would
+              change nothing about THIS expense and the reader would come back to the same page.
+              An empty state that points at a no-op is worse than one that points at nothing. */}
+          {/* `R-1` STOP - see the long note in `my-record/page.tsx`. This branch is above
+              `SplitControl`, so the page cannot create the first split, and the sentence that
+              stood here told the reader to come back and set the ratio: it would return them to
+              this identical page. Both this and the "set a default ratio" button it replaced
+              pointed at a no-op. What is left is only what is true in either ruling. */}
+          <p>עדיין לא נקבעה חלוקה להוצאה הזו, ולכן היא רשומה במלואה על מי שרשם אותה.</p>
+          <div className="row">
+            <Link className="button secondary" href="/my-record">חזרה למה שנרשם</Link>
+            <Link className="button secondary" href="/settings/separate-accounts">הגדרות ההסדר</Link>
+          </div>
         </section>
       </AppShell>
     );

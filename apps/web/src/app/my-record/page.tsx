@@ -63,6 +63,39 @@ export default function MyRecordPage() {
 
   const windowOpenedAt = heDate(totals.windowOpenedAt);
 
+  // ── BRIEF 2b — `חלקך 0₪` IS ARITHMETICALLY TRUE AND IS NOT AN ANSWER TO THE QUESTION ASKED. ──
+  //
+  // `shareAgorot` is all-history, so a zero here means no split anywhere has ever given this member
+  // a share — i.e. NOTHING HAS BEEN SPLIT YET. That is the first state every declared household is
+  // in, and rendering it as three ₪0.00 tiles beside a real "נרשם" figure reads as a broken page,
+  // not as an empty one. `handlers.ts` says it about its own copy: "arithmetically true and
+  // semantically nonsense".
+  //
+  // So the first state gets an EMPTY STATE — the one number that means something, and what to do
+  // next — and the four components return the moment there is anything to be a component of.
+  // ══ `R-1` STOP, RECORDED IN CODE BECAUSE THE COPY CANNOT CLOSE IT ═══════════════════════════
+  //
+  // 🔴 **NO USER OF THIS PRODUCT CAN CREATE THE FIRST SPLIT OF ANY EXPENSE.** Verified end to end:
+  //   1. `listMySepacctComponents` (both stores) maps each purchase to `mine ? {...} : undefined`
+  //      and filters, where `mine` is the viewer's row in an EXISTING allocation - and
+  //      `resolveAllocation` returns `undefined` for zero rows. A household that has split nothing
+  //      gets `entries: []`.
+  //   2. That list is the ONLY producer of a `purchaseId` in this repository - one link,
+  //      `my-record/page.tsx`. No dashboard, activity or budget surface exposes one.
+  //   3. `/shared-expenses` returns early on `allocation === null`, ABOVE `SplitControl`.
+  //   4. Turning the arrangement on writes no split rows: `profile.defaultSplit` is read by nobody
+  //      (`packages/db/src/flags.ts` - *"Stage 1 stores them and nothing reads them"*).
+  //
+  // The capability bootstraps only from a state it cannot reach. Closing it needs either a new
+  // backend projection (household purchases with NO split yet) or a product ruling that per-expense
+  // splitting is not offered in this release. Both are owner calls and the backend is read-only.
+  //
+  // ⚠️ WHAT IS FIXED HERE IS THE MISDIRECTION ONLY, AND DELIBERATELY NOT MORE. Copy that instructed
+  // "pick an expense from the list below and set its ratio" pointed at a list that is guaranteed
+  // empty in exactly that state. Every sentence below is true under BOTH candidate rulings, so it
+  // is safe to ship ahead of one; nothing here claims splitting is available, or that it is not.
+  const nothingSplitYet = totals.shareAgorot === 0 && totals.recordedAgorot > 0;
+
   return (
     <AppShell>
       <h1 className="page-title">{TITLE}</h1>
@@ -74,12 +107,32 @@ export default function MyRecordPage() {
         {windowOpenedAt
           ? <p className="status">מוצג מ־<bdi dir="ltr">{windowOpenedAt}</bdi>. מה שקדם לתאריך הזה אינו נכלל ברכיבים למטה.</p>
           : <p className="muted">כולל את כל ההיסטוריה.</p>}
-        <div className="grid two">
-          <Component label="נרשם" agorot={totals.recordedAgorot} />
-          <Component label="החלק שלי" agorot={totals.shareAgorot} />
-          <Component label="שולם ממני" agorot={totals.settledOutAgorot} />
-          <Component label="שולם אליי" agorot={totals.settledInAgorot} />
-        </div>
+        {nothingSplitYet ? (
+          <>
+            <div className="grid two">
+              <Component label="נרשם" agorot={totals.recordedAgorot} />
+            </div>
+            <p style={{ marginTop: "var(--sp-3)" }}>עדיין לא חולקה אף הוצאה, ולכן אין עדיין חלק משלכם להציג.</p>
+            <p className="muted">ההוצאות ממשיכות להירשם כרגיל. הרשימה שלמטה מציגה הוצאות שכבר נקבעה בהן חלוקה, ולכן היא ריקה כרגע.</p>
+          </>
+        ) : (
+          <div className="grid two">
+            <Component label="נרשם" agorot={totals.recordedAgorot} />
+            <Component label="החלק שלי" agorot={totals.shareAgorot} />
+            {/* `R-1` — TRANSFERS CANNOT BE RECORDED BY ANYBODY TODAY. `HOUSEHOLD_SEPARATE_ACCOUNTS_
+                SETTLE_ENABLED` reads 0 on the live process, so both routes 404 and the NLP kind is
+                never taught. Two tiles reading ₪0.00 for ever, with nothing a reader can do about
+                them, is the same `חלקך 0₪` defect one field over - so they appear only once there
+                is a transfer to show. `messages.ts` does the same thing for the same reason: it
+                appends `הועבר` only when something actually moved. */}
+            {(totals.settledOutAgorot > 0 || totals.settledInAgorot > 0) && (
+              <>
+                <Component label="שולם ממני" agorot={totals.settledOutAgorot} />
+                <Component label="שולם אליי" agorot={totals.settledInAgorot} />
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="panel" style={{ maxWidth: 680, marginTop: "var(--sp-4)" }}>

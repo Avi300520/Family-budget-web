@@ -12,6 +12,7 @@ import { api } from "../../../lib/api";
 import { redirectIfUnauthorized } from "../../../lib/authGuard";
 import { BUDGET_CATEGORIES, CAP_BUCKETS } from "../../../lib/categories";
 import { nis } from "../../../lib/format";
+import { SEPACCT_UI_ENABLED } from "../../../lib/sepacct";
 import { isHouseholdManager } from "../../../lib/settingsView";
 import { useViewer } from "../../../lib/useViewer";
 
@@ -260,8 +261,11 @@ export default function CategoryBudgetsPage() {
       {/* Ceiling summary — income vs. total caps */}
       <section className="panel" style={{ marginBottom: "var(--sp-5)" }}>
         {incomeRedacted && (
+          // 2a — same silence, second surface. The tile reads "פרטית" and, until now, nothing said
+          // whose or where. Pointer flag-gated for the same reason as on /settings/household.
           <p className="status" style={{ display: "block", marginBottom: "var(--sp-4)" }}>
-            כשהחשבונות בבית מנוהלים בנפרד, אין הכנסה משותפת להשוות אליה. התקרות עצמן עובדות כרגיל.
+            כשהחשבונות בבית מנוהלים בנפרד, אין הכנסה משותפת להשוות אליה. הסכום שנשמר קודם לא נמחק, הוא רק מפסיק להיות מוצג. התקרות עצמן עובדות כרגיל.
+            {SEPACCT_UI_ENABLED && <> ההכנסה שלכם עצמכם נשמרת ב<Link href="/my-income">ההכנסה שלי</Link>.</>}
           </p>
         )}
         <div className="grid three">
