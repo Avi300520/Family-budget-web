@@ -36,6 +36,8 @@ const arg = (name, fallback) => {
 };
 const PORT = Number(arg("port", 4999));
 let mode = arg("mode", "populated");
+/** What the wizard last posted to `/onboarding/complete`, so the walk can assert an ABSENCE. */
+let lastOnboarding = null;
 
 const HOUSEHOLD = "7bf6b573-6e69-4ec3-a6ba-8c0be3fbd9c5";
 const VIEWER = "98b1bf2e-3c99-4ca3-9a0a-7208f208bd9a";
@@ -226,7 +228,13 @@ const server = createServer(async (req, res) => {
     // The sum rule applies ONLY when the arrangement is on: turning it off with a stale or empty
     // split is accepted, and the UI must not block that.
     const sum = next.defaultSplit.reduce((t, s) => t + s.shareBp, 0);
-    if (next.separateAccounts && (next.defaultSplit.length === 0 || sum !== 10000)) return fail(res, 400, "split.invalid", "Invalid");
+    // `CC_UX_BUILD` item 4 / ruling `R-a` — THE PENDING SHAPE. A household declaring in the wizard
+    // has exactly ONE adult, so the ratio it types can only be stored as its own share with the
+    // counterpart unnamed. The route accepts one share naming the CALLER at `shareBp < 10000`,
+    // stores it, and does NOT declare. `fresh` is the mode where that household exists.
+    const pending = mode === "fresh" && next.separateAccounts && next.defaultSplit.length === 1
+      && next.defaultSplit[0].userId === VIEWER && next.defaultSplit[0].shareBp > 0 && next.defaultSplit[0].shareBp < 10000;
+    if (!pending && next.separateAccounts && (next.defaultSplit.length === 0 || sum !== 10000)) return fail(res, 400, "split.invalid", "Invalid");
     if (next.defaultSplit.some((s) => MEMBERS.find((m) => m.userId === s.userId)?.role === "limited_member")) return fail(res, 400, "split.not_a_member", "Not a member");
     config = { ...config, separateAccounts: next.separateAccounts, defaultSplit: next.defaultSplit };
     return send(res, 200, config);
@@ -293,6 +301,45 @@ const server = createServer(async (req, res) => {
       })
       .filter(Boolean);
     return send(res, 200, { entries });
+  }
+
+  // ── `CC_UX_BUILD` items 4 and 5 — the routes the WIZARD and the JOIN walk need. ──────────────
+  //
+  // These are not SEPACCT routes and are deliberately outside the `isSepacct` mode switch above:
+  // a walk that cannot complete onboarding or accept an invite cannot reach screens A, B, C or D
+  // at all, in any mode.
+
+  // The wizard's whole-document save. It answers the shape `useOnboardingWizard` reads —
+  // `{ user, household }` — and NOTHING else, because the two writes that follow it (the pending
+  // ratio and the private income) are separate routes on purpose and the walk must prove they run.
+  if (p === "/api/v1/onboarding/complete" && req.method === "POST") {
+    const payload = await readBody(req);
+    lastOnboarding = payload;
+    return send(res, 200, {
+      user: { id: VIEWER, phoneE164: "+972500000000", displayName: payload.displayName ?? "נועה", locale: "he", status: "active", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+      household: { id: HOUSEHOLD, ownerUserId: VIEWER, name: payload.householdName ?? "בית", monthlyBudgetAmount: payload.monthlyBudgetAmount ?? 0, currency: "ILS", budgetCycleDay: 1, status: "active" }
+    });
+  }
+  // What the wizard actually posted, so the walk can assert the ABSENCE of a shared income rather
+  // than only that the screen did not show a field for it.
+  if (p === "/__onboarding" && req.method === "GET") return send(res, 200, lastOnboarding ?? {});
+
+  // The invite preview and the two join doors. `joinHousehold` is the warm door and
+  // `joinHouseholdDirect` the cold one; both return `member`, which is where screen D gets the
+  // joiner's own id from (never `/me`, which is a write).
+  if (p === "/api/v1/households/join" && req.method === "GET") {
+    return send(res, 200, { invite: { id: "inv-1", householdId: HOUSEHOLD, role: "adult_member", invitedPhone: "+972500000001", expiresAt: "2030-01-01T00:00:00.000Z" }, household: { id: HOUSEHOLD, name: "בית לדוגמה" } });
+  }
+  if ((p === "/api/v1/households/join" || p === "/api/v1/households/join/direct") && req.method === "POST") {
+    // The JOINER is the partner, not the viewer: screen D is drawn for the person who did NOT
+    // configure the arrangement, and a stub that hands back the setter's id would let a wrong
+    // implementation (`shares[0]`, or "the other name") look right.
+    return send(res, 200, {
+      member: { id: "m2", householdId: HOUSEHOLD, userId: PARTNER, role: "adult_member", permissions: {}, joinedAt: "2026-08-31T00:00:00.000Z", status: "active" },
+      household: { id: HOUSEHOLD, ownerUserId: VIEWER, name: "בית לדוגמה", monthlyBudgetAmount: 12000, currency: "ILS", budgetCycleDay: 1, status: "active" },
+      user: { id: PARTNER, phoneE164: "+972500000001", displayName: "אורי", locale: "he", status: "active", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+      csrfToken: "stub-csrf"
+    });
   }
 
   return fail(res, 404, "http.not_found", "Not found");
