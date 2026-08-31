@@ -54,12 +54,40 @@ export default function OnboardingPage() {
   // ── Completion screen (preserves the existing wa.me cold-start CTA behavior) ──
   if (wizard.done) {
     const hasWhatsAppCta = Boolean(botWhatsAppLink());
+    // `CC_UX_BUILD` item 4, spec screen C — **"מי עוד בבית? בלי צד שני אין מה לחלק."**
+    //
+    // A household that answered "בנפרד" has stored a ratio naming one person, and that ratio does
+    // nothing at all until a second adult joins: the arrangement is not declared, no expense
+    // splits, and every separate-accounts surface reads as off. So this screen leads with the one
+    // action that makes the answer real, instead of the generic "add family members" CTA.
+    //
+    // ⚠️ IT LINKS TO THE INVITE SURFACE RATHER THAN CLONING IT. The spec draws a phone field here;
+    // `/settings/members` already is that field, with the country-code handling, the duplicate and
+    // limit refusals and their Hebrew. A second copy of an invite form is a second place for those
+    // refusals to be wrong, and the screen asks the same question and offers the same two answers
+    // either way. Recorded as a deviation from the drawing, not from the intent.
+    const separate = wizard.state.separateAccounts;
     return (
       <div className="login-page">
         <main id="main" className="login-box" style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}><span aria-hidden>🏠</span></div>
           <h1 className="page-title" style={{ marginBottom: 8 }}>הבית מוכן!</h1>
-          {hasWhatsAppCta ? (
+          {/* The post-completion writes report here, because this screen is where a first-time
+              household lands and the wizard footer that normally shows a notice is gone by now.
+              §A60: what did not save has to be said where the person can still act on it. */}
+          {wizard.notice && (
+            <p className="status warn" role="status" style={{ display: "block", textAlign: "start", marginBottom: 18 }}>
+              {wizard.notice}
+            </p>
+          )}
+          {separate ? (
+            <>
+              <h2 style={{ fontSize: 17, marginBottom: 6 }}>מי עוד בבית?</h2>
+              <p className="muted" style={{ marginBottom: 22 }}>
+                בלי צד שני אין מה לחלק. ההוצאות המשותפות מתחילות להתחלק ברגע שבן/בת הזוג מצטרפים.
+              </p>
+            </>
+          ) : hasWhatsAppCta ? (
             <p className="muted" style={{ marginBottom: 22 }}>
               פינגטלי עובד בוואטסאפ - שלחו לבוט הודעה ראשונה, וכל ההוצאות והקניות יתנהלו משם.
             </p>
@@ -67,8 +95,14 @@ export default function OnboardingPage() {
             <p className="muted" style={{ marginBottom: 22 }}>הצעד הבא - הוסיפו בני משפחה כדי להתחיל לעקוב יחד אחרי התקציב.</p>
           )}
           <div className="form" style={{ marginInline: "auto" }}>
+            {separate && (
+              <Link className="button" href="/settings/members" style={{ textDecoration: "none" }}>
+                <UserPlus size={18} aria-hidden />
+                שליחת הזמנה
+              </Link>
+            )}
             <WhatsAppCtaButton />
-            {wizard.householdType === "family" && (
+            {!separate && wizard.householdType === "family" && (
               <Link className={`button${hasWhatsAppCta ? " secondary" : ""}`} href="/settings/members" style={{ textDecoration: "none" }}>
                 <UserPlus size={18} aria-hidden />
                 הוסיפו בני משפחה
@@ -76,7 +110,7 @@ export default function OnboardingPage() {
             )}
             <Link className="button secondary" href="/dashboard" style={{ textDecoration: "none" }}>
               <Home size={18} aria-hidden />
-              לדשבורד
+              {separate ? "אחר כך" : "לדשבורד"}
             </Link>
           </div>
         </main>

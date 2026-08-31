@@ -157,6 +157,30 @@ export interface WizardState {
   cars: number;
   /** The household's declaration; the named default is selected after a second adult joins. */
   separateAccounts: boolean;
+  /**
+   * `CC_UX_BUILD` item 4 — THE RECORDER'S OWN SHARE, AS A PERCENTAGE, AND NOTHING ELSE.
+   *
+   * The wizard asks the ratio on the same screen as the arrangement (spec screen A, "one new
+   * screen, not two"), and at that moment the household has exactly ONE adult. `defaultSplit` is
+   * keyed by `userId`, so the counterpart cannot be named yet: what is stored is this number as the
+   * setter's own share, and the backend assigns the remainder when the second adult joins.
+   *
+   * ⚠️ `A61` — IT IS TYPED, NEVER DERIVED. There is no income-proportional option and no
+   * `splitRule`: a ratio computed from a private figure publishes that figure on every shared
+   * expense. A couple who wants 62/38 types 62.
+   */
+  separateSharePct: number | "";
+  /**
+   * `CC_UX_BUILD` item 4, spec screen B — THIS MEMBER'S OWN INCOME, PRIVATE.
+   *
+   * It is NOT part of the onboarding payload. `POST /onboarding/complete` writes the household
+   * baseline, and a per-member income is not a household fact — it goes to `PUT …/my-income` after
+   * completion, which is the only route that stores it and the only one that can read it back.
+   * Keeping it out of the baseline is also the ROOT fix for the vanishing income (`A56`): a
+   * household that answers "בנפרד" is never asked for a shared figure, so there is never a shared
+   * figure to disappear.
+   */
+  ownIncome: number | "";
   acceptTerms: boolean;
   acceptPrivacy: boolean;
   // cycle
@@ -209,6 +233,8 @@ export function createDefaultState(): WizardState {
     city: "",
     cars: 1,
     separateAccounts: false,
+    separateSharePct: 50,
+    ownIncome: "",
     // Consent is captured passively at /login (browse-wrap per the /privacy page) and the backend
     // stamps consent_terms_at/consent_privacy_at unconditionally on completeOnboarding. Seed true so
     // the legacy consent gate in validateStep('profile') and the hardcoded acceptTerms/acceptPrivacy
@@ -232,6 +258,34 @@ export function createDefaultState(): WizardState {
 }
 
 // ── Derived numbers ─────────────────────────────────────────────────────────────
+
+/**
+ * `CC_UX_BUILD` item 4 — the wizard's ratio, as the ONE share the backend can store today.
+ *
+ * At the end of onboarding the household has exactly one adult, and `defaultSplit` is keyed by
+ * `userId`, so the only thing that can be written is the setter's own share with the counterpart
+ * unnamed. `PUT /households/:id/separate-accounts` accepts exactly that shape while the household
+ * has one active adult, stores it, and does NOT declare — the declaration is minted when the second
+ * adult arrives and the remainder becomes theirs.
+ *
+ * ⚠️ **BASIS POINTS BY STRING SURGERY, NEVER `pct * 100`.** `62.5 * 100` is `6250.000000000001` in
+ * binary floating point and the wire refuses a non-integer `shareBp` with `400 split.invalid`. The
+ * same reason `agorotFromInput` exists one module over, and the same technique.
+ *
+ * Returns `null` for anything that is not a ratio a household could have meant: empty, out of
+ * range, more than two decimals, or `100` — which is not a split at all but "I pay everything", and
+ * which the pending shape explicitly excludes (`shareBp < 10000`) so that a household cannot leave
+ * onboarding having accidentally declared its partner owes nothing.
+ */
+export function pendingSplitBp(pct: number | ""): number | null {
+  if (typeof pct !== "number" || !Number.isFinite(pct)) return null;
+  const text = pct.toFixed(2);
+  const match = /^(\d+)\.(\d{2})$/.exec(text);
+  if (!match) return null;
+  const bp = Number(match[1]) * 100 + Number(match[2]);
+  if (!Number.isInteger(bp) || bp <= 0 || bp >= 10000) return null;
+  return bp;
+}
 function num(v: number | ""): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
@@ -284,6 +338,28 @@ export const STEP_ORDER: ReadonlyArray<StepKey> = ([
   "welcome", "profile", "separate", "cycle", "income", "fixed", "budget", "alerts", "done"
 ] as StepKey[]).filter((step) => step !== "separate" || process.env.NEXT_PUBLIC_SEPACCT_UI === "1");
 
+/**
+ * `CC_UX_BUILD` item 4 — THE STEPS THIS PARTICULAR HOUSEHOLD IS ASKED, in order.
+ *
+ * `STEP_ORDER` above is the full spine and stays a constant: the dormancy proof reads it, and the
+ * flag filter belongs to the build rather than to a household. This is the state-dependent view of
+ * it, and the controller indexes off THIS.
+ *
+ * > Decision tree, spec v2: `יחיד/ה` is asked nothing. `זוג`, `משפחה` and `שותפים` are asked.
+ *
+ * ⚠️ A ONE-PERSON HOUSEHOLD IS NOT ASKED HOW IT DIVIDES ITS MONEY. There is nobody to divide it
+ * with, the arrangement cannot be declared without a second adult, and asking is the seventh
+ * question in a row for a person who can only answer it one way. This is a SKIP, not a hidden
+ * control: the step is absent from the sequence, so the stepper's count is right and `back()` does
+ * not land on a screen that renders nothing.
+ *
+ * ⚠️ IT IS DERIVED FROM `STEP_ORDER`, NEVER RE-LISTED. A second hand-written array is the shape
+ * that drifts the first time a step is inserted into one of them.
+ */
+export function visibleSteps(state: Pick<WizardState, "householdType">): ReadonlyArray<StepKey> {
+  return STEP_ORDER.filter((step) => step !== "separate" || state.householdType !== "single");
+}
+
 /** Returns null when the step is valid, or a Hebrew error message when it is not. */
 export function validateStep(step: StepKey, state: WizardState): string | null {
   switch (step) {
@@ -297,6 +373,11 @@ export function validateStep(step: StepKey, state: WizardState): string | null {
       if (!state.acceptTerms || !state.acceptPrivacy) return "צריך לאשר את התנאים ואת מדיניות הפרטיות.";
       return null;
     case "income":
+      // `CC_UX_BUILD` item 4 — under separate accounts there IS no household income, so nothing can
+      // derive the managed budget and the household has to state it. The own-income field is
+      // deliberately NOT required: it is private, it is written by a different route after
+      // completion, and blocking the wizard on it would make a private figure feel compulsory.
+      if (state.separateAccounts) return num(state.managedBudget) > 0 ? null : "כתבו תקציב חודשי לניהול.";
       // Income is optional in income-mode; a managed budget is required in budget-mode.
       if (state.budgetMode === "budget" && num(state.managedBudget) <= 0) return "כתבו תקציב חודשי לניהול.";
       return null;
@@ -394,9 +475,33 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
       // `sepacctArranged(existing)` answers "no", which is a different question from "was the
       // document I am being handed derived from a redacted read". `A56-15` measured that gap and
       // this is the client side of closing it: §A60 ships the two repositories as one release.
+      // ── `CC_UX_BUILD` item 4 — **THE ROOT FIX, AND IT IS AN OMISSION RATHER THAN A HANDLER.**
+      //
+      // A household that answered "בנפרד" was never asked for a shared household income (spec
+      // screen B asks for THEIR OWN, which is private and goes to `PUT …/my-income`). So there is
+      // no shared figure in this payload at all — not `0`, not `null`, ABSENT.
+      //
+      // 🔑 THIS IS UPSTREAM OF §A56 RATHER THAN A SECOND COPY OF IT. §A56 exists because the
+      // server redacts `budget.income` from an arranged household's read and this wizard rebuilds
+      // `budget` from named fields, so the gap came back as an explicit `0` and destroyed ₪20,000.
+      // Both halves of that fix stay exactly as they are, for every household that already has a
+      // shared income. What changes is that a household declaring HERE never acquires one, so the
+      // disappearance has nothing to disappear — better than explaining it after the fact.
+      //
+      // ⚠️ **`incomeRedacted` IS TESTED FIRST, AND THE ORDER IS THE WHOLE CORRECTNESS OF THIS BLOCK.**
+      // A household that ALREADY declared and re-enters the wizard (`?mode=edit`, or a draft
+      // hydrated from a redacted read) carries BOTH marks: `separateAccounts` because it is
+      // arranged, and `incomeRedacted` because the read it was built from had `budget.income`
+      // removed. Those say different things. The second one says *the document in my hands is
+      // missing a figure that is still stored on the server*, and dropping it is what lets a save
+      // arriving after the arrangement ends overwrite ₪20,000 with nothing — the exact write §A56
+      // was written to refuse. So the MARK wins, and the omission below applies only to a household
+      // answering here for the first time, which by construction has no stored figure to protect.
       ...(state.incomeRedacted
         ? { incomeRedacted: true as const }
-        : { income: state.budgetMode === "income" ? num(state.income) : null })
+        : state.separateAccounts
+          ? {}
+          : { income: state.budgetMode === "income" ? num(state.income) : null })
     },
     fixedExpenses: state.fixed
       .filter((f) => f.on)

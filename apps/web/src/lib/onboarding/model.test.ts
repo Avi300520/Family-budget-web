@@ -5,6 +5,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  visibleSteps,
+  pendingSplitBp,
+  STEP_ORDER,
   createDefaultState,
   monthlyOf,
   totalMonthlyFixed,
@@ -515,4 +518,75 @@ test("SEPACCT A60: the wizard can never change the arrangement, in EITHER direct
   // Non-vacuity: the rest of the profile is still built from the same state, so the assertions
   // above are not green merely because `profile` came back empty.
   assert.equal((buildOnboardingPayload(on).baseline.profile as Record<string, unknown>).type, "family");
+});
+
+// ── `CC_UX_BUILD` item 4 — the wizard asks, and the answer becomes a ratio the backend can store ──
+
+test("CC_UX item 4: a יחיד/ה household is never asked how it divides money with nobody", () => {
+  const single = { householdType: "single" as const };
+  const couple = { householdType: "couple" as const };
+  // The step is only in STEP_ORDER at all when the UI flag is set; when it is, a one-person
+  // household must still not see it. Both halves asserted so the cell cannot be green because the
+  // flag happens to be unset in this process.
+  assert.equal(visibleSteps(single).includes("separate"), false);
+  assert.equal(visibleSteps(couple).includes("separate"), STEP_ORDER.includes("separate"));
+  // And nothing ELSE moved: skipping one step must not reorder or drop the other eight.
+  assert.deepEqual(
+    visibleSteps(single),
+    STEP_ORDER.filter((s) => s !== "separate"),
+    "the single-household spine is not STEP_ORDER minus one step"
+  );
+});
+
+test("CC_UX item 4: pendingSplitBp converts by string surgery and refuses what is not a ratio", () => {
+  assert.equal(pendingSplitBp(50), 5000);
+  assert.equal(pendingSplitBp(60), 6000);
+  // 🔴 THE CASE THAT BREAKS `pct * 100`: 62.5 * 100 is 6250.000000000001 in binary floating point,
+  //    and the wire refuses a non-integer shareBp with 400 split.invalid.
+  assert.equal(pendingSplitBp(62.5), 6250);
+  assert.equal(pendingSplitBp(33.33), 3333);
+  // Not a ratio: nothing typed, the whole thing, nothing at all, and out of range.
+  assert.equal(pendingSplitBp(""), null);
+  assert.equal(pendingSplitBp(100), null, "100/0 is not a split, it is 'I pay everything'");
+  assert.equal(pendingSplitBp(0), null);
+  assert.equal(pendingSplitBp(-5), null);
+  assert.equal(pendingSplitBp(120), null);
+  assert.equal(pendingSplitBp(Number.NaN), null);
+});
+
+test("CC_UX item 4: a household answering בנפרד posts NO shared income - absent, not zero", () => {
+  const s = createDefaultState();
+  s.displayName = "א"; s.householdName = "ב"; s.city = "ג";
+  s.separateAccounts = true;
+  s.budgetMode = "income"; s.income = 24000; s.managedBudget = 9000; s.ownIncome = 18000;
+  const b = buildOnboardingPayload(s).baseline.budget as Record<string, unknown>;
+  assert.equal("income" in b, false, "a separate-accounts household posted a shared household income");
+  assert.equal("incomeRedacted" in b, false, "a first-run household has no redaction to mark");
+  assert.equal(b.managedMonthlyBudget, 9000, "the managed budget is the household's either way");
+  // The own income is NOT in the baseline at all: it is per-member, private, and written by
+  // `PUT …/my-income` after completion. A household document is the wrong place for it.
+  assert.equal(JSON.stringify(buildOnboardingPayload(s)).includes("18000"), false,
+    "the private own-income figure travelled inside the household baseline");
+});
+
+test("CC_UX item 4: an ALREADY-arranged household still sends the §A56 mark, not the omission", () => {
+  // Both marks are set on this state, and they say different things. The redaction wins: this
+  // document was built from a read with `budget.income` removed, and dropping the mark is what
+  // lets a save arriving after the arrangement ends overwrite the stored figure with nothing.
+  const s = buildStateFromBaseline({ financialBaseline: REDACTED_READ, monthlyBudgetAmount: 8000 }, "אבי");
+  s.householdName = "בית"; s.city = "חיפה";
+  assert.equal(s.separateAccounts, true, "the fixture no longer sets both marks - the cell is vacuous");
+  assert.equal(s.incomeRedacted, true, "the fixture no longer sets both marks - the cell is vacuous");
+  const b = buildOnboardingPayload(s).baseline.budget as Record<string, unknown>;
+  assert.equal(b.incomeRedacted, true, "the separate-accounts omission swallowed §A56's mark");
+  assert.equal("income" in b, false);
+});
+
+test("CC_UX item 4: under separate accounts the managed budget is required, the own income is not", () => {
+  const s = createDefaultState();
+  s.separateAccounts = true;
+  s.managedBudget = ""; s.ownIncome = "";
+  assert.notEqual(validateStep("income", s), null, "a separate-accounts household got through with no budget");
+  s.managedBudget = 9000;
+  assert.equal(validateStep("income", s), null, "the own income was made compulsory - it is private and optional");
 });

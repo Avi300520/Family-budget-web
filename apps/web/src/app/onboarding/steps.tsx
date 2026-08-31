@@ -110,33 +110,91 @@ export function ProfileStep({ state, set }: StepProps) {
 }
 
 // ── Budget cycle ─────────────────────────────────────────────────────────────────
-// ── SEPACCT `AMENDMENT_16` §A60 — THIS STEP TELLS THE HOUSEHOLD WHERE THE ANSWER IS MADE ──────
+// ── SEPACCT `CC_UX_BUILD` item 4, spec screen A — **THE WIZARD ASKS, AND STILL DOES NOT DECIDE.**
 //
-// It used to offer two cards and write `state.separateAccounts`, and `buildOnboardingPayload` sent
-// it. `R-1` measured what that did: "ביחד" was a one-way door that returned `200 OK` and changed
-// nothing, and "בנפרד" landed an arrangement with no declaration stamp — hidden income on one
-// surface, "joint" on the other, no start notice, and a split the announcing route would have
-// refused. §A60's own rule is that a refusal which looks like success is worse than either
-// outcome; a CONTROL that looks like a decision and is not is the same defect one layer up.
+// §A60 turned this step read-only, and it was right to. The version before it wrote
+// `state.separateAccounts` and `buildOnboardingPayload` sent it as
+// `state.separateAccounts || undefined` — so "ביחד" was a one-way door that returned `200 OK` and
+// changed nothing, and "בנפרד" landed an arrangement with NO declaration stamp: hidden income on
+// one surface, "joint" on the other, no start notice, and a split the announcing route would have
+// refused. A control that looks like a decision and is not is §A60's own complaint one layer up.
 //
-// So the wizard asks the question and names the surface that answers it. The declaration lives on
-// `/settings/separate-accounts`, which validates the split, mints the stamp and announces itself.
-// See the long note in `buildOnboardingPayload` for why sending the boolean honestly is worse.
-export function SeparateAccountsStep({ state }: StepProps) {
+// 🔑 **THE FIX WAS NEVER "DO NOT ASK". IT WAS "DO NOT DECIDE HERE".** The control is back, and the
+// answer still does not travel in the onboarding payload — `buildOnboardingPayload`'s `profile`
+// carries no `separateAccounts` key and `model.test.ts` still pins that. What the answer does now is
+// drive one `PUT /households/:id/separate-accounts` AFTER `POST /onboarding/complete` returns,
+// which is the route that validates the split, stores the ratio and mints the stamp when it can.
+// The wizard collects; the announcing route decides. Both halves of §A60 survive.
+//
+// ⚠️ ONE SCREEN, NOT TWO. The ratio opens INLINE under the "בנפרד" card the moment it is chosen.
+// The spec's hole 5: the previous design answered "people have no attention span" by adding two
+// steps. A seventh question in a row is how a wizard gets abandoned.
+//
+// ⚠️ AND THE RATIO IS TYPED, NEVER DERIVED (`A61`). There is no "split it by income" option, and
+// there will not be one: you know your own income and you see your own share on every expense, so
+// `partner = (mine ÷ myShare) − mine` publishes the figure `member_income` exists to protect. A
+// couple who wants income-proportional computes it and types 62.
+export function SeparateAccountsStep({ state, set }: StepProps) {
+  const separate = state.separateAccounts;
+  const half = state.separateSharePct === 50;
+  const pct = typeof state.separateSharePct === "number" ? state.separateSharePct : 50;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <section className="panel">
-        <h2>{state.separateAccounts ? "בבית הזה החשבונות מנוהלים בנפרד" : "אפשר לנהל את הכספים ביחד או בנפרד"}</h2>
-        <p className="muted">
-          בנפרד, כל אחד רואה את החלק שלו בהוצאה משותפת וההכנסה של כל אחד נשארת פרטית ונראית רק לו.
-        </p>
-        {/* 🔴 The clause that stood here said "and every change is announced to both sides". The
-            fan-out in `household-routes.ts` skips `peer.userId === auth.user.id` — the person who
-            makes the change is EXCLUDED — so it was false for exactly the reader being told it. */}
-        <p className="status" style={{ display: "block" }}>
-          את ההסדר קובעים בהגדרות, בעמוד ״הפרדת כספים״, אחרי שיש שני חברים בוגרים בבית. שם גם בוחרים את יחס החלוקה, ושם כתוב בדיוק מה משתנה לפני שמסמנים.
-        </p>
-      </section>
+      <p className="muted" style={{ margin: 0 }}>אפשר לשנות בכל שלב.</p>
+      <OptionCards
+        cols={1}
+        value={separate ? "apart" : "together"}
+        onChange={(id) => set({ separateAccounts: id === "apart" })}
+        options={[
+          { id: "together", emoji: "🤝", title: "יחד", sub: "קופה אחת. רואים את אותם מספרים." },
+          { id: "apart", emoji: "🧾", title: "בנפרד", sub: "לכל אחד הכסף שלו, וההוצאות המשותפות מתחלקות ביניכם." }
+        ]}
+      />
+
+      {separate && (
+        <section className="panel" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>איך מתחלק?</h2>
+          <OptionCards
+            cols={2}
+            value={half ? "half" : "other"}
+            // Leaving "יחס אחר" seeds 60 rather than keeping 50: a person who taps it has already
+            // said they do not want half, and a control that opens showing the answer they just
+            // rejected reads as broken.
+            onChange={(id) => set({ separateSharePct: id === "half" ? 50 : (pct === 50 ? 60 : pct) })}
+            options={[
+              { id: "half", title: "חצי חצי" },
+              { id: "other", title: "יחס אחר" }
+            ]}
+          />
+          {!half && (
+            <div className="row" style={{ gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <Field label="החלק שלך" htmlFor="sep-share">
+                {/* Every number is a left-to-right island. Two percentages on one RTL line
+                    transpose visually with every character correct, which is the failure
+                    `SPLIT_CONTROL_DESIGN.md` names; the `%` sits OUTSIDE the value for the
+                    same reason. */}
+                <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                  <input
+                    id="sep-share" className="input mono" type="number" inputMode="decimal"
+                    min={1} max={99} step={1} dir="ltr" style={{ width: 96 }}
+                    value={state.separateSharePct}
+                    onChange={(e) => set({ separateSharePct: e.target.value === "" ? "" : Number(e.target.value) })}
+                  />
+                  <span aria-hidden>%</span>
+                </div>
+              </Field>
+              <p className="muted" style={{ margin: 0 }}>
+                {"החלק של בן/בת הזוג: "}
+                <bdi className="mono" dir="ltr">{Math.max(0, Math.min(100, 100 - pct))}</bdi>
+                {"%"}
+              </p>
+            </div>
+          )}
+          <p className="status" style={{ display: "block" }}>
+            היחס נשמר עכשיו ומתחיל לפעול כשמצטרף בן/בת הזוג. עד אז אין מה לחלק.
+          </p>
+        </section>
+      )}
     </div>
   );
 }
@@ -182,6 +240,41 @@ export function CycleStep({ state, set }: StepProps) {
 
 // ── Income / managed budget ──────────────────────────────────────────────────────
 export function IncomeStep({ state, set }: StepProps) {
+  // ── SEPACCT `CC_UX_BUILD` item 4, spec screen B — **THE ROOT FIX FOR THE VANISHING INCOME.**
+  //
+  // A household that has just answered "בנפרד" is never asked for a shared household figure. It is
+  // asked for its OWN, which is private, which the partner cannot read, and which is written by
+  // `PUT …/my-income` after completion rather than by the baseline overwrite.
+  //
+  // 🔑 THIS IS UPSTREAM OF THE BRANCH BELOW, NOT A SECOND COPY OF IT. The `incomeRedacted` branch
+  // explains a figure that has already disappeared, and it exists for every household that had a
+  // shared income before it declared. This branch means a household declaring HERE never acquires
+  // one — so there is nothing to disappear, nothing to explain, and no rebuilt `0` for the server
+  // to refuse. Explaining a disappearance is a fix; not disappearing is better.
+  //
+  // ⚠️ ORDER MATTERS, AND IT IS THE OPPOSITE OF THE OBVIOUS ONE. The `incomeRedacted` branch below
+  // is tested FIRST, because an already-arranged household re-entering the wizard carries both
+  // marks and the one that matters to it is the redaction: it had a shared figure, it cannot see
+  // it, and the paragraph explaining that is the only place the product says so. This branch is
+  // for a household answering for the FIRST time, which has no stored figure and therefore nothing
+  // to explain — it is simply never asked for a shared income at all.
+  if (state.separateAccounts && !state.incomeRedacted) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <Field label="ההכנסה שלך" hint="פרטית. בן/בת הזוג לא רואה את המספר הזה.">
+          <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })} placeholder="18,000" autoFocus ariaLabel="ההכנסה שלך" />
+        </Field>
+        {/* The budget is the household's either way — the spec's own table. It is the one figure on
+            this screen that both partners see, and it is not derived from either income. */}
+        <Field label="תקציב חודשי לניהול" hint="הסכום המשותף של הבית. את זה שניכם רואים.">
+          <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder="10,000" ariaLabel="תקציב חודשי לניהול" />
+        </Field>
+        <p className="muted" style={{ margin: 0 }}>
+          אפשר לדלג על ההכנסה. היא לא נדרשת לשום חישוב כאן, והיא נשמרת רק אצלכם.
+        </p>
+      </div>
+    );
+  }
   // ── SEPACCT `AMENDMENT_15` §A56 / `AMENDMENT_16` §A60 ──────────────────────────────────────
   // Under separate accounts the server removes `budget.income` from every read — the owner's
   // included, because nothing in the data says whose money it is — and refuses every write of it.

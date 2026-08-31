@@ -8,8 +8,11 @@ import { bootstrapErrorAction } from "../../lib/authRouting";
 import {
   createDefaultState, computeTotals, validateStep, buildOnboardingPayload,
   buildStateFromBaseline, suggestedManagedBudget, loadDraft, saveDraft, clearDraft,
-  humanizeOnboardingError, incomeRefusedNotice, STEP_ORDER, type StepKey, type WizardState
+  humanizeOnboardingError, incomeRefusedNotice, STEP_ORDER, visibleSteps, pendingSplitBp,
+  type StepKey, type WizardState
 } from "../../lib/onboarding/model";
+import { sepacct } from "../../lib/sepacctApi";
+import { agorotFromInput } from "../../lib/sepacct";
 
 // Steps where an empty answer is acceptable and a "skip" affordance is offered.
 const SKIPPABLE: ReadonlySet<StepKey> = new Set(["fixed", "alerts"]);
@@ -31,7 +34,7 @@ export interface WizardController {
   state: WizardState;
   set: (partial: Partial<WizardState>) => void;
   stepKey: StepKey;
-  stepIndex: number; // 1-based position among the 7 interactive steps (welcome..alerts)
+  stepIndex: number; // 1-based position among this household's interactive steps (welcome..alerts)
   stepCount: number;
   canSkip: boolean;
   primaryLabel: string;
@@ -51,13 +54,16 @@ export interface WizardController {
   skip: () => void;
 }
 
-const INTERACTIVE: ReadonlyArray<StepKey> = STEP_ORDER.filter((s) => s !== "done");
+/** The steps that carry a question, for THIS household. `done` is a celebration, not a step, and
+ *  a household that is never asked about separate accounts must not see a segment for it — a
+ *  progress bar that counts a screen you will not be shown is a progress bar that lies. */
+const interactiveSteps = (state: WizardState): ReadonlyArray<StepKey> => visibleSteps(state).filter((s) => s !== "done");
 
 export function useOnboardingWizard(): WizardController {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [state, setState] = useState<WizardState>(createDefaultState);
-  const [index, setIndex] = useState(0); // index into STEP_ORDER
+  const [index, setIndex] = useState(0); // index into `steps` — the VISIBLE spine, see below
   const [error, setError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [working, setWorking] = useState(false);
@@ -142,14 +148,22 @@ export function useOnboardingWizard(): WizardController {
     setState((s) => ({ ...s, ...partial }));
   }, []);
 
-  const stepKey = STEP_ORDER[index] as StepKey;
+  // ── `CC_UX_BUILD` item 4 — THE SPINE IS NOW STATE-DEPENDENT, AND THE INDEX IS CLAMPED TO IT.
+  //
+  // `STEP_ORDER` is the BUILD's sequence (the SEPACCT step is filtered out when the UI flag is
+  // unset); `visibleSteps` is THIS HOUSEHOLD's, and a `יחיד/ה` is not asked how it divides money
+  // with nobody. The clamp is not defensive noise: `householdType` is chosen on `profile`, which
+  // comes BEFORE `separate`, so going back and switching to `יחיד/ה` shortens the array under a
+  // live index. Without it the last step lands on `undefined` and the wizard renders nothing.
+  const steps = useMemo(() => visibleSteps(state), [state]);
+  const stepKey = (steps[Math.min(index, steps.length - 1)] ?? "welcome") as StepKey;
   const totals = useMemo(() => computeTotals(state), [state]);
 
   const goTo = useCallback((nextIndex: number) => {
     setError(undefined);
     setNotice(undefined);
     // Entering the managed-budget step in income mode: prefill the suggestion once.
-    const target = STEP_ORDER[nextIndex];
+    const target = steps[nextIndex];
     setState((s) => {
       if (target === "budget" && s.budgetMode === "income" && !s.managedTouched) {
         return { ...s, managedBudget: suggestedManagedBudget(s) };
@@ -164,7 +178,7 @@ export function useOnboardingWizard(): WizardController {
     // Re-check the required steps before committing (navigation already gates them).
     for (const s of ["profile", "income", "budget"] as StepKey[]) {
       const msg = validateStep(s, state);
-      if (msg) { setError(msg); setIndex(STEP_ORDER.indexOf(s)); return; }
+      if (msg) { setError(msg); setIndex(Math.max(0, steps.indexOf(s))); return; }
     }
     setWorking(true);
     setError(undefined);
@@ -188,9 +202,59 @@ export function useOnboardingWizard(): WizardController {
       if (refused) {
         setState((s) => ({ ...s, incomeRedacted: true, income: "" }));
         setNotice(refused);
-        setIndex(STEP_ORDER.indexOf("income"));
+        setIndex(Math.max(0, steps.indexOf("income")));
         if (typeof window !== "undefined") window.scrollTo({ top: 0 });
         return;
+      }
+      // ── `CC_UX_BUILD` item 4 — **THE ANSWER POSTS AFTER COMPLETION, NEVER INSIDE THE PAYLOAD.**
+      //
+      // `buildOnboardingPayload`'s `profile` still carries no `separateAccounts` key and
+      // `model.test.ts` still pins that — §A60's ruling is untouched. What the wizard's answer does
+      // is drive the announcing route, here, once the household exists and has an id.
+      //
+      // 🔑 THIS ORDER IS THE ONLY ONE THAT WORKS, and it is a property of the server rather than a
+      // preference. `carrySeparateAccounts` makes the whole-document baseline overwrite IGNORE
+      // both arrangement keys for a household carrying a declaration stamp, and a wizard answer
+      // that lands without one reads as UNDECLARED at every gate — *"an answer whose date nobody
+      // can produce is a suggestion"*. So the baseline goes first and the arrangement second.
+      //
+      // ⚠️ EACH CALL FAILS ON ITS OWN AND SAYS SO. §A60: a refusal that looks like success is worse
+      // than either outcome. The household HAS been created by this point, so the wizard does not
+      // go backwards — it finishes, and the done screen names the surface that can complete what
+      // did not land. Silence here would leave a household believing it is splitting when it is not,
+      // which is the exact failure this whole run exists to close.
+      // ⚠️ FIRST RUN ONLY, AND `?mode=edit` IS THE CASE THAT MATTERS. In edit mode the household
+      // already exists and may already be DECLARED with two adults named, so posting the pending
+      // one-share shape would be refused `400 split.invalid` and the person would be told their
+      // ratio failed to save when nothing was wrong with it. An existing household changes its
+      // arrangement on `/settings/separate-accounts`, which is the only surface that can.
+      if (!editMode && state.separateAccounts && saved.household?.id && saved.user?.id) {
+        const householdId = saved.household.id;
+        const missed: string[] = [];
+        const shareBp = pendingSplitBp(state.separateSharePct);
+        if (shareBp === null) {
+          missed.push("יחס החלוקה");
+        } else {
+          try {
+            // The PENDING shape: one share, naming the person who answered, with the counterpart
+            // unnamed because the counterpart has not joined. The backend stores it and does NOT
+            // declare; the declaration is minted when the second adult arrives and the remainder
+            // becomes theirs.
+            await sepacct.saveConfig(householdId, {
+              separateAccounts: true,
+              defaultSplit: [{ userId: saved.user.id, shareBp }]
+            });
+          } catch { missed.push("יחס החלוקה"); }
+        }
+        const income = agorotFromInput(String(state.ownIncome ?? ""));
+        if (income.ok && income.agorot !== null) {
+          try {
+            await sepacct.saveOwnIncome(householdId, income.agorot);
+          } catch { missed.push("ההכנסה שלך"); }
+        }
+        if (missed.length > 0) {
+          setNotice(`הבית נוצר, אבל ${missed.join(" ו")} לא נשמרו. אפשר להשלים את זה בהגדרות, בעמוד ״הפרדת כספים״.`);
+        }
       }
       if (editMode) {
         // Baseline updated — return to the dashboard (no first-time "done" celebration).
@@ -198,7 +262,7 @@ export function useOnboardingWizard(): WizardController {
         return;
       }
       if (userIdRef.current) clearDraft(userIdRef.current);
-      goTo(STEP_ORDER.indexOf("done"));
+      goTo(Math.max(0, steps.indexOf("done")));
     } catch (err) {
       // Translate the API error to Hebrew by code; never surface a raw English / JSON message.
       setError(humanizeOnboardingError(err));
@@ -211,7 +275,7 @@ export function useOnboardingWizard(): WizardController {
     const msg = validateStep(stepKey, state);
     if (msg) { setError(msg); return; }
     if (stepKey === "alerts") { void submit(); return; }
-    goTo(Math.min(STEP_ORDER.length - 1, index + 1));
+    goTo(Math.min(steps.length - 1, index + 1));
   }, [stepKey, state, index, goTo, submit]);
 
   const back = useCallback(() => {
@@ -222,14 +286,15 @@ export function useOnboardingWizard(): WizardController {
   const skip = useCallback(() => {
     if (!SKIPPABLE.has(stepKey)) return;
     if (stepKey === "alerts") { void submit(); return; }
-    goTo(Math.min(STEP_ORDER.length - 1, index + 1));
+    goTo(Math.min(steps.length - 1, index + 1));
   }, [stepKey, index, goTo, submit]);
 
   const primaryLabel =
     stepKey === "welcome" ? (editMode ? "ממשיכים" : "מתחילים")
     : stepKey === "alerts" ? (editMode ? "שמירת השינויים" : "סיום")
     : "המשך";
-  const stepIndex = INTERACTIVE.indexOf(stepKey) + 1;
+  const interactive = interactiveSteps(state);
+  const stepIndex = interactive.indexOf(stepKey) + 1;
 
   return {
     ready,
@@ -238,7 +303,7 @@ export function useOnboardingWizard(): WizardController {
     set,
     stepKey,
     stepIndex,
-    stepCount: INTERACTIVE.length,
+    stepCount: interactive.length,
     canSkip: SKIPPABLE.has(stepKey),
     primaryLabel,
     editMode,
