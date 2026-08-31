@@ -10,7 +10,6 @@ import { api } from "../../../lib/api";
 import { CATEGORY_LABELS } from "../../../lib/categories";
 import { SEPACCT_UI_ENABLED } from "../../../lib/sepacct";
 import { isHouseholdManager } from "../../../lib/settingsView";
-import { useViewer } from "../../../lib/useViewer";
 
 /** Format a purchase's purchaseDate + optional time as a local time string. */
 function formatPurchaseTime(p: Purchase): string {
@@ -86,8 +85,25 @@ function canSplit(p: Purchase, viewerUserId: string | undefined, manager: boolea
   return recorded > declared;
 }
 
+/**
+ * What the door needs about the VIEWER, taken from the `me()` this page already awaits.
+ *
+ * 🔴 `R-2` — IT USED TO CALL `useViewer()`, AND THAT WAS A THIRD `GET /api/v1/me`. This page has
+ * always called `api.me()` itself, and `AppShell` already calls `useViewer()`, so adding one here
+ * took a live page from two to three — measured, flag OFF, `[me, me, me, purchases/period]` against
+ * the baseline's `[me, me, purchases/period]` — and put the third on the critical path to first
+ * content. It is not a free read either: `server.ts` rotates the CSRF token on every `/me`
+ * (`if (!csrfToken) csrfToken = await store.rotateSessionCsrf(...)`, and a cookie-resolved session's
+ * plaintext is always `""`), so each one is an `update web_sessions` on the caller's own row - three
+ * writers contending where there were two.
+ *
+ * That was the ONLY exception to "identical with the variable unset", and it was pure waste: the
+ * `me()` already awaited below carries all three fields. No extra request, at either flag setting.
+ */
+interface DoorViewer { userId?: string; manager: boolean; declaredAt?: string }
+
 export default function SpendingBreakdownPage() {
-  const viewer = useViewer();
+  const [door, setDoor] = useState<DoorViewer>({ manager: false });
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -98,6 +114,11 @@ export default function SpendingBreakdownPage() {
       try {
         const me = await api.me();
         if (!me.household) { setError("אין בית"); return; }
+        setDoor({
+          userId: me.user?.id,
+          manager: isHouseholdManager({ role: me.membership?.role, permissions: (me.membership?.permissions as Record<string, unknown> | undefined) ?? null }),
+          declaredAt: me.household.financialBaseline?.profile?.separateAccountsDeclaredAt
+        });
         const result = await api.listHouseholdPurchasesForPeriod(me.household.id);
         setPurchases(result.purchases);
         setPeriodStart(result.periodStart);
@@ -121,9 +142,8 @@ export default function SpendingBreakdownPage() {
   // `/my-record` is the same all-zero page. Two surfaces, no entry point, no explanation, and the
   // conclusion available to them is that the feature does not work. Shown only when the household
   // is declared AND nothing on the page is actionable, so it never nags a reader who has a door.
-  const manager = isHouseholdManager(viewer.caps);
-  const anyDoor = purchases.some((p) => canSplit(p, viewer.userId, manager, viewer.separateAccountsDeclaredAt));
-  const explainNoDoor = SEPACCT_UI_ENABLED && Boolean(viewer.separateAccountsDeclaredAt) && purchases.length > 0 && !anyDoor;
+  const anyDoor = purchases.some((p) => canSplit(p, door.userId, door.manager, door.declaredAt));
+  const explainNoDoor = SEPACCT_UI_ENABLED && Boolean(door.declaredAt) && purchases.length > 0 && !anyDoor;
 
   // Group by category, sort purchases within each group newest-first
   const byCategory = new Map<string, Purchase[]>();
@@ -187,7 +207,7 @@ export default function SpendingBreakdownPage() {
                     <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
                       <span className="muted" style={{ fontSize: 12, minWidth: 60 }} dir="ltr">{formatPurchaseTime(p)}</span>
                       <span>{p.merchantNameRaw ?? "הוצאה"}</span>
-                      {canSplit(p, viewer.userId, manager, viewer.separateAccountsDeclaredAt) && (
+                      {canSplit(p, door.userId, door.manager, door.declaredAt) && (
                         <Link href={`/shared-expenses?purchaseId=${p.id}`} style={{ fontSize: 12 }}>חלוקה</Link>
                       )}
                     </div>

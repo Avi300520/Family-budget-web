@@ -41,13 +41,29 @@ console.log(`    /onboarding  step counter="${counter ? counter[0] : "(none - wi
 console.log(`    /onboarding  separate-accounts step title present: ${/איך הכספים מתנהלים/.test(text)}`);
 
 // 3. the door on the pre-existing page. `--mode fresh` has no household, so flip first.
-await fetch("http://127.0.0.1:4999/__mode?to=empty").catch(() => {});
-await page.goto(BASE + "/dashboard/spending", { waitUntil: "networkidle" });
-await page.waitForTimeout(1500);
-const doors = await page.locator('a[href^="/shared-expenses?purchaseId="]').count();
-const spendingText = await page.locator("body").innerText();
-const rows = (spendingText.match(/₪/g) ?? []).length;
-console.log(`    /dashboard/spending  split-door links=${doors}  (must be 0)   page rendered: ${/הוצאות החודש/.test(spendingText)}  money cells=${rows}`);
+//
+// 🔴 `R-2` — THIS CHECK USED TO COUNT ONLY LINKS, HEADING AND `₪`, AND THE PAGE HIDES **TWO**
+// THINGS. A one-clause mutant that drops `SEPACCT_UI_ENABLED` from `explainNoDoor` ships a Hebrew
+// SEPACCT sentence to every declared household with no variable set - and printed a line BYTE-
+// IDENTICAL to the passing one, because the paragraph carries no link and no `₪`. A control with
+// zero power over half of what it certifies is the shape this program keeps paying for.
+//
+// ⚠️ AND IT RAN ONLY IN `empty`, WHERE `/me` IS AN OWNER WITH `permissions.all`. Flag ON, that
+// viewer HAS doors, so `explainNoDoor` is false in both builds and the fixture could not exercise
+// the paragraph in EITHER direction. `adultnopay` is the state the paragraph exists for - a
+// non-manager who paid for nothing - so the check runs in both modes and asserts BOTH renderables.
+const NO_DOOR_COPY = /נקבעת על ידי מי שרשם אותה או על ידי מנהלי הבית/;
+for (const m of ["empty", "adultnopay"]) {
+  await fetch(`http://127.0.0.1:4999/__mode?to=${m}`).catch(() => {});
+  await page.goto(BASE + "/dashboard/spending", { waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+  const doors = await page.locator('a[href^="/shared-expenses?purchaseId="]').count();
+  const spendingText = await page.locator("body").innerText();
+  const rows = (spendingText.match(/₪/g) ?? []).length;
+  const explainer = NO_DOOR_COPY.test(spendingText);
+  const ok = doors === 0 && !explainer;
+  console.log(`    /dashboard/spending [${m.padEnd(10)}] links=${doors} (must be 0)  no-door copy=${explainer} (must be false)  rendered=${/הוצאות החודש/.test(spendingText)}  ₪=${rows}  ${ok ? "OK" : "<<< DORMANCY FAILURE"}`);
+}
 await fetch("http://127.0.0.1:4999/__mode?to=fresh").catch(() => {});
 
 await browser.close();
