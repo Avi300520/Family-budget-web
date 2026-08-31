@@ -66,7 +66,12 @@ const guard = async (name, fn) => {
   try { await fn(); } catch (e) { failures.push(`${name}: ${e.message}`); log(`   ⛔ ${name}: ${e.message}`); }
 };
 
-log(`walk against ${BASE} (stub ${STUB}), viewport 390x844\n`);
+// The walk MUTATES the stub - it presses save buttons. Reset first, or the second run measures the
+// FIRST run's residue and reports it as a defect in the build. Measured: a second walk against an
+// unchanged build failed because the first had already set that expense to 100/0, which correctly
+// hides the button the second was looking for.
+await fetch(`${STUB}/__reset`).catch(() => undefined);
+log(`walk against ${BASE} (stub ${STUB}), viewport 390x844 - fixture reset\n`);
 
 // ── LEG 1 — a new household through the wizard, answering בנפרד ───────────────────────────────
 await guard("leg 1", async () => {

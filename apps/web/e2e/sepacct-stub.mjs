@@ -129,6 +129,11 @@ const PERIOD_ROWS = [
 
 let income = { monthlyAgorot: 1825000 };
 
+/** The pristine fixture, captured once. `/__reset` restores it so the walk is repeatable. */
+const CONFIG_SEED = structuredClone(config);
+const SPLITS_SEED = structuredClone(splits);
+const INCOME_SEED = structuredClone(income);
+
 /** The server's rule: floor every part, then hand the remainder out by shareBp desc, userId asc. */
 function resolve(totalAgorot, shares) {
   const parts = shares.map((s) => ({ ...s, agorot: Math.floor((totalAgorot * s.shareBp) / 10000) }));
@@ -211,6 +216,12 @@ const server = createServer(async (req, res) => {
   }
   // Let the harness flip modes without a restart.
   if (p === "/__mode") { mode = url.searchParams.get("to") ?? mode; return send(res, 200, { mode }); }
+  // ⚠️ **AND LET IT RESET, BECAUSE THE WALK MUTATES THIS PROCESS.** `splits`, `config` and `income`
+  // are module state: a walk that clicks אני נושא/ת בכל הסכום leaves the fixture at 100/0, and the
+  // NEXT run then finds the button correctly hidden and reports a failure that is its own residue.
+  // Measured: the second walk against an unchanged build failed for exactly that reason. A walk you
+  // can only run once is not a walk.
+  if (p === "/__reset") { splits = structuredClone(SPLITS_SEED); config = structuredClone(CONFIG_SEED); income = structuredClone(INCOME_SEED); lastOnboarding = null; return send(res, 200, { reset: true }); }
 
   const isSepacct = /separate-accounts|\/split|my-income|my-components|my-record-components/.test(p);
   if (isSepacct) {
