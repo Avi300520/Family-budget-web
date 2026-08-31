@@ -12,12 +12,14 @@ import {
   RefreshCw,
   Rocket,
   ShieldCheck,
+  Split,
   Users,
   Wallet
 } from "lucide-react";
 import { planForCode, type BillingTier, type Subscription } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
+import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
 import { activeMemberCount } from "../../lib/roster";
 import { api } from "../../lib/api";
 import { useViewer } from "../../lib/useViewer";
@@ -75,6 +77,18 @@ const GROUPS: SettingGroup[] = [
         icon: Users,
         tint: "coral",
         can: canViewHouseholdMembers
+      },
+      {
+        href: "/settings/separate-accounts",
+        title: "הפרדת כספים",
+        // 2d — the hub is where an adult who has heard the product supports this has to FIND it.
+        // The old description named the ratio, which is the second question; this names the thing.
+        description: "ניהול כספים בנפרד: כל אחד רואה את החלק שלו בהוצאה משותפת וההכנסה נשארת פרטית.",
+        icon: Split,
+        tint: "plum",
+        // Dormant with the rest of SEPACCT: no card while the flag is off, so the hub never
+        // points at a route that renders as absent.
+        can: (caps) => SEPACCT_UI_ENABLED && canViewHouseholdSettings(caps)
       }
     ]
   },

@@ -15,6 +15,7 @@ import {
   Stepper, ChipSelect, OptionCards, MoneyInput, DayChips, FreqPick, Field, MiniToggle, TextInput
 } from "./controls";
 import { NotificationsEditor } from "../../components/NotificationsEditor";
+import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
 
 export interface StepProps {
   state: WizardState;
@@ -109,6 +110,37 @@ export function ProfileStep({ state, set }: StepProps) {
 }
 
 // ── Budget cycle ─────────────────────────────────────────────────────────────────
+// ── SEPACCT `AMENDMENT_16` §A60 — THIS STEP TELLS THE HOUSEHOLD WHERE THE ANSWER IS MADE ──────
+//
+// It used to offer two cards and write `state.separateAccounts`, and `buildOnboardingPayload` sent
+// it. `R-1` measured what that did: "ביחד" was a one-way door that returned `200 OK` and changed
+// nothing, and "בנפרד" landed an arrangement with no declaration stamp — hidden income on one
+// surface, "joint" on the other, no start notice, and a split the announcing route would have
+// refused. §A60's own rule is that a refusal which looks like success is worse than either
+// outcome; a CONTROL that looks like a decision and is not is the same defect one layer up.
+//
+// So the wizard asks the question and names the surface that answers it. The declaration lives on
+// `/settings/separate-accounts`, which validates the split, mints the stamp and announces itself.
+// See the long note in `buildOnboardingPayload` for why sending the boolean honestly is worse.
+export function SeparateAccountsStep({ state }: StepProps) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <section className="panel">
+        <h2>{state.separateAccounts ? "בבית הזה החשבונות מנוהלים בנפרד" : "אפשר לנהל את הכספים ביחד או בנפרד"}</h2>
+        <p className="muted">
+          בנפרד, כל אחד רואה את החלק שלו בהוצאה משותפת וההכנסה של כל אחד נשארת פרטית ונראית רק לו.
+        </p>
+        {/* 🔴 The clause that stood here said "and every change is announced to both sides". The
+            fan-out in `household-routes.ts` skips `peer.userId === auth.user.id` — the person who
+            makes the change is EXCLUDED — so it was false for exactly the reader being told it. */}
+        <p className="status" style={{ display: "block" }}>
+          את ההסדר קובעים בהגדרות, בעמוד ״הפרדת כספים״, אחרי שיש שני חברים בוגרים בבית. שם גם בוחרים את יחס החלוקה, ושם כתוב בדיוק מה משתנה לפני שמסמנים.
+        </p>
+      </section>
+    </div>
+  );
+}
+
 export function CycleStep({ state, set }: StepProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -150,6 +182,29 @@ export function CycleStep({ state, set }: StepProps) {
 
 // ── Income / managed budget ──────────────────────────────────────────────────────
 export function IncomeStep({ state, set }: StepProps) {
+  // ── SEPACCT `AMENDMENT_15` §A56 / `AMENDMENT_16` §A60 ──────────────────────────────────────
+  // Under separate accounts the server removes `budget.income` from every read — the owner's
+  // included, because nothing in the data says whose money it is — and refuses every write of it.
+  // Rendering the input anyway posts a figure the product will not store, behind a `200 OK`:
+  // "a refusal that looks like success is worse than either accepting or rejecting". So the person
+  // is told HERE, on the step where they would have typed it, and edits the shared budget instead.
+  if (state.incomeRedacted) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {/* `R-1` — THE MOST LITERAL "WHERE DID MY NUMBER GO" SURFACE IN THE PRODUCT, AND IT WAS THE
+            ONE STILL MISSING BOTH HALVES. This is the very field the person typed the figure into.
+            The other two surfaces already say the stored amount survives and where their own now
+            lives; this one said neither, which is exactly the "the app lost our data" reading. */}
+        <p className="status" style={{ display: "block" }}>
+          בבית הזה החשבונות מנוהלים בנפרד, ולכן אין הכנסה משותפת לשמור כאן. הסכום שנשמר קודם לא נמחק - הוא רק מפסיק להיות מוצג, וחוזר אם ההסדר מכובה.
+          {SEPACCT_UI_ENABLED && <> ההכנסה שלכם עצמכם נשמרת בעמוד ״ההכנסה שלי״ ונראית רק לכם.</>}
+        </p>
+        <Field label="תקציב חודשי לניהול" hint="הסכום המשותף שתרצו לנהל מדי חודש.">
+          <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder="10,000" autoFocus ariaLabel="תקציב חודשי לניהול" />
+        </Field>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <OptionCards

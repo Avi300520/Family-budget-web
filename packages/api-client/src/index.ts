@@ -215,7 +215,23 @@ export function createApiClient(options: ApiClientOptions) {
       // budget; if a baseline is sent its budget.managedMonthlyBudget MUST equal it.
       baseline?: OnboardingBaselineRequest;
     }) =>
-      request<{ user: User; household: Household }>("/api/v1/onboarding/complete", {
+      request<{
+        user: User;
+        household: Household;
+        /**
+         * `AMENDMENT_16` §A60 — **THE SAVE LANDED AND `baseline.budget.income` DID NOT.**
+         *
+         * An arranged household cannot set the shared income; the rest of the whole-document write
+         * is stored as asked. Present (and `true`) ONLY when an `income` was actually sent and
+         * actually dropped — omitted otherwise, so the response is unchanged for every household
+         * that is not under separate accounts.
+         *
+         * ⚠️ The client must NOT re-derive this from the returned household's redaction mark: a
+         * household that declares in this same save is arranged in the response and was not in the
+         * request, and that inference fires on every declaration. Read this key.
+         */
+        incomeRefused?: boolean;
+      }>("/api/v1/onboarding/complete", {
         method: "POST",
         body: JSON.stringify(body)
       }),
@@ -311,7 +327,7 @@ export function createApiClient(options: ApiClientOptions) {
         method: "POST",
         body: JSON.stringify({ token })
       }),
-    /** Verified admin identity from Cloudflare Access (or the dev-session subject in local dev). */
+    /** Verified admin identity from the app-level Google OAuth (NextAuth) session, via the same-origin admin BFF (or the dev-session subject in local dev). Admin migrated off Cloudflare Access on 2026-06-25. */
     adminAuthMe: () => request<{ adminEmail: string; via: string }>("/api/v1/admin/auth/me"),
     adminOverview: () =>
       request<{
@@ -367,11 +383,13 @@ export function createApiClient(options: ApiClientOptions) {
       }),
     // ── Admin V2 — Household 360 ───────────────────────────────────────────
     // ── Household-360 calls use the /h360/* alias, NOT /api/v1/admin/households/* ──────────
-    // Cloudflare Access 302s the literal /api/v1/admin/households* path at the admin.pingtally.com
-    // edge (proven: bare-path siblings reach Vercel 200, /households/search never reaches Vercel
-    // or the backend). The same-origin BFF maps /h360/* back to the real backend /households/*
-    // path server-side (apps/admin/src/lib/adminAlias.ts). Browser paths carry no "households"/
-    // "search" token, so the edge does not challenge them. Auth/JWT forwarding is unchanged.
+    // Routing rationale (from the Cloudflare Access era, before the 2026-06-25 migration to
+    // app-level Google OAuth/NextAuth): the admin.pingtally.com edge 302s the literal
+    // /api/v1/admin/households* path (proven: bare-path siblings reach Vercel 200, /households/search
+    // never reaches Vercel or the backend). The same-origin BFF maps /h360/* back to the real backend
+    // /households/* path server-side (apps/admin/src/lib/adminAlias.ts). Browser paths carry no
+    // "households"/"search" token, so the edge does not challenge them. Admin-session forwarding is
+    // unchanged (now the Google OAuth/NextAuth session, not the former Cloudflare Access JWT).
     adminSearchHouseholds: (by: AdminHouseholdSearchBy, q: string, limit = 20) =>
       request<{ households: AdminHouseholdSearchRow[] }>("/api/v1/admin/h360/find", {
         method: "POST",
@@ -499,8 +517,13 @@ export function createApiClient(options: ApiClientOptions) {
       }),
     deleteWishlistItem: (itemId: string) =>
       request<{ item: WishlistItem }>(`/api/v1/wishlist/${itemId}`, { method: "DELETE" }),
+    // WP-A1-04: the invite preview is UNAUTHENTICATED, so its `household` is an explicit
+    // two-key pick — NOT a `Household`. Declaring the full type here is not merely imprecise,
+    // it typechecks a runtime crash: `household.monthlyBudgetAmount.toLocaleString()` compiles
+    // (declared `number`) and throws on every invite acceptance, on the one screen a cold
+    // invitee sees. Widening this shape requires widening the server pick and its key-set gate.
     lookupInvite: (token: string) =>
-      request<{ invite: HouseholdInvite; household: Household | undefined }>(`/api/v1/households/join?token=${encodeURIComponent(token)}`),
+      request<{ invite: HouseholdInvite; household: { id: string; name: string } | undefined }>(`/api/v1/households/join?token=${encodeURIComponent(token)}`),
     joinHousehold: (inviteToken: string, displayName?: string) =>
       request<{ member: HouseholdMember; household: Household | undefined }>("/api/v1/households/join", {
         method: "POST",

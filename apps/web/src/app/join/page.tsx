@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import type { Household, HouseholdInvite, User } from "@shopping-assistant/shared-types";
+import type { HouseholdInvite, User } from "@shopping-assistant/shared-types";
 import { ApiClientError } from "@shopping-assistant/api-client";
 import { api } from "../../lib/api";
 import { PhoneInput } from "../../components/PhoneInput";
@@ -24,7 +24,11 @@ function JoinPageInner() {
   const token = params.get("token") ?? "";
 
   const [invite, setInvite] = useState<HouseholdInvite>();
-  const [household, setHousehold] = useState<Household>();
+  // WP-A1-04 / SEPACCT stage 1: the UNAUTHENTICATED invite preview returns an explicit two-key
+  // pick, not a Household. This state was declared as the full type, which typechecked a runtime
+  // crash: any `household.monthlyBudgetAmount` here compiles and throws on the one screen a cold
+  // invitee sees. Narrowed to the shape the endpoint actually returns; only `.name` is read.
+  const [household, setHousehold] = useState<{ id: string; name: string }>();
   const [currentUser, setCurrentUser] = useState<User>();
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [phone, setPhone] = useState("");

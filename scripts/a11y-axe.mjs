@@ -54,6 +54,9 @@
  *   A11Y_SKIP_BUILD=1 pnpm a11y            # reuse an existing apps/web/.next build
  *   A11Y_BASE_URL=http://localhost:3000 pnpm a11y   # scan an already-running server
  *   A11Y_ENGINE=jsdom pnpm a11y            # force the weak engine even if playwright exists
+ *   A11Y_SCOPE=sepacct pnpm a11y          # scan the SEPACCT surfaces instead of the public 8
+ *                                          (needs NEXT_PUBLIC_SEPACCT_UI=1 to see anything but 404)
+ *   A11Y_VIEWPORT=375 pnpm a11y            # same scan at the mobile width ([browser] engine only)
  *
  * BACKEND
  * -------
@@ -76,7 +79,7 @@ const WEB_DIR = path.join(REPO_ROOT, "apps", "web");
 const IS_WIN = process.platform === "win32";
 
 /** Public routes under the accessibility statement (audit §1.1). */
-const ROUTES = [
+const PUBLIC_ROUTES = [
   { path: "/", name: "/ (landing)", coverage: "full" },
   { path: "/login", name: "/login", coverage: "full" },
   {
@@ -102,6 +105,31 @@ const ROUTES = [
   { path: "/privacy", name: "/privacy", coverage: "full" },
   { path: "/terms", name: "/terms", coverage: "full" },
 ];
+
+/**
+ * SEPACCT (2026-08-28). NOT public routes and NOT under the accessibility statement - opt in with
+ * A11Y_SCOPE=sepacct so the eight-route public contract above stays exactly what it was.
+ *
+ * These four pages now talk to the API. Which STATE each one renders is therefore decided on the
+ * other side of NEXT_PUBLIC_API_URL, not by a query parameter: point the app at
+ * `apps/web/e2e/sepacct-stub.mjs` and set its --mode (populated / empty / window / error /
+ * dormant / forbidden / off). `apps/web/e2e/sepacct-measure.mjs` drives all of them.
+ *
+ * Needs NEXT_PUBLIC_SEPACCT_UI=1 at BUILD time; without it all four render the 404 page, which is
+ * the point (see SEPACCT_FRONTEND_SPEC.md section 3).
+ */
+const SEPACCT_ROUTES = [
+  { path: "/settings/separate-accounts", name: "/separate-accounts", coverage: "arrangement; state set by the stub's --mode" },
+  { path: "/shared-expenses?purchaseId=26fabb47-5ff7-48fb-ab15-8589a5ec3b2d", name: "/shared-expenses", coverage: "one expense's split; state set by the stub's --mode" },
+  { path: "/shared-expenses", name: "/shared-expenses (no id)", coverage: "reached without a purchase id" },
+  { path: "/my-income", name: "/my-income", coverage: "own income; state set by the stub's --mode" },
+  { path: "/my-record", name: "/my-record", coverage: "two routes, two windows; state set by the stub's --mode" },
+];
+
+const ROUTES = process.env.A11Y_SCOPE === "sepacct" ? SEPACCT_ROUTES : PUBLIC_ROUTES;
+
+/** A11Y_VIEWPORT=375 runs the same scan at the mobile width. [browser] engine only. */
+const VIEWPORT = { width: Number(process.env.A11Y_VIEWPORT || 1280), height: 900 };
 
 const AXE_OPTIONS = { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] } };
 
@@ -160,7 +188,7 @@ async function loadBrowserEngine() {
 async function scanWithBrowser({ AxeBuilder, chromium }, baseUrl) {
   const browser = await chromium.launch();
   // @axe-core/playwright requires a Page created from an explicit BrowserContext.
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: VIEWPORT });
   const results = [];
   try {
     for (const route of ROUTES) {
@@ -211,25 +239,25 @@ function report(engine, results) {
   const pad = (s, n) => String(s) + " ".repeat(Math.max(0, n - String(s).length));
   log("");
   log("=".repeat(96));
-  log(`  axe-core WCAG 2.0 A/AA scan - engine: [${engine}]`);
+  log(`  axe-core WCAG 2.0 A/AA scan - engine: [${engine}]  scope: ${process.env.A11Y_SCOPE || "public"}  viewport: ${VIEWPORT.width}`);
   if (engine === "jsdom") {
     log("  WARNING: jsdom fallback. No layout, no computed colour-contrast, no client-side");
     log("  hydration. A clean result here is NOT a WCAG 2.0 AA conformance claim.");
   }
   log("=".repeat(96));
-  log(`  ${pad("ROUTE", 22)}${pad("VIOLATIONS", 12)}${pad("INCOMPLETE", 12)}COVERAGE`);
+  log(`  ${pad("ROUTE", 30)}${pad("VIOLATIONS", 12)}${pad("INCOMPLETE", 12)}COVERAGE`);
   log("-".repeat(96));
   let total = 0;
   let errored = 0;
   for (const r of results) {
     if (r.error) {
       errored += 1;
-      log(`  ${pad(r.route.name, 22)}${pad("ERROR", 12)}${pad("-", 12)}${r.error}`);
+      log(`  ${pad(r.route.name, 30)}${pad("ERROR", 12)}${pad("-", 12)}${r.error}`);
       continue;
     }
     total += r.violations.length;
     log(
-      `  ${pad(r.route.name, 22)}${pad(r.violations.length, 12)}${pad(r.incomplete.length, 12)}${r.route.coverage}`,
+      `  ${pad(r.route.name, 30)}${pad(r.violations.length, 12)}${pad(r.incomplete.length, 12)}${r.route.coverage}`,
     );
   }
   log("-".repeat(96));

@@ -8,6 +8,8 @@ import { AppShell } from "../../../components/AppShell";
 import { LoadState } from "../../../components/LoadState";
 import { api } from "../../../lib/api";
 import { CATEGORY_LABELS } from "../../../lib/categories";
+import { SEPACCT_UI_ENABLED } from "../../../lib/sepacct";
+import { isHouseholdManager } from "../../../lib/settingsView";
 
 /** Format a purchase's purchaseDate + optional time as a local time string. */
 function formatPurchaseTime(p: Purchase): string {
@@ -40,7 +42,68 @@ function categoryRank(cat: string): number {
   return CATEGORY_ORDER[cat] ?? 50;
 }
 
+/**
+ * ── THE DOOR (`R-1`'s stop, closed). ──────────────────────────────────────────────────────────
+ *
+ * A household could declare and then never split anything, because the only page that produced a
+ * `purchaseId` listed only expenses that ALREADY had a split. This page has always listed every
+ * household expense of the period WITH its id; it needed one link per row, not a new endpoint.
+ *
+ * 🔴 **THE LINK APPEARS ONLY WHERE THE SERVER WILL ACCEPT THE SPLIT. A door onto a refusal is the
+ * same defect one screen along.** Every condition below is a refusal `PUT …/split` actually
+ * raises, read off `household-routes.ts` and `postgres-store.ts` rather than guessed:
+ *
+ *   • not declared            → the route 404s (`requireSepacctSplits` → `requireDeclared`)
+ *   • `limited_member`        → 403 `split.child_excluded` — and unreachable anyway: this whole
+ *                               page 403s a child at `GET …/purchases/period`
+ *   • not payer, not manager  → 403 "Only the payer or a household manager may change a split"
+ *   • no payer on the row     → 409 `split.no_payer` (a de-attributed purchase)
+ *   • recorded before the
+ *     arrangement began       → 409 `split.before_arrangement`
+ *
+ * Scope needs no check here: `listHouseholdPurchasesForPeriod` already filters
+ * `householdBudgetWhereSql()` — `expense_type = 'household' and status = 'confirmed' and
+ * project_budget_id is null`, invariant #1 — so a personal or project expense never reaches this
+ * list at all.
+ *
+ * ⚠️ THE BOUND IS `createdAt`, NOT `purchaseDate`, because the server's guard compares
+ * `p.created_at <= declaredAt`. Compared as milliseconds and required to be STRICTLY greater, so
+ * the sub-millisecond boundary errs toward HIDING a splittable row rather than showing an
+ * unsplittable one — the safe direction, and the only one of the two that is not the defect.
+ *
+ * ⚠️ THE TWO-ADULT CASE IS DELIBERATELY NOT CHECKED HERE. It would cost this page a members fetch
+ * on every load; a declared household has two adults by construction (the arrangement PUT refuses
+ * to enable without a complete split), and the only way to lose one is a departure afterwards.
+ * `/shared-expenses` already holds the roster and says so plainly in that state.
+ */
+function canSplit(p: Purchase, viewerUserId: string | undefined, manager: boolean, declaredAt: string | undefined): boolean {
+  if (!SEPACCT_UI_ENABLED || !declaredAt || !p.userId || !viewerUserId) return false;
+  if (p.userId !== viewerUserId && !manager) return false;
+  const declared = new Date(declaredAt).getTime();
+  const recorded = new Date(p.createdAt).getTime();
+  if (Number.isNaN(declared) || Number.isNaN(recorded)) return false;
+  return recorded > declared;
+}
+
+/**
+ * What the door needs about the VIEWER, taken from the `me()` this page already awaits.
+ *
+ * 🔴 `R-2` — IT USED TO CALL `useViewer()`, AND THAT WAS A THIRD `GET /api/v1/me`. This page has
+ * always called `api.me()` itself, and `AppShell` already calls `useViewer()`, so adding one here
+ * took a live page from two to three — measured, flag OFF, `[me, me, me, purchases/period]` against
+ * the baseline's `[me, me, purchases/period]` — and put the third on the critical path to first
+ * content. It is not a free read either: `server.ts` rotates the CSRF token on every `/me`
+ * (`if (!csrfToken) csrfToken = await store.rotateSessionCsrf(...)`, and a cookie-resolved session's
+ * plaintext is always `""`), so each one is an `update web_sessions` on the caller's own row - three
+ * writers contending where there were two.
+ *
+ * That was the ONLY exception to "identical with the variable unset", and it was pure waste: the
+ * `me()` already awaited below carries all three fields. No extra request, at either flag setting.
+ */
+interface DoorViewer { userId?: string; manager: boolean; declaredAt?: string }
+
 export default function SpendingBreakdownPage() {
+  const [door, setDoor] = useState<DoorViewer>({ manager: false });
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -51,6 +114,11 @@ export default function SpendingBreakdownPage() {
       try {
         const me = await api.me();
         if (!me.household) { setError("אין בית"); return; }
+        setDoor({
+          userId: me.user?.id,
+          manager: isHouseholdManager({ role: me.membership?.role, permissions: (me.membership?.permissions as Record<string, unknown> | undefined) ?? null }),
+          declaredAt: me.household.financialBaseline?.profile?.separateAccountsDeclaredAt
+        });
         const result = await api.listHouseholdPurchasesForPeriod(me.household.id);
         setPurchases(result.purchases);
         setPeriodStart(result.periodStart);
@@ -68,6 +136,14 @@ export default function SpendingBreakdownPage() {
   if (!periodStart) return <AppShell><h1 className="sr-only">הוצאות החודש</h1><LoadState /></AppShell>;
 
   const total = purchases.reduce((sum, p) => sum + p.totalAmount, 0);
+
+  // `R-1` F4 — THE REFUSAL IS CORRECT; THE SILENCE IS NOT. A non-manager who paid for nothing this
+  // month sees no `חלוקה` on any row and, until this line, not one word saying why - and their
+  // `/my-record` is the same all-zero page. Two surfaces, no entry point, no explanation, and the
+  // conclusion available to them is that the feature does not work. Shown only when the household
+  // is declared AND nothing on the page is actionable, so it never nags a reader who has a door.
+  const anyDoor = purchases.some((p) => canSplit(p, door.userId, door.manager, door.declaredAt));
+  const explainNoDoor = SEPACCT_UI_ENABLED && Boolean(door.declaredAt) && purchases.length > 0 && !anyDoor;
 
   // Group by category, sort purchases within each group newest-first
   const byCategory = new Map<string, Purchase[]>();
@@ -95,6 +171,12 @@ export default function SpendingBreakdownPage() {
       </Link>
       <h1 className="page-title">הוצאות החודש</h1>
       <div className="muted" style={{ marginBottom: 16, fontSize: 13 }}>{fmtDate(periodStart)} - {fmtDate(periodEnd)}</div>
+
+      {explainNoDoor && (
+        <p className="muted" style={{ marginBottom: 16 }}>
+          חלוקה של הוצאה נקבעת על ידי מי שרשם אותה או על ידי מנהלי הבית, ורק להוצאות שנרשמו מאז שההסדר התחיל.
+        </p>
+      )}
 
       <section className="panel" style={{ marginBottom: 16 }}>
         <div className="row between">
@@ -125,6 +207,9 @@ export default function SpendingBreakdownPage() {
                     <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
                       <span className="muted" style={{ fontSize: 12, minWidth: 60 }} dir="ltr">{formatPurchaseTime(p)}</span>
                       <span>{p.merchantNameRaw ?? "הוצאה"}</span>
+                      {canSplit(p, door.userId, door.manager, door.declaredAt) && (
+                        <Link href={`/shared-expenses?purchaseId=${p.id}`} style={{ fontSize: 12 }}>חלוקה</Link>
+                      )}
                     </div>
                     <span style={{ fontWeight: 600 }}>{p.totalAmount.toLocaleString("he-IL")}₪</span>
                   </div>

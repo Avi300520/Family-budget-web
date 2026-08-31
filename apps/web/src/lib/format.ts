@@ -6,6 +6,16 @@ export function nis(n: number | null | undefined): string {
   return "₪" + Math.round(Number(n) || 0).toLocaleString("he-IL");
 }
 
+/** Format a stored integer-agorot value at the presentation boundary only. */
+export function ilsFromAgorot(agorot: number): string {
+  const safe = Number.isInteger(agorot) ? agorot : 0;
+  const sign = safe < 0 ? "-" : "";
+  const absolute = Math.abs(safe);
+  const whole = Math.trunc(absolute / 100).toLocaleString("he-IL");
+  const fraction = String(absolute % 100).padStart(2, "0");
+  return `${sign}₪${whole}.${fraction}`;
+}
+
 // BATCH-GI F6 — dates were rendered by dropping the raw API value into the JSX, which produced
 // "יעד: Invalid Date" on the dashboard project cards and a raw "Thu Aug 06 2026 00:00:00 GMT..."
 // on /budget. Both are 1.3.1 failures (the text does not convey the information) and plain

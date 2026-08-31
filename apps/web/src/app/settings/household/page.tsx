@@ -15,6 +15,7 @@ import { DayChips, Field, MoneyInput, TextInput } from "../../onboarding/control
 import { announce } from "../../../lib/a11y/announce";
 import { api } from "../../../lib/api";
 import { nis } from "../../../lib/format";
+import { SEPACCT_UI_ENABLED } from "../../../lib/sepacct";
 import { useViewer } from "../../../lib/useViewer";
 import { canEditBaseline, canEditHouseholdSettings, canViewHouseholdSettings } from "../../../lib/settingsView";
 
@@ -228,7 +229,20 @@ export default function HouseholdSettingsPage() {
   }
 
   const baseline = household?.financialBaseline;
-  const incomeMode = baseline?.budget?.mode === "income";
+  // ── SEPACCT `AMENDMENT_16` §A60 — **A LABEL THAT NO LONGER DESCRIBES ITS NUMBER IS THE SAME
+  //    DEFECT AS A REFUSAL THAT LOOKS LIKE SUCCESS.** `R-2` found this after the arming.
+  //
+  // Under separate accounts the server DELETES `budget.income` from every read and marks the
+  // document `incomeRedacted`. It deliberately leaves `budget.mode` alone — the mode is how the
+  // household set its budget up, not a claim about what is readable — so `mode === "income"` stays
+  // true while the figure is gone, and the `??` below then fell through to `monthlyBudgetAmount`.
+  // The page went on rendering "הכנסה חודשית נטו" over the MANAGED BUDGET: measured ₪20,000 →
+  // ₪8,000 with no notice, and `פנוי לניהול` wrong by the same substitution.
+  //
+  // 🔑 Reading the mark makes the page tell the truth with no new copy: a redacted household is
+  // rendered exactly as a budget-mode household, because that is what its readable figures ARE.
+  const incomeRedacted = baseline?.budget?.incomeRedacted === true;
+  const incomeMode = baseline?.budget?.mode === "income" && !incomeRedacted;
   const income = baseline?.budget?.income ?? household?.monthlyBudgetAmount ?? 0;
   const fixedMonthly = baseline ? totalMonthlyFixed(baseline.fixedExpenses) : 0;
   const available = Math.max(0, income - fixedMonthly);
@@ -293,6 +307,31 @@ export default function HouseholdSettingsPage() {
       <section className="panel" style={{ maxWidth: 480, marginBottom: 16 }}>
         {baseline ? (
           <>
+            {/* §A60: say that a figure is being withheld rather than quietly showing another one. */}
+            {/* ── BRIEF 2a — THE FIGURE VANISHES AND, UNTIL NOW, NOTHING SAID WHERE IT WENT. ──
+                `R-2` fixed the MISLABEL (₪20,000 rendered as ₪8,000 under "הכנסה"); this is the
+                other half — the partner who typed that number during onboarding, comes back, and
+                concludes the app lost their data. No gate can see that person, so the copy has to.
+
+                Two facts, both measured, and neither was said before:
+                  • it is not gone — `carryOwnIncome` carries the stored key back verbatim on every
+                    refused write, and the read-time strip un-strips when the arrangement ends;
+                  • their own income now lives somewhere specific.
+
+                ⚠️ THE POINTER IS FLAG-GATED AND THE SENTENCE IS NOT. `/my-income` renders
+                `notFound()` with `NEXT_PUBLIC_SEPACCT_UI` unset, so linking it ungated would send a
+                household to a 404 — and would break the dormancy property this whole branch is
+                held to. The explanation is true in both postures; only the destination is not. */}
+            {incomeRedacted && (
+              <p className="status" style={{ display: "block", marginBottom: 14 }}>
+                כשהחשבונות בבית מנוהלים בנפרד, אין הכנסה משותפת להציג כאן. הסכום שנשמר קודם לא נמחק - הוא רק מפסיק להיות מוצג, וחוזר אם ההסדר מכובה.
+                {/* `R-1` — "ונשמרת אצלו" MOVED INSIDE THE GUARD. It asserts each person's income is
+                    being kept somewhere; with the flag off `/my-income` is `notFound()`, so it is
+                    being kept nowhere and the sentence was false in exactly the posture this
+                    branch ships in. The half that is true in BOTH postures stays outside. */}
+                {SEPACCT_UI_ENABLED && <> ההכנסה של כל אחד פרטית ונשמרת אצלו בלבד: <Link href="/my-income">ההכנסה שלי</Link>.</>}
+              </p>
+            )}
             <div className="grid three" style={{ marginBottom: 18 }}>
               <StatTile label={incomeMode ? "הכנסה" : "תקציב"} value={nis(income)} />
               <StatTile label="הוצאות קבועות" value={nis(fixedMonthly)} minus sub={`${activeFixed.length} חשבונות`} />

@@ -113,6 +113,22 @@ export const KID_AGE_BRACKETS: ReadonlyArray<KidAgeBracket> = ["0-3", "4-6", "7-
 export interface WizardFixedExpense {
   /** Stable local React key. For a preset = preset id; for custom = generated id. */
   key: string;
+  /**
+   * SEPACCT stage 1 / `OD-5` - the SERVER-assigned uuid, present ONLY on a line that came back
+   * from a persisted baseline, and absent on a line the user has just added.
+   *
+   * ⚠️ IT IS A SEPARATE FIELD FROM `key` ON PURPOSE, and the first version of this change used
+   * `key` and was wrong. `key` is a LOCAL list key: `addCustom` sets it from `genId()`, which is
+   * `crypto.randomUUID()`, so sending `key` meant every brand-new custom line arrived carrying an
+   * identity the CLIENT chose. The server accepts any syntactic uuid, so it would have persisted
+   * it - turning "server-assigned uuid, stable per household instance" into a claim the code no
+   * longer honoured, and letting a manager re-point a new line onto an existing line's stored
+   * split and price history by supplying that line's uuid. Raised by a cold review of stage 1.
+   *
+   * A line with no `serverId` sends NO `id` key at all (absent, never null), and the server mints
+   * one - which is exactly the pre-existing behaviour for a line it has never seen.
+   */
+  serverId?: string;
   sourcePresetId: string | null;
   isCustom: boolean;
   /** Active (included) toggle. */
@@ -139,6 +155,8 @@ export interface WizardState {
   householdName: string;
   city: string; // doubles as defaultCity (required by the backend contract)
   cars: number;
+  /** The household's declaration; the named default is selected after a second adult joins. */
+  separateAccounts: boolean;
   acceptTerms: boolean;
   acceptPrivacy: boolean;
   // cycle
@@ -150,6 +168,20 @@ export interface WizardState {
   // income / managed budget
   budgetMode: BudgetMode;
   income: number | "";
+  /**
+   * SEPACCT / `AMENDMENT_15` §A56 + `AMENDMENT_16` §A60 — **THE SERVED READ HID `budget.income`.**
+   *
+   * The server sets `budget.incomeRedacted: true` on every read of an ARRANGED household's
+   * baseline and removes `income` from it. Two things follow, and both are load-bearing:
+   *
+   *  1. `income` above is `""` because the figure was withheld, NOT because anybody emptied the
+   *     field. `buildOnboardingPayload` must therefore send no `income` at all — a rebuilt `0` is
+   *     the exact write that destroyed ₪20,000 in run 14 — and must send the MARK back, which is
+   *     what the server refuses on when the arrangement ended between the read and this save.
+   *  2. The income step renders read-only: the server will not store what is typed there, and a
+   *     refusal that looks like success is the defect §A60 rules out.
+   */
+  incomeRedacted: boolean;
   managedBudget: number | "";
   /** Whether the user has manually edited the managed budget (so we stop auto-prefilling). */
   managedTouched: boolean;
@@ -176,6 +208,7 @@ export function createDefaultState(): WizardState {
     householdName: "",
     city: "",
     cars: 1,
+    separateAccounts: false,
     // Consent is captured passively at /login (browse-wrap per the /privacy page) and the backend
     // stamps consent_terms_at/consent_privacy_at unconditionally on completeOnboarding. Seed true so
     // the legacy consent gate in validateStep('profile') and the hardcoded acceptTerms/acceptPrivacy
@@ -189,6 +222,7 @@ export function createDefaultState(): WizardState {
     incomeCount: 1,
     budgetMode: "income",
     income: "",
+    incomeRedacted: false,
     managedBudget: "",
     managedTouched: false,
     fixed: [],
@@ -239,11 +273,16 @@ export function effectiveCycleDay(state: WizardState): number {
 }
 
 // ── Validation (per step) ───────────────────────────────────────────────────────
-export type StepKey = "welcome" | "profile" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
+export type StepKey = "welcome" | "profile" | "separate" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
 
-export const STEP_ORDER: ReadonlyArray<StepKey> = [
-  "welcome", "profile", "cycle", "income", "fixed", "budget", "alerts", "done"
-];
+// The separate-accounts step ships DORMANT with the rest of SEPACCT: with the flag off the wizard
+// has no such step and asks no household about a feature whose every route answers 404.
+// The env read is inlined rather than imported from ../sepacct because this module is deliberately
+// runtime-import-free (see the header); ../sepacct.SEPACCT_UI_ENABLED is the same expression and is
+// what every other call site uses.
+export const STEP_ORDER: ReadonlyArray<StepKey> = ([
+  "welcome", "profile", "separate", "cycle", "income", "fixed", "budget", "alerts", "done"
+] as StepKey[]).filter((step) => step !== "separate" || process.env.NEXT_PUBLIC_SEPACCT_UI === "1");
 
 /** Returns null when the step is valid, or a Hebrew error message when it is not. */
 export function validateStep(step: StepKey, state: WizardState): string | null {
@@ -304,6 +343,31 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
       kidAges: state.kids > 0 ? state.kidAges : [],
       region: state.city.trim() || undefined,
       cars: state.cars
+      // ── SEPACCT `AMENDMENT_16` §A60 — **THE WIZARD ASKS; IT DOES NOT DECIDE.**
+      //    `separateAccounts` IS DELIBERATELY NOT SENT, AND `R-1` MEASURED BOTH REASONS.
+      //
+      // It used to send `state.separateAccounts || undefined`, which is a one-way door in the most
+      // literal sense: `false || undefined` drops the key, so the wizard could turn an arrangement
+      // ON and was PHYSICALLY INCAPABLE of turning it off. Clicking "ביחד" and saving returned
+      // `200 OK`, moved the card, and changed nothing — the exact silent refusal §A60 forbids, on
+      // the setting that hides every member's income and re-attributes every shared expense.
+      //
+      // And sending the boolean honestly is WORSE, not better. `carrySeparateAccounts` makes a
+      // STAMPED household's stored answer win, so `false` would still be refused — silently — for
+      // exactly the households that have really declared. Where it is NOT refused it lands an
+      // UNSTAMPED answer (`AR-5`): the income strip fires on the raw boolean while the arrangement
+      // route reports `sepacctDeclared`, which needs the stamp — so `/settings/separate-accounts`
+      // says the accounts are joint in the same second this wizard's income step says they are
+      // separate, no start notice fires, and the household holds an arrangement the `PUT` would
+      // have REJECTED (no second adult, no validated split). The wizard cannot mint a declaration
+      // instant and must not pretend to.
+      //
+      // 🔑 **THE ARRANGEMENT HAS A SURFACE AND THIS IS NOT IT**: `/settings/separate-accounts`
+      // posts the announcing `PUT`, which validates the split, refuses a child or a non-member,
+      // mints the stamp and fires the start notice. With the key ABSENT, `carrySeparateAccounts`
+      // carries the stored answer forward in BOTH directions, so this whole-document write cannot
+      // change the arrangement at all — which is the property. The step now says where the answer
+      // is made instead of offering a control that cannot make it.
     },
     cycle: {
       basis: state.basis,
@@ -314,12 +378,63 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
     },
     budget: {
       mode: state.budgetMode,
-      income: state.budgetMode === "income" ? num(state.income) : null,
-      managedMonthlyBudget: managed
+      managedMonthlyBudget: managed,
+      // ── SEPACCT `AMENDMENT_15` §A56 / `AMENDMENT_16` §A60 — A REDACTED READ IS NOT AN EMPTY
+      //    FIELD, AND THIS IS THE HALF THAT LIVES IN THIS REPOSITORY ──────────────────────────
+      //
+      // `POST /onboarding/complete` is a WHOLE-DOCUMENT overwrite. Under separate accounts the
+      // server removes `budget.income` from every read — including the owner's — and this wizard
+      // rebuilds `budget` from named fields rather than spreading the served document. So the gap
+      // rendered as an empty number input and posted back an explicit `0`: measured over HTTP on
+      // run 14, ₪20,000 → 0, permanent.
+      //
+      // 🔑 **BOTH HALVES, AND NEITHER IS THE OTHER'S BACKUP.** Omitting `income` means there is no
+      // rebuilt zero to refuse in the first place. Carrying `incomeRedacted` is what makes the
+      // server refuse a write that arrives AFTER the arrangement ended — by then its own
+      // `sepacctArranged(existing)` answers "no", which is a different question from "was the
+      // document I am being handed derived from a redacted read". `A56-15` measured that gap and
+      // this is the client side of closing it: §A60 ships the two repositories as one release.
+      ...(state.incomeRedacted
+        ? { incomeRedacted: true as const }
+        : { income: state.budgetMode === "income" ? num(state.income) : null })
     },
     fixedExpenses: state.fixed
       .filter((f) => f.on)
       .map((f) => ({
+        // SEPACCT stage 1 / `OD-5` (`SEPACCT_SPEC` 8.3) - SEND THE LINE'S SERVER ID BACK.
+        //
+        // `POST /onboarding/complete` is a WHOLE-DOCUMENT overwrite and serves `?mode=edit` as
+        // well as first run. The server's `normalizeFinancialBaseline` PRESERVES a supplied id
+        // and mints a fresh uuid only when none arrives - so with no id sent, every line's uuid
+        // was regenerated on every save. Preset lines survived anyway because `sourcePresetId`
+        // is sent and preserved; CUSTOM lines did not, and their price-observation history
+        // (`lastObservedAmount`, matched on this id) was orphaned on every wizard edit. That is
+        // `S-166`'s remaining half.
+        //
+        // `f.serverId` is set ONLY by `fixedFromBaseline`, i.e. only for a line that came back
+        // from a persisted baseline. A line the user has just added has none and the key is
+        // OMITTED entirely - absent, never null - so the server mints a uuid exactly as before.
+        //
+        // ⚠️ IT IS DELIBERATELY NOT `f.key`, and the first version of this change used `f.key`
+        // and was wrong. `addCustom` sets `key` from `genId()`, which is `crypto.randomUUID()`,
+        // so `f.key` would have made every brand-new custom line arrive with a CLIENT-chosen
+        // identity that the server would then persist. Raised by a cold review of stage 1.
+        //
+        // 🔴 **THIS IS NO LONGER INERT, AND THE SENTENCE THAT USED TO SIT HERE SAID IT WAS.**
+        // `R-2` caught it. The old note read *"this half is inert on its own ... both halves
+        // shipped together"*, which was true when written and is false now: the BACKEND half is
+        // DEPLOYED (`fixedExpenseInputSchema` accepts `id` at `packages/validation/src/index.ts`,
+        // and `6d48240` is an ancestor of the live `41680ca`), while this frontend half is not
+        // merged. They did not ship together and they are not shipping together.
+        //
+        // ⚠️ SO THIS IS THE ONE SEPACCT-BRANCH CHANGE THAT ALTERS LIVE BEHAVIOUR WITH
+        // `NEXT_PUBLIC_SEPACCT_UI` UNSET, AND IT IS REACHABLE TODAY. Any owner or admin re-saving
+        // the wizard through `?mode=edit` posts a key `origin/main` never posted, and the deployed
+        // server acts on it (`normalizeFinancialBaseline`: `supplied ?? randomUUID()`). The effect
+        // is the intended fix - custom lines keep their uuid instead of orphaning their price
+        // history every save - but it is a behavioural difference from `origin/main`, not a
+        // no-op, and the dormancy claim has to name it rather than assume it away.
+        ...(f.serverId ? { id: f.serverId } : {}),
         sourcePresetId: f.sourcePresetId,
         isCustom: f.isCustom,
         label: f.label.trim(),
@@ -344,6 +459,39 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
     acceptPrivacy: true,
     baseline
   };
+}
+
+/**
+ * ── SEPACCT `AMENDMENT_16` §A60 — **THE REFUSAL THE CLIENT COULD NOT SEE** ────────────────────
+ *
+ * `POST /onboarding/complete` answers `200 OK` and returns the household it stored. When the
+ * household is under separate accounts it REFUSES the incoming `budget.income` and keeps the
+ * stored figure — a legitimate protection, and until now an invisible one: everything else the
+ * person edited was saved, one field was not, and nothing said so.
+ *
+ * `IncomeStep` already prevents the common case: a read that came back marked renders no income
+ * input, and `buildOnboardingPayload` then sends no figure. This closes the one the client cannot
+ * prevent — **the arrangement was declared between our read and our save** (a partner in WhatsApp,
+ * a second tab). We sent a figure believing it writable and the server dropped it.
+ *
+ * 🔴 **IT READS THE SERVER'S OWN ANSWER (`incomeRefused`) AND MUST NOT INFER ONE. `R-1` MEASURED
+ * WHAT INFERRING COSTS.** The first cut asked whether the RESPONSE was redacted — which is a
+ * different question from *was the value I sent dropped*, and the two disagree in exactly one case
+ * that is not a race: **the save that declares the arrangement itself.** `carryOwnIncome` refuses
+ * on the state BEFORE the write, and a household that declares in the same whole-document save is
+ * arranged AFTER it. So the notice fired for **every** household that chose "בנפרד", first run and
+ * edit alike, telling them in Hebrew on a money surface that an income which HAD been stored was
+ * not — and in first run it also short-circuited the completion step and left the draft behind.
+ *
+ * 🔑 **A refusal signal that fires on non-refusals is worse than no signal: it trains people to
+ * dismiss the one that means something.** The server now reports the refusal it performed, from
+ * the one predicate that knows (`ownIncomeWriteRefused`, asked of the PRIOR household).
+ */
+export const INCOME_REFUSED_NOTICE =
+  "השאר נשמר. ההכנסה לא נשמרה: בבית הזה החשבונות מנוהלים בנפרד, ואין הכנסה משותפת לשמור. ההכנסה של כל אחד פרטית ונשמרת אצלו.";
+
+export function incomeRefusedNotice(saved: { incomeRefused?: boolean } | undefined): string | null {
+  return saved?.incomeRefused === true ? INCOME_REFUSED_NOTICE : null;
 }
 
 // ── Sub-budget auto-split (round to ₪50, last bucket absorbs remainder) ──────────
@@ -466,6 +614,7 @@ export function coerceDraftState(raw: unknown): WizardState | null {
   if (typeof raw.householdName === "string") s.householdName = raw.householdName;
   if (typeof raw.city === "string") s.city = raw.city;
   s.cars = finiteNumber(raw.cars, s.cars);
+  if (typeof raw.separateAccounts === "boolean") s.separateAccounts = raw.separateAccounts;
   // Consent is no longer a wizard field — a stale draft must not re-introduce a false consent and
   // re-block the profile step (the seeded `true` default always wins). See createDefaultState.
   if (inEnum(raw.basis, BUDGET_BASES)) s.basis = raw.basis;
@@ -475,6 +624,13 @@ export function coerceDraftState(raw: unknown): WizardState | null {
   s.incomeCount = finiteNumber(raw.incomeCount, s.incomeCount);
   if (inEnum(raw.budgetMode, BUDGET_MODES)) s.budgetMode = raw.budgetMode;
   s.income = numberOrEmpty(raw.income);
+  // Carried because `redactDraftForStorage` spreads the whole state, so this flag really does
+  // reach `localStorage` and a silently dropped `true` is how a stored income gets destroyed.
+  // ⚠️ The first cut of this comment claimed the value "can only ever be `false`" on the grounds
+  // that drafts are first-run only. `R-1` was right that the reason was wrong even where the line
+  // was harmless: the refusal branch in `useOnboardingWizard` sets it, and stating a safety case
+  // that does not hold is how the next reader deletes the line.
+  if (typeof raw.incomeRedacted === "boolean") s.incomeRedacted = raw.incomeRedacted;
   s.managedBudget = numberOrEmpty(raw.managedBudget);
   if (typeof raw.managedTouched === "boolean") s.managedTouched = raw.managedTouched;
   if (Array.isArray(raw.fixed)) {
@@ -525,6 +681,9 @@ function fixedFromBaseline(raw: unknown): WizardFixedExpense | null {
   return {
     // The wizard list key: prefer the server uuid, then the preset id, then a fresh local key.
     key: typeof raw.id === "string" && raw.id ? raw.id : sourcePresetId ?? `f_${Math.random().toString(36).slice(2)}`,
+    // SEPACCT stage 1 / `OD-5`: the server's own id, kept separately from the list key so that
+    // only a line the SERVER has already named can send one back. See `WizardFixedExpense`.
+    ...(typeof raw.id === "string" && raw.id ? { serverId: raw.id } : {}),
     sourcePresetId,
     isCustom: raw.isCustom === true,
     // Baseline persists `isActive` (the wizard toggle is `on`). Default to on when absent.
@@ -569,6 +728,7 @@ export function buildStateFromBaseline(source: BaselineEditSource | undefined, d
     if (Array.isArray(p.kidAges)) s.kidAges = p.kidAges.filter((a): a is KidAgeBracket => inEnum(a, KID_AGE_BRACKETS));
     if (typeof p.region === "string" && p.region) s.city = p.region;
     s.cars = finiteNumber(p.cars, s.cars);
+    if (typeof p.separateAccounts === "boolean") s.separateAccounts = p.separateAccounts;
   }
   if (isPlainObject(b.cycle)) {
     const c = b.cycle;
@@ -582,6 +742,9 @@ export function buildStateFromBaseline(source: BaselineEditSource | undefined, d
     const bg = b.budget;
     if (inEnum(bg.mode, BUDGET_MODES)) s.budgetMode = bg.mode;
     s.income = numberOrEmpty(bg.income);
+    // §A56: the server hid the figure rather than the household emptying it. Carried so the save
+    // does not rebuild a `0` over it, and so the step can say so instead of pretending to accept.
+    if (bg.incomeRedacted === true) s.incomeRedacted = true;
     if (typeof bg.managedMonthlyBudget === "number" && Number.isFinite(bg.managedMonthlyBudget)) {
       s.managedBudget = bg.managedMonthlyBudget;
       s.managedTouched = true;

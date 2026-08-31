@@ -22,6 +22,8 @@ import {
   DRAFT_TTL_MS,
   humanizeOnboardingError,
   buildStateFromBaseline,
+  incomeRefusedNotice,
+  INCOME_REFUSED_NOTICE,
   type WizardState,
   type WizardFixedExpense
 } from "./model.ts";
@@ -135,7 +137,15 @@ test("buildOnboardingPayload: managed budget → monthlyBudgetAmount; income sta
   assert.equal(p.baseline.budget?.income, 24000); // income NOT in monthlyBudgetAmount
   assert.equal(p.acceptTerms, true);
   assert.equal(p.defaultCity, "תל אביב");
-  // fixed expense maps without a client id; reportCat preserved
+  // SEPACCT stage 1 / `OD-5`. This line is a BRAND-NEW custom expense - the server has never
+  // seen it and has therefore never named it - so no `id` key is sent and the server mints one.
+  // ABSENT, never null.
+  //
+  // ⚠️ The assertion reads the same as it did before this stage and it does NOT mean the same
+  // thing, which is why it is spelled out. Before, `buildOnboardingPayload` sent no id for ANY
+  // line, including one seeded from a persisted baseline, and this cell was pinning that defect
+  // green under the comment "fixed expense maps without a client id". The property that actually
+  // changed is in the round-trip cell below, and that is the cell that would catch a regression.
   const fe = p.baseline.fixedExpenses?.[0] as Record<string, unknown>;
   assert.equal("id" in fe, false);
   assert.equal(fe.reportCat, "subscriptions");
@@ -285,6 +295,30 @@ function fullBaseline(): FinancialBaseline {
   };
 }
 
+test("SEPACCT OD-5: a stored line's server uuid survives baseline -> wizard -> payload", () => {
+  // THE ROUND TRIP IS THE PROPERTY, and a one-directional cell cannot see it. `?mode=edit`
+  // re-enters the wizard from a PERSISTED baseline and POSTs a whole-document overwrite, so the
+  // uuid has to survive two hops: `buildStateFromBaseline` must park it somewhere
+  // (`WizardFixedExpense.key`), and `buildOnboardingPayload` must send it back out.
+  //
+  // WHAT THIS CATCHES that the presence cell above cannot: a payload builder that sends
+  // `id: genId()`, or `id: f.sourcePresetId`, or that sends the key for preset lines only. All
+  // three satisfy `"id" in fe === true`. Only the CUSTOM line (`uuid-x`, `sourcePresetId: null`)
+  // discriminates them, because it is the line with no second axis to fall back on - which is
+  // exactly why `SEPACCT_SPEC` 8.3 says preset lines were always stable and custom ones were not.
+  const state = buildStateFromBaseline(
+    { financialBaseline: fullBaseline(), name: "בית כהן", monthlyBudgetAmount: 9000, defaultCity: "תל אביב", budgetCycleDay: 5 },
+    "אבי"
+  );
+  // The inactive custom line is `on: false` and `buildOnboardingPayload` filters those out, so
+  // turn it on: the question is whether the uuid survives, not whether the line is active.
+  for (const f of state.fixed) f.on = true;
+  const sent = buildOnboardingPayload(state).baseline.fixedExpenses ?? [];
+  const ids = new Map(sent.map((f) => [(f as Record<string, unknown>).label, (f as Record<string, unknown>).id]));
+  assert.equal(ids.get("שכירות"), "uuid-rent");
+  assert.equal(ids.get("חוג שחייה"), "uuid-x");
+});
+
 test("buildStateFromBaseline: round-trips a full baseline into wizard state", () => {
   const s = buildStateFromBaseline(
     { financialBaseline: fullBaseline(), name: "בית כהן", monthlyBudgetAmount: 9000, defaultCity: "תל אביב", budgetCycleDay: 5 },
@@ -401,4 +435,84 @@ test("saveDraft does NOT persist income / budget-amount / household name to loca
 
 test("DRAFT_TTL_MS is at most 24h (was 14 days)", () => {
   assert.ok(DRAFT_TTL_MS <= 24 * 60 * 60 * 1000, `TTL ${DRAFT_TTL_MS}ms exceeds 24h`);
+});
+
+// =============================================================================
+// SEPACCT `AMENDMENT_15` §A56 / `AMENDMENT_16` §A60 - the client half of `A56-15`.
+//
+// The backend cell `apps/api/src/sepacct-income-roundtrip.gate.test.ts` measures the ROUND TRIP.
+// It can only replay a payload SHAPE, because the wizard lives in this repository. These cells
+// pin that the shape it replays is the one this wizard actually builds - the two together are the
+// property, and either alone is the "unit test of one half" §A56 rules out.
+// =============================================================================
+
+const REDACTED_READ = {
+  version: 1, mode: "quick",
+  profile: { type: "couple", adults: 2, kids: 0, kidAges: [], cars: 1, separateAccounts: true },
+  cycle: { basis: "calendar", startDay: 1, salaryDay: 10, incomeCount: 1 },
+  // What the server serves an ARRANGED household: no `income` key at all, plus the mark.
+  budget: { mode: "income", managedMonthlyBudget: 8000, incomeRedacted: true },
+  fixedExpenses: [], subBudgets: {}, alerts: undefined
+} as unknown as FinancialBaseline;
+
+test("SEPACCT A56: a redacted read hydrates as redacted, and the empty income is the SERVER's gap", () => {
+  const s = buildStateFromBaseline({ financialBaseline: REDACTED_READ, monthlyBudgetAmount: 8000 }, "אבי");
+  assert.equal(s.incomeRedacted, true);
+  assert.equal(s.income, "");            // withheld, NOT emptied by anyone
+  assert.equal(s.separateAccounts, true);
+});
+
+test("SEPACCT A56: the mark travels back and NO rebuilt income is posted over the stored figure", () => {
+  const s = buildStateFromBaseline({ financialBaseline: REDACTED_READ, monthlyBudgetAmount: 8000 }, "אבי");
+  s.householdName = "בית"; s.city = "חיפה";
+  const b = buildOnboardingPayload(s).baseline.budget as Record<string, unknown>;
+  // 🔴 THE DEFECT, AS AN ASSERTION. `income` used to be rebuilt from flat state as `num("") === 0`
+  //    and posted over a stored ₪20,000. There must be no key at all - absent, never null, never 0.
+  assert.equal("income" in b, false, "a redacted read posted an income back - this is the ₪20,000 write");
+  assert.equal(b.incomeRedacted, true, "the mark did not travel - the server cannot refuse a save that arrives after the arrangement ends");
+  assert.equal(b.managedMonthlyBudget, 8000);
+});
+
+test("SEPACCT A56 negative control: an UNREDACTED read still sends the figure and no mark", () => {
+  const s = createDefaultState();
+  s.displayName = "א"; s.householdName = "ב"; s.city = "ג";
+  s.budgetMode = "income"; s.income = 0; s.managedBudget = 9000;
+  const b = buildOnboardingPayload(s).baseline.budget as Record<string, unknown>;
+  // An honest zero from a read that was never redacted still lands - §A56 forbids a rule that
+  // fires on the VALUE, and the backend cell `A56-2` is the other side of this one.
+  assert.equal(b.income, 0);
+  assert.equal("incomeRedacted" in b, false);
+});
+
+test("SEPACCT A60: the notice reads the SERVER's answer, and never infers one from the response", () => {
+  // R-1, run 16. The first cut asked whether the RESPONSE was redacted. A household that DECLARES
+  // in the same whole-document save is arranged in the response and refused nothing - carryOwnIncome
+  // asks the state BEFORE the write. Measured over HTTP: the notice fired for 100% of households
+  // choosing separate accounts, on a money surface, in Hebrew, saying an income that HAD been
+  // stored was not - and in first run it short-circuited the completion step and kept the draft.
+  assert.equal(incomeRefusedNotice({ incomeRefused: true }), INCOME_REFUSED_NOTICE);
+  // The declaring save: the server stored the income and says so by omitting the key.
+  assert.equal(incomeRefusedNotice({}), null);
+  assert.equal(incomeRefusedNotice(undefined), null);
+  assert.equal(incomeRefusedNotice({ incomeRefused: false }), null);
+});
+
+test("SEPACCT A60: the wizard can never change the arrangement, in EITHER direction", () => {
+  // R-1, run 16, Finding 1. `separateAccounts: state.separateAccounts || undefined` made the
+  // together card a one-way door - `false || undefined` drops the key - so the card moved, the save
+  // returned 200, and the arrangement that hides every member's income stayed on. Sending the
+  // boolean honestly is worse: carrySeparateAccounts refuses it for a STAMPED household (silently)
+  // and lands an UNSTAMPED one otherwise, which /settings/separate-accounts then reports as joint
+  // while the income step says separate. The key is not sent at all, and with it absent the server
+  // carries the stored answer forward in both directions.
+  const off = createDefaultState();
+  off.displayName = "a"; off.householdName = "b"; off.city = "c"; off.managedBudget = 9000;
+  const on: WizardState = { ...off, separateAccounts: true };
+  for (const [label, st] of [["together", off], ["separate", on]] as const) {
+    const profile = buildOnboardingPayload(st).baseline.profile as Record<string, unknown>;
+    assert.equal("separateAccounts" in profile, false, `the wizard sent an arrangement answer (${label})`);
+  }
+  // Non-vacuity: the rest of the profile is still built from the same state, so the assertions
+  // above are not green merely because `profile` came back empty.
+  assert.equal((buildOnboardingPayload(on).baseline.profile as Record<string, unknown>).type, "family");
 });

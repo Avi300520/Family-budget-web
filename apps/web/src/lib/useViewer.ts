@@ -28,6 +28,15 @@ export interface Viewer {
   displayName?: string;
   /** The household name (sidebar identity block / settings banner). */
   householdName?: string;
+  /** The signed-in user's id. SEPACCT joins split shares against it - a share carries a userId
+   *  and no display name (SEPACCT_FRONTEND_SPEC.md section 6 item 1). */
+  userId?: string;
+  /** The household's id. Every SEPACCT route but the arrangement GET is keyed by it. */
+  householdId?: string;
+  /** SEPACCT: when this household declared the arrangement. SERVER-SET, absent while the backend
+   *  flag is off, and deliberately KEPT when the arrangement is turned back off - so the settings
+   *  copy can say what switching off does without promising an erasure that does not happen. */
+  separateAccountsDeclaredAt?: string;
   /** Convenience bundle for the capability helpers in settingsView.ts. */
   caps: ViewerCaps;
   /** True when the authenticated user belongs to a household (membership resolved). */
@@ -43,6 +52,9 @@ export function useViewer(): Viewer {
   const [displayName, setDisplayName] = useState<string>();
   const [householdName, setHouseholdName] = useState<string>();
   const [hasHousehold, setHasHousehold] = useState(false);
+  const [userId, setUserId] = useState<string>();
+  const [householdId, setHouseholdId] = useState<string>();
+  const [declaredAt, setDeclaredAt] = useState<string>();
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -58,6 +70,9 @@ export function useViewer(): Viewer {
         setDisplayName(me.user?.displayName ?? undefined);
         setHouseholdName(me.household?.name ?? undefined);
         setHasHousehold(Boolean(me.household));
+        setUserId(me.user?.id);
+        setHouseholdId(me.household?.id);
+        setDeclaredAt(me.household?.financialBaseline?.profile?.separateAccountsDeclaredAt);
         setStatus("ready");
       })
       .catch(() => {
@@ -68,6 +83,9 @@ export function useViewer(): Viewer {
         setDisplayName(undefined);
         setHouseholdName(undefined);
         setHasHousehold(false);
+        setUserId(undefined);
+        setHouseholdId(undefined);
+        setDeclaredAt(undefined);
         setStatus("error");
       });
     return () => {
@@ -77,5 +95,5 @@ export function useViewer(): Viewer {
 
   const retry = useCallback(() => setNonce((n) => n + 1), []);
 
-  return { status, role, permissions, displayName, householdName, caps: { role, permissions }, hasHousehold, retry };
+  return { status, role, permissions, displayName, householdName, userId, householdId, separateAccountsDeclaredAt: declaredAt, caps: { role, permissions }, hasHousehold, retry };
 }

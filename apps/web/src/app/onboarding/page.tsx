@@ -7,13 +7,14 @@ import { computeTotals, type StepKey } from "../../lib/onboarding/model";
 import { WhatsAppCtaButton, botWhatsAppLink } from "../../components/WhatsAppCta";
 import { useOnboardingWizard } from "./useOnboardingWizard";
 import {
-  WelcomeStep, ProfileStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
+  WelcomeStep, ProfileStep, SeparateAccountsStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
 } from "./steps";
 import styles from "./onboarding.module.css";
 
 const STEP_META: Record<StepKey, { title: string; sub: string }> = {
   welcome: { title: "ברוכים הבאים לפינגטלי", sub: "כמה שאלות קצרות ונכין תקציב שמתנהל בוואטסאפ." },
   profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
+  separate: { title: "איך הכספים מתנהלים", sub: "אפשר להפריד כספים ועדיין לנהל הוצאות משותפות." },
   cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
   income: { title: "כמה כסף נכנס - וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
   fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות - שכירות, חשבונות, מנויים ועוד." },
@@ -25,6 +26,7 @@ const STEP_META: Record<StepKey, { title: string; sub: string }> = {
 const STEP_COMPONENTS: Record<Exclude<StepKey, "done">, (props: StepProps) => ReactElement> = {
   welcome: WelcomeStep,
   profile: ProfileStep,
+  separate: SeparateAccountsStep,
   cycle: CycleStep,
   income: IncomeStep,
   fixed: FixedStep,
@@ -120,6 +122,9 @@ export default function OnboardingPage() {
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           {wizard.error && <div className="status error" role="alert" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.error}</div>}
+          {/* SEPACCT §A60 — a save that succeeded and did not store everything. A status, not an
+              error: the rest really was saved. `role="status"` so it is announced without the alarm. */}
+          {wizard.notice && <div className="status" role="status" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.notice}</div>}
           <div className={`${styles.footerRow} a11y-sticky-cta`}>
             {wizard.stepIndex > 1 ? (
               <button type="button" className="button secondary" onClick={wizard.back} disabled={wizard.working}>חזרה</button>
