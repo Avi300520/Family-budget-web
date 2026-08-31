@@ -73,27 +73,26 @@ export default function MyRecordPage() {
   //
   // So the first state gets an EMPTY STATE — the one number that means something, and what to do
   // next — and the four components return the moment there is anything to be a component of.
-  // ══ `R-1` STOP, RECORDED IN CODE BECAUSE THE COPY CANNOT CLOSE IT ═══════════════════════════
+  // ══ `R-1`'s STOP, AND WHAT CLOSED IT — `CC_UX_BUILD` item 1 ════════════════════════════════
   //
-  // 🔴 **NO USER OF THIS PRODUCT CAN CREATE THE FIRST SPLIT OF ANY EXPENSE.** Verified end to end:
-  //   1. `listMySepacctComponents` (both stores) maps each purchase to `mine ? {...} : undefined`
-  //      and filters, where `mine` is the viewer's row in an EXISTING allocation - and
-  //      `resolveAllocation` returns `undefined` for zero rows. A household that has split nothing
-  //      gets `entries: []`.
-  //   2. That list is the ONLY producer of a `purchaseId` in this repository - one link,
-  //      `my-record/page.tsx`. No dashboard, activity or budget surface exposes one.
-  //   3. `/shared-expenses` returns early on `allocation === null`, ABOVE `SplitControl`.
-  //   4. Turning the arrangement on writes no split rows: `profile.defaultSplit` is read by nobody
-  //      (`packages/db/src/flags.ts` - *"Stage 1 stores them and nothing reads them"*).
+  // 🔴 The block that stood here said, correctly at the time: **no user of this product can create
+  // the first split of any expense.** The capability bootstrapped only from a state it could not
+  // reach, and its fourth clause was the root — *"turning the arrangement on writes no split rows:
+  // `profile.defaultSplit` is read by nobody"*.
   //
-  // The capability bootstraps only from a state it cannot reach. Closing it needs either a new
-  // backend projection (household purchases with NO split yet) or a product ruling that per-expense
-  // splitting is not offered in this release. Both are owner calls and the backend is read-only.
+  // **That clause is now false, and it is the only one that had to become false.** A shared expense
+  // recorded by a declared household is divided at the household ratio inside the transaction that
+  // writes it, so a household that has answered has allocations from its FIRST expense onward and
+  // the list below is populated without anybody hunting for a way in. The door on
+  // `/dashboard/spending` (run 17) remains, and is now for CHANGING a split rather than for
+  // conjuring the first one.
   //
-  // ⚠️ WHAT IS FIXED HERE IS THE MISDIRECTION ONLY, AND DELIBERATELY NOT MORE. Copy that instructed
-  // "pick an expense from the list below and set its ratio" pointed at a list that is guaranteed
-  // empty in exactly that state. Every sentence below is true under BOTH candidate rulings, so it
-  // is safe to ship ahead of one; nothing here claims splitting is available, or that it is not.
+  // ⚠️ THE EMPTY STATE STAYS, AND ITS POPULATION CHANGED RATHER THAN VANISHED. It is now reached by
+  // a household whose expenses all predate the declaration, whose ratio does not currently resolve
+  // (a member left, or a third adult arrived), or whose only recorder is a child — none of which
+  // are broken states, and all of which look identical to a person unless the page says which.
+  // Kept for the lesson, which outlived its defect: three sessions of careful empty-state Hebrew
+  // had been written AROUND a dead end, and no amount of copy was ever going to close it.
   // `R-1` F2 — `&& totals.recordedAgorot > 0` USED TO BE HERE AND IT DEAD-ENDED THE EXACT PERSON
   // THIS EMPTY STATE EXISTS FOR. A partner who has paid for nothing yet has recorded 0 AND share 0,
   // so the guidance was skipped and they got two ₪0.00 tiles and, measured, ZERO links in <main> -
@@ -119,6 +118,10 @@ export default function MyRecordPage() {
               <Component label="נרשם" agorot={totals.recordedAgorot} />
             </div>
             <p style={{ marginTop: "var(--sp-3)" }}>עדיין לא חולקה אף הוצאה, ולכן אין עדיין חלק משלכם להציג.</p>
+            {/* `CC_UX_BUILD` item 1 changed WHO reaches this screen, so it now names the reasons
+                rather than implying the feature is simply new. All three are ordinary states, and
+                they are indistinguishable to a person unless the page distinguishes them. */}
+            <p className="muted">הוצאות משותפות חדשות מתחלקות מעצמן. אם לא מופיע כאן כלום, בדרך כלל זה בגלל שההוצאות נרשמו לפני שהתחלתם את ההסדר, או שיחס החלוקה עדיין לא נקבע.</p>
             {/* The next step exists now (the door on /dashboard/spending), so this says it. It does
                 NOT say "pick one from the list below": that list still shows only expenses that
                 already HAVE a split, so it is still empty in this exact state. Restoring the
