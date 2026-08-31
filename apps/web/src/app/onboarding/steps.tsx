@@ -192,8 +192,31 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
               </p>
             </div>
           )}
+          {/* ── `AMENDMENT_18` §A68 — **THE SCREEN THAT TAKES THE ANSWER NAMES WHAT HAPPENS NEXT.**
+              The FIRST sentence was already here, and it is §A68's ruling word for word: the
+              arrangement begins when the other adult joins. It shipped in this branch's first
+              commit, which means it was on screen throughout run 18's walk.
+
+              🔴 **AND THE WALK STILL HESITATED, WHICH IS WHY THERE IS A SECOND SENTENCE.** The
+              reported hesitation was *"had the income question been skipped, or was it still
+              coming?"* — asked after answering בנפרד, typing 60 and pressing המשך, which lands
+              on the BUDGET-CYCLE step because `STEP_ORDER` is `separate → cycle → income`. The
+              first sentence cannot answer that: it is about the RATIO's timing. The question the
+              answer actually changed is the income one, and the product said so two steps later,
+              on the step where the person had already stopped wondering.
+
+              So §A68's own generalisation is applied to the OTHER consequence of the same answer:
+              **where a setup answer changes a LATER question, the screen that takes the answer
+              names the question it changed.** Same rule, same screen, one line.
+
+              ⚠️ EVERY CLAUSE VERIFIED AT SOURCE BEFORE IT WAS WRITTEN, because a sentence about a
+              screen two steps away is exactly the claim `A66` was struck for. `IncomeStep`'s
+              `state.separateAccounts && !state.incomeRedacted` branch renders `ההכנסה שלך`
+              hinted *"פרטית. בן/בת הזוג לא רואה את המספר הזה"*, carries NO household-income
+              field at all, and `buildOnboardingPayload` sends no `budget.income` for it. */}
           <p className="status" style={{ display: "block" }}>
             היחס נשמר עכשיו ומתחיל לפעול כשמצטרף בן/בת הזוג. עד אז אין מה לחלק.
+            {" "}בהמשך נשאל על ההכנסה שלך בלבד, והיא נשארת פרטית - אין כאן הכנסה משותפת.
           </p>
         </section>
       )}

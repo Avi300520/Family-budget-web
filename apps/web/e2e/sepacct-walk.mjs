@@ -100,6 +100,24 @@ await guard("leg 1", async () => {
   await click(page, "יחס אחר", "not half-and-half");
   await fill(page, "#sep-share", 60, "the recorder's own share");
   log(`   partner's share shown as: ${(await visible(page)).find((l) => l.includes("החלק של בן")) ?? "(absent)"}`);
+  // ── `AMENDMENT_18` §A68 / §A70 — **THE SCREEN THAT TAKES THE ANSWER, ASSERTED ON THAT SCREEN.**
+  // §A70: a cell is not counted until it has been seen RED with the control removed — delete either
+  // sentence from `SeparateAccountsStep` and the matching line below goes to RED.
+  // ⚠️ ANTI-VACUITY FIRST, and this is the exact failure §A70 lists twice: assert we are ON the
+  // step that carries the ratio before believing anything it says. `איך מתחלק?` is rendered by
+  // this step and by no other.
+  {
+    const sep = await visible(page);
+    const onSeparateStep = sep.includes("איך מתחלק?");
+    log(`   is this really the ratio step? ${onSeparateStep ? "yes" : "🔴 NO - the two checks below prove nothing"}`);
+    const namesTheEvent = sep.some((l) => l.includes("מתחיל לפעול כשמצטרף"));
+    const namesTheIncome = sep.some((l) => l.includes("בהמשך נשאל על ההכנסה שלך בלבד"));
+    log(`   §A68 names the event that makes it real?   ${namesTheEvent ? "yes" : "🔴 no"}`);
+    log(`   §A68 names the question it changed?        ${namesTheIncome ? "yes" : "🔴 no"}`);
+    if (!onSeparateStep || !namesTheEvent || !namesTheIncome) {
+      failures.push(`§A68: separateStep=${onSeparateStep} event=${namesTheEvent} income=${namesTheIncome}`);
+    }
+  }
   await click(page, "המשך");
   log(`   screen: ${await heading(page)}   ← the CYCLE step comes between`);
   await click(page, "המשך");
