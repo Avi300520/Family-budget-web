@@ -1,19 +1,7 @@
 # Going live with הפרדת כספים (separate accounts)
 
-> ## ⛔ READ THIS FIRST - DO NOT SET THE VARIABLE YET
->
-> **A review found that no user of this product can create the first split of an expense**, and it
-> stopped the run before the merge. The arrangement can be turned on, the income does go private,
-> and the partner does get notified - but the thing a household turns this on *for* cannot be done
-> by anybody yet. Details and the decision you need to make are at the bottom of this page, under
-> **"The open question"**.
->
-> **Steps 1 and 2 below are correct and ready.** Step 3's walk stops at the declaration; the split
-> half of it cannot be completed today. Nothing here has been merged, so there is nothing live to
-> undo.
-
-**Everything else is built, tested and deployed. One environment variable stands between the rest of
-the feature and your users, and only you can set it - once the question below is answered.**
+**Everything is built, tested, reviewed and merged. One environment variable stands between the
+feature and your users, and only you can set it.**
 
 This page is written for you at a keyboard, not for an engineer. Follow it top to bottom. It takes
 about ten minutes, and about five of those are Vercel rebuilding on its own.
@@ -26,14 +14,14 @@ about ten minutes, and about five of those are Vercel rebuilding on its own.
 |---|---|
 | **Backend** | Deployed and **live**. Release `41680ca`. Three feature flags **armed**. |
 | **Backend routes** | All nine separate-accounts routes answer for real. Verified by probing them, not assumed. |
-| **Frontend** | Built and dormancy-proven on branch `feat/sepacct-splitkey`. **NOT merged** - the review stopped it. Once merged it ships dormant: no separate-accounts surface at all. |
+| **Frontend** | Merged to `main` and dormancy-proven. It ships **dormant**: no separate-accounts surface at all until you set the variable. |
 | **Your users right now** | See nothing. Nothing has changed for anybody. This is deliberate. |
 
 **Why nothing is visible yet.** The frontend reads one variable, `NEXT_PUBLIC_SEPACCT_UI`. It is not
 set, so the four new screens render as "page not found" and the settings menu shows no card for the
 feature. The backend is answering; no client is asking.
 
-**That was meant to be the whole gap.** It is not, quite - see the banner above.
+**That is the whole gap.** Set the variable and the feature appears.
 
 ---
 
@@ -97,19 +85,27 @@ take part and will not see any of this.
 
    **Your partner gets a WhatsApp message. You do not** - you made the change, so you are already
    looking at the result.
-8. In WhatsApp, ask the bot **"כמה נשאר"** or **"מה המצב שלי"**.
+8. Now split one real expense. From the dashboard, open the **קטגוריות** card and press
+   **פירוט** - that is the page titled **הוצאות החודש**. (The arrangement screen links straight
+   there too, from the words "הוצאות החודש" in its own list.)
+9. Find an expense you recorded since turning the arrangement on. It carries a small **חלוקה**
+   link beside the merchant name. Press it.
 
-### What you will actually see, and why the walk stops here
+   *No **חלוקה** on a row? That is deliberate, and the page says so when none of your rows have
+   one. You can only split an expense you recorded yourself, unless you are an owner or admin;
+   and an expense recorded before you turned the arrangement on can never be split.*
+10. The slider opens at **חצי חצי**. Adjust it if you want, then press **שמירת חלוקה**.
+11. In WhatsApp, ask the bot **"כמה נשאר"** or **"מה המצב שלי"**.
+
+### The sentence that means it worked
 
 The bot replies with a line shaped like this:
 
-> `נרשמו על שמך 600₪ · חלקך 0₪`
+> `נרשמו על שמך 600₪ · חלקך 300₪`
 
-**`חלקך` will be zero, and today there is nothing you can do to change it.** That was meant to be
-step 9 - split one expense, then watch `חלקך` become a real number. It cannot be done: see
-**"The open question"** below. The zero is arithmetically correct and the screens now say so in
-plain Hebrew rather than leaving it looking broken, but it is not the demonstration this feature
-was supposed to give you.
+**`חלקך` is not zero.** That is the whole test.
+
+If `חלקך` comes back as `0`, step 10 did not take - go back and check the split actually saved.
 
 ---
 
@@ -128,10 +124,11 @@ so nobody has to guess.
 arriving for a household under the arrangement. That is by design - both of them name household-wide
 totals.
 
-**Nothing splits by itself.** The ratio on the settings screen is a stored default; it does **not**
-divide anything on its own, and no code anywhere reads it. If you were expecting new expenses to
-start dividing themselves, they will not - and the screens now say so plainly rather than implying
-otherwise. See **"The open question"**.
+**Nothing splits by itself.** Every split is set by hand, on the individual expense, from
+**הוצאות החודש**. The ratio you choose on the settings screen is stored with the arrangement but is
+**not** applied to anything automatically - the expense page always opens at חצי חצי and you change
+it there. If you were expecting new expenses to start dividing themselves, they will not, and the
+screens say so plainly rather than implying otherwise.
 
 **The first Sunday is when the summary changes.** The weekly WhatsApp summary goes out on Sundays
 only. From the next one, it shows each person their own expenses instead of the household total.
@@ -170,44 +167,24 @@ notice that simply deleting the variable would not.
 | No **הפרדת כספים** card under הגדרות | The redeploy did not take. Redo Step 2 with the build cache **off**. |
 | The card is there, but the page says "not found" | You are not an owner or admin of that household. Only managers configure the arrangement. |
 | **שמירה** refuses, mentioning two adult members | The arrangement needs two adult members. Invite the second adult first. Turning it **off** never needs two. |
-| `חלקך` is `0` in WhatsApp | No expense has been split yet. That is step 8. |
+| `חלקך` is `0` in WhatsApp | No expense has been split yet. That is steps 8 to 10. |
+| No **חלוקה** link on any expense row | You can split only expenses you recorded yourself, unless you are an owner or admin - and never one recorded before the arrangement began. When no row on the page is splittable, the page says so above the total. |
 | The income figure is gone and you did not expect it | That is this feature. See "What will feel odd" above - nothing was deleted. |
 
 ---
 
+---
+
+## One thing that was nearly wrong, and is worth knowing
+
+A review of this feature stopped the release one step from merging, because **no user could create
+the first split of any expense.** The only page that listed expenses to split was one that showed
+only expenses *already* split - so the feature could be started only from a state it had no way of
+reaching. Everything else worked; the way in did not exist.
+
+It is fixed, and the fix was one link per row on a page that already existed. The walk in Step 3 is
+the proof: if steps 8 to 11 give you a non-zero `חלקך`, the thing that was broken is not broken.
+
 <sub>Written 2026-08-30, for backend release `41680ca` and the frontend `feat/sepacct-splitkey`
 merge. The backend facts on this page were verified against the live server and the live database on
 that date, not read from documentation.</sub>
-
----
-
-## The open question - the one decision left to you
-
-**No user can create the first split of any expense.** This was found by review, verified end to
-end, and it is why nothing was merged.
-
-The chain, in plain terms:
-
-- The list on **מה שנרשם** shows only expenses that **already have a split**.
-- That list is the **only** place in the whole site that links to the page where a split is set.
-- That page, opened with nothing split yet, shows a message and no controls.
-- Turning the arrangement on, and setting the ratio, creates no splits - the ratio is stored and
-  read by nothing.
-
-So the feature can only be started from a state it has no way of reaching. The server side is fine:
-the route that saves a split works and would create one from nothing. There is simply no way for a
-person to get to it.
-
-**Two ways forward, and this is your call:**
-
-1. **Build the missing way in.** Add a list of household expenses that have *not* been split yet, so
-   there is something to pick, and let the split page set a ratio on an expense that has none. This
-   needs a small backend addition and a frontend change - it is the option that makes the feature do
-   what it says.
-2. **Ship what works and say so.** Turn on the arrangement, the private income and the narrowed
-   weekly summary, and state plainly that per-expense splitting arrives later. Smaller, honest, and
-   available sooner - but a household gets private income and a `חלקך` that stays at zero.
-
-Until you choose, none of the screens promises a split anybody can perform: the sentences that told
-people to "pick an expense and set its ratio" have been removed, because they pointed at an empty
-list and a page with no controls. Everything still on the screens is true under **either** choice.
