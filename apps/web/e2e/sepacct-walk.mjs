@@ -123,10 +123,24 @@ await guard("leg 1", async () => {
   act('type 18000 as MY OWN income');
   const budgets = page.locator("input[inputmode=decimal]");
   if (await budgets.count() > 1) { await budgets.nth(1).fill("9000"); act('type 9000 as the household budget'); }
-  for (const label of ["המשך", "דילוג", "המשך", "סיום"]) {
-    try { await click(page, label); } catch { /* the step order varies with the answers; keep going */ }
+  // ⚠️ **PRESS ON UNTIL THE WIZARD IS ACTUALLY FINISHED, AND ASSERT THAT IT WAS.** The first cut
+  // clicked a fixed list of four labels, stopped on step 7 of 8, and then read `/__onboarding` —
+  // which was still empty, so "no shared income in the payload" was answered about a payload that
+  // had never been sent. The SECOND vacuous check in this file, after the one that ran on the cycle
+  // screen. A walk that stops early and then asks a question gets a green that means nothing.
+  for (let i = 0; i < 8; i += 1) {
+    if ((await visible(page)).some((l) => l.includes("הבית מוכן"))) break;
+    let moved = false;
+    for (const label of ["סיום", "המשך", "דילוג"]) {
+      try { await click(page, label); moved = true; break; } catch { /* try the next affordance */ }
+    }
+    if (!moved) break;
+    await page.waitForTimeout(400);
   }
   await page.waitForTimeout(1200);
+  const finished = (await visible(page)).some((l) => l.includes("הבית מוכן"));
+  log(`   reached the done screen? ${finished ? "yes" : "🔴 NO - everything below is vacuous"}`);
+  if (!finished) throw new Error("the wizard never completed, so the payload assertions would prove nothing");
   log(`   screen: ${await heading(page)}`);
   const doneLines = await visible(page);
   log(`   reads: ${doneLines.slice(1, 7).join(" / ")}`);
