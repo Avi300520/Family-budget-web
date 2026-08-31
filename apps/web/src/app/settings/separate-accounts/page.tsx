@@ -223,6 +223,14 @@ export default function SeparateAccountsSettingsPage() {
           ) : (
             <p>ההוצאות המשותפות אינן מתחלקות כרגע בין חברי הבית.</p>
           )}
+          {/* `R-2` FINDING 5 — a third adult stops the splitting SILENTLY, and until this the only
+              place that said so was a manager-only panel. The partner is the person most likely to
+              notice their share quietly stop appearing, so they are told here too. */}
+          {declared && tooManyAdults && (
+            <p className="status warn" role="alert">
+              בבית הזה יש יותר משני חברים בוגרים, ולכן הוצאות חדשות לא מתחלקות מעצמן כרגע. מנהלי הבית יכולים לקבוע את היחס מחדש.
+            </p>
+          )}
           <p className="status">את ההסדר ואת יחס החלוקה קובעים מנהלי הבית. אם היחס לא נראה לכם נכון, דברו איתם - הם יכולים לשנות אותו כאן.</p>
           <div className="row" style={{ marginTop: "var(--sp-4)" }}>
             <Link className="button" href="/my-record">מה נרשם עליי</Link>
