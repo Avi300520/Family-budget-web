@@ -165,7 +165,18 @@ await guard("leg 3", async () => {
   const d = await visible(page);
   log(`   reads:`);
   for (const l of d.slice(0, 8)) log(`      ${l}`);
-  log(`   states the ratio?      ${d.some((l) => l.includes("תתחלק")) ? "yes" : "NO"}`);
+  // ⚠️ WHICH SENTENCE IS CORRECT DEPENDS ON THE STORED RATIO, and leg 1 left this household with a
+  // PENDING one — a single share, because the partner had not joined yet. Screen D must then state
+  // NO number: `F-3`, and `A61` one step on, since guessing `חצי חצי` here would be the product
+  // inventing the very percentage it is forbidden to invent. So the check asks the stub what is
+  // stored and asserts the matching sentence, instead of expecting one and printing NO for the other.
+  const stored = await (await fetch(`${STUB}/api/v1/households/current/separate-accounts`)).json();
+  const bp = stored.defaultSplit.reduce((t2, x) => t2 + x.shareBp, 0);
+  const resolvedRatio = stored.defaultSplit.length === 2 && bp === 10000;
+  const statesNumber = d.some((l) => l.includes("תתחלק"));
+  const statesPending = d.some((l) => l.includes("עדיין לא נקבע"));
+  log(`   stored ratio is ${resolvedRatio ? "RESOLVED" : "PENDING"}, and the screen ${resolvedRatio === statesNumber && resolvedRatio !== statesPending ? "says the matching thing" : "🔴 says the WRONG thing"}`);
+  log(`      -> "${(d.find((l) => l.includes("תתחלק") || l.includes("עדיין לא נקבע")) ?? "(neither)").trim()}"`);
   log(`   states income privacy? ${d.some((l) => l.includes("פרטית")) ? "yes" : "NO"}`);
   log(`   offers a way to object? ${d.some((l) => l.includes("לא נכונה")) ? "yes" : "NO"}`);
 });
