@@ -963,6 +963,12 @@ function MyMoneyCard({ householdId }: { householdId: string }) {
   return (
     <section className="panel">
       <h2 style={{ marginTop: 0 }}>הכסף שלך</h2>
+      {/* ── F534 `R-2` R2-4 — **TWO TILES IN ONE GRID READ AS PARTS OF EACH OTHER.** A 60/40
+          household sees `נרשמו על שמך ₪1,000` beside `החלק שלך ₪900` and reads 90%. The
+          real answer is that ₪900 is 60% of a DIFFERENT population — every shared expense in the
+          household, not just the ones they recorded. `/my-record` carries exactly this sentence
+          and the card, added this run, dropped it. */}
+      <p className="muted" style={{ marginTop: 0 }}>מוצגים רכיבים בלבד, כל אחד בפני עצמו. החלק שלך מחושב מכל ההוצאות המשותפות בבית, לא רק מאלה שרשמתם.</p>
       {windowOpenedAt
         ? <p className="status">מוצג מ־<bdi dir="ltr">{windowOpenedAt}</bdi>.</p>
         : <p className="muted">כולל את כל ההיסטוריה.</p>}

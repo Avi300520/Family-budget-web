@@ -259,6 +259,11 @@ await guard("dashboard card", async () => {
   log(`   a way to the detail?   ${hasLink ? "yes" : "🔴 no"}`);
   const window = v.find((l) => l.includes("מוצג מ־") || l.includes("כל ההיסטוריה"));
   log(`   states its RANGE?      ${window ? `yes - "${window}"` : "🔴 no - two totals with no window is a number nobody can place"}`);
+  // `R-2` R2-4 — the two tiles cover DIFFERENT populations, and the card must say so, or a 60/40
+  // household reads "נרשמו על שמך ₪1,000" beside "החלק שלך ₪900" as a 90% share.
+  const populations = v.some((l) => l.includes("לא רק מאלה שרשמתם"));
+  log(`   says the two tiles are DIFFERENT sets? ${populations ? "yes" : "🔴 no - it reads as a percentage of the tile beside it"}`);
+  if (!populations) failures.push("screen E: the card does not say the two tiles cover different populations (R2-4)");
   if (!dashboardLoaded || !hasCard || !hasRecorded || !hasShare || !hasLink || !window) {
     failures.push(`screen E: loaded=${dashboardLoaded} card=${hasCard} recorded=${hasRecorded} share=${hasShare} link=${hasLink} window=${Boolean(window)}`);
   }
