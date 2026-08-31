@@ -56,7 +56,17 @@ const WHAT_CHANGES: ReadonlyArray<React.ReactNode> = [
   // "הוצאות החודש": the only way there is a ghost button labelled `פירוט` on a CATEGORIES card,
   // three screens away. Naming a place a reader cannot find is the same defect as naming an action
   // they cannot take - the one that stopped the previous run - one degree weaker.
-  <>שום הוצאה לא מתחלקת מעצמה, גם לא לפי היחס שנקבע כאן. את החלוקה קובעים על כל הוצאה בנפרד, מתוך <Link href="/dashboard/spending">הוצאות החודש</Link>.</>,
+  // 🔴 `CC_UX_BUILD` ITEM 1 FLIPPED THIS SENTENCE'S TRUTH VALUE, WHICH IS `F-3` WITH THE SIGN
+  // REVERSED. It read *"שום הוצאה לא מתחלקת מעצמה"* — true for sixteen runs, and the exact
+  // defect the run was called to fix. A shared expense recorded by this household now divides at
+  // the ratio below, in the same write. Saying otherwise would send a reader off to split by hand
+  // work the product has already done.
+  <>הוצאות משותפות חדשות מתחלקות מעצמן לפי היחס שלמטה. אפשר לשנות כל חלוקה בנפרד מתוך <Link href="/dashboard/spending">הוצאות החודש</Link>.</>,
+  // `A64`, CORRECTED. The amendment asked for *"הוצאות של הילדים מתחלקות ביניכם באותו יחס"*,
+  // and `sepacct.ts`'s `holdsPosition` docstring had already ruled the opposite: a child's approved
+  // household expense counts in the HOUSEHOLD total *"and in NOBODY's position"*. Dividing it would
+  // make two debtors with no creditor, because the child is the payer and holds no position.
+  "הוצאה שילד רושם נכנסת לסך ההוצאות של הבית ואינה מתחלקת ביניכם. ילדים אינם צד בחלוקה.",
   "הסיכום השבועי שמגיע בוואטסאפ יציג רק את ההוצאות שלכם. הוא נשלח בימי ראשון, אז זה ייראה בפעם הבאה שהוא מגיע.",
   "בן או בת הזוג יקבלו הודעה בוואטסאפ על ההפעלה ועל הכיבוי. אתם לא מקבלים אותה, כי אתם עושים את השינוי כאן."
 ];
@@ -148,6 +158,15 @@ export default function SeparateAccountsSettingsPage() {
   const setEnabled = (separateAccounts: boolean) => setData({ ...data, separateAccounts });
 
   const blocked = data.separateAccounts && !pair;
+  // ── `CC_UX_BUILD` item 2 — **A RATIO BETWEEN TWO OF THREE ADULTS APPLIES TO NOTHING.** ────────
+  //
+  // `defaultSplit` must name EVERY active adult, or `resolveHouseholdSplit` answers `extra_adults`
+  // and auto-split refuses rather than inventing a percentage for the person nobody named. The
+  // control below picks `adults[0]` and `adults[1]`, so on a three-adult household it happily
+  // offers a ratio the backend will then decline to apply, silently and for ever. That is the
+  // shape this run exists to remove — a control that looks like a decision and is not — so the
+  // screen says so instead of pretending.
+  const tooManyAdults = adults.length > 2;
   // 2c — "מה השתנה" is a claim about the STORED arrangement, so it needs the server's own stamp and
   // not the checkbox: an unsaved tick would otherwise announce a change that has not happened.
   const declared = data.separateAccounts && Boolean(declaredAt);
@@ -214,7 +233,7 @@ export default function SeparateAccountsSettingsPage() {
             made it worse, because *אחר* implies one was already there.
             Seeding from it would work for one role and 403 for the other, so the copy tells the
             truth instead and names the number they will actually see. */}
-        <p className="muted">היחס הזה נשמר יחד עם ההסדר, אבל הוא עדיין לא מוחל מעצמו על אף הוצאה. את החלוקה של כל הוצאה קובעים בעמוד ההוצאה, ושם מתחילים תמיד מחצי חצי ואפשר לשנות.</p>
+        <p className="muted">היחס הזה מוחל על כל הוצאה משותפת חדשה, ברגע שהיא נרשמת. שינוי כאן משפיע קדימה בלבד. הוצאות שכבר חולקו נשארות כפי שנרשמו.</p>
         {first && second
           ? <SplitControl
               first={{ userId: first.userId, displayName: nameOf(first.displayName) }}
@@ -225,6 +244,11 @@ export default function SeparateAccountsSettingsPage() {
             />
           : <p>יחס החלוקה נקבע כאן אחרי ששני חברים בוגרים מצטרפים. את ההסדר עצמו אפשר לכבות גם עכשיו.</p>}
         {blocked && <p className="status" role="alert">כדי להפעיל את ההסדר דרושים שני חברים בוגרים. לכבות אפשר תמיד.</p>}
+        {tooManyAdults && (
+          <p className="status warn" role="alert">
+            בבית הזה יש יותר משני חברים בוגרים, והיחס כאן מחלק בין שניים בלבד. כל עוד זה המצב, הוצאות חדשות לא מתחלקות מעצמן, ואפשר לקבוע חלוקה על כל הוצאה בנפרד.
+          </p>
+        )}
         <div className="row" style={{ marginTop: "var(--sp-4)" }}>
           {/* Never `disabled` on a control that its own activation disables (2.4.3): aria-busy plus
               the re-entrancy guard above, so focus is never dropped to <body> mid-save. */}

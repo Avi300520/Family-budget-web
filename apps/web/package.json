@@ -9,7 +9,7 @@
     "start": "next start --port 3000",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "pnpm -w run lint",
-    "test": "node --experimental-strip-types --test \"src/lib/authRouting.test.ts\" \"src/lib/onboarding/model.test.ts\" \"src/lib/settingsView.test.ts\" \"src/lib/brandCopy.test.ts\" \"src/lib/insightsPreview.test.ts\" \"src/lib/noEmDash.test.ts\" \"src/lib/billingCheckoutError.test.ts\" \"src/lib/moneyInput.test.ts\" \"src/lib/format.test.ts\" \"src/lib/roster.test.ts\" \"src/lib/memberActionError.test.ts\" \"src/lib/sepacct.test.ts\""
+    "test": "node --experimental-strip-types --test \"src/lib/authRouting.test.ts\" \"src/lib/onboarding/model.test.ts\" \"src/lib/settingsView.test.ts\" \"src/lib/brandCopy.test.ts\" \"src/lib/insightsPreview.test.ts\" \"src/lib/noEmDash.test.ts\" \"src/lib/billingCheckoutError.test.ts\" \"src/lib/moneyInput.test.ts\" \"src/lib/format.test.ts\" \"src/lib/roster.test.ts\" \"src/lib/memberActionError.test.ts\" \"src/lib/sepacct.test.ts\" \"src/lib/backLink.test.ts\""
   },
   "dependencies": {
     "@shopping-assistant/api-client": "workspace:*",

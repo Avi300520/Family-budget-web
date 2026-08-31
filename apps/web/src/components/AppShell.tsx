@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BarChart3, ChevronRight, ClipboardList, Gift, LayoutDashboard, ListChecks, LogOut, Menu, Settings, Sparkles } from "lucide-react";
 import type { HouseholdRole } from "@shopping-assistant/shared-types";
 import { api, clearClientSession } from "../lib/api";
+import { backLinkFor } from "../lib/backLink";
 import { useViewer } from "../lib/useViewer";
 import { filterByRole } from "../lib/settingsView";
 import { roleLabelFor } from "../lib/roleLabels";
@@ -59,6 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const links = filterByRole(ALL_LINKS, role);
   const router = useRouter();
   const pathname = usePathname();
+  const backLink = backLinkFor(pathname);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -212,12 +214,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           the dashboard. A11yBar's JS fallback masked it for mouse-less users with
           JS on; with JS off the link went nowhere. */}
       <main id="main" className="main">
-        {/* Back-to-hub affordance on every Settings sub-screen (and the two
-            settings-only sub-pages reached from the hub: /receipts, /export).
-            Never on the /settings hub itself. One place → covers all states. */}
-        {!!pathname && (pathname.startsWith("/settings/") || pathname === "/receipts" || pathname === "/export") && (
+        {/* Back-to-hub affordance, one place → covers all states. The ROUTE TABLE moved to
+            `lib/backLink.ts` when `CC_UX_BUILD` item 6 added the three separate-accounts pages,
+            which had no navigation and no way back at all; the rule is testable there and this
+            component just renders the answer. */}
+        {backLink && (
           <Link
-            href="/settings"
+            href={backLink.href}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -231,7 +234,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             }}
           >
             <ChevronRight size={18} aria-hidden />
-            <span>חזרה להגדרות</span>
+            <span>{backLink.label}</span>
           </Link>
         )}
         {children}

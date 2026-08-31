@@ -109,7 +109,16 @@ export const sepacct = {
   /**
    * §1 — GET /households/current/separate-accounts. `current`, NOT an id: this is the only SEPACCT
    * route keyed that way and the PUT below is keyed by id. The asymmetry is real; do not "fix" it.
-   * Manager only — anyone else gets `403 auth.forbidden`, which is not absence.
+   * 🔴 **NOT MANAGER-ONLY, AND THIS COMMENT SAID IT WAS.** §A49 opened the read: verified at
+   * `household-routes.ts:454-470`, which runs `arrangementAuth` and then refuses only a
+   * `limited_member`. The asymmetry is that the **PUT** is manager-only (`:485`) while this GET
+   * answers any active adult — deliberately, so a partner who did not configure the arrangement can
+   * still see what it is. A `403 auth.forbidden` from HERE means a CHILD, not a non-manager, and it
+   * is still not absence.
+   *
+   * It mattered: this sentence was the stated reason `/shared-expenses` seeds its first split at
+   * 50/50 instead of the household ratio, and the reason two other files avoid reading the roster
+   * from here. The behaviour those files chose is still fine; the reason given for it was not.
    */
   getConfig: () => call<SepacctConfigDto>("/api/v1/households/current/separate-accounts"),
 

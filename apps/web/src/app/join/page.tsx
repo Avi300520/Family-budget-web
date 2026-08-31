@@ -7,6 +7,9 @@ import { ApiClientError } from "@shopping-assistant/api-client";
 import { api } from "../../lib/api";
 import { PhoneInput } from "../../components/PhoneInput";
 import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../lib/countryCodes";
+import Link from "next/link";
+import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
+import { sepacct, type SepacctConfigDto } from "../../lib/sepacctApi";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "בעלים",
@@ -39,6 +42,9 @@ function JoinPageInner() {
   // call the direct-join API on tap. No re-entering the phone number.
   const [directJoin, setDirectJoin] = useState(false);
   const [error, setError] = useState<string>();
+  // `A63` — the arrangement this person is joining INTO, plus their own id so their share can be
+  // picked out of it. Null on every failure path, which is what keeps screen D fail-open.
+  const [arrangement, setArrangement] = useState<{ config: SepacctConfigDto; viewerUserId: string } | null>(null);
 
   useEffect(() => {
     if (!token) { setPhase("error"); setError("קישור הזמנה חסר"); return; }
@@ -80,15 +86,46 @@ function JoinPageInner() {
     setError(undefined);
     try {
       const nameToSend = displayName.trim() || undefined;
-      if (directJoin) {
+      // ⚠️ THE JOINER'S OWN id COMES OFF THE JOIN RESPONSE, NOT FROM `api.me()`. Both join routes
+      // already return `member`, and `/me` is a WRITE — `server.ts` rotates the CSRF token on every
+      // call — so asking it here would add a round trip AND a row update to the one screen a
+      // person with no session sees. Screen D needs the id to pick THEIR share out of the ratio.
+      const joined = directJoin
         // The single-use invite token authenticates the invited phone's user; the
         // response sets the session cookie and the api-client stores the csrfToken.
-        await api.joinHouseholdDirect(token, nameToSend);
-      } else {
-        await api.joinHousehold(token, nameToSend);
-      }
+        ? await api.joinHouseholdDirect(token, nameToSend)
+        : await api.joinHousehold(token, nameToSend);
       setPhase("done");
+      // ── `A63` / `CC_UX_BUILD` item 5 — **THE OTHER PARTY TO THE ARRANGEMENT GETS A SCREEN.** ──
+      //
+      // Half the users of a two-person arrangement are the person who did not configure it, and
+      // until this branch the product told them nothing: a 1.8-second panel and a redirect to a
+      // dashboard where money is already being divided by a rule they never saw. They are also the
+      // one party who cannot find out by accident — `/settings/separate-accounts` is not in the nav,
+      // and the WhatsApp start notice fires on the DECLARING write, which for a household whose
+      // ratio resolves on this very join is the write they just caused.
+      //
+      // Three facts and a way to object. NOT a consent gate: the arrangement is already true for
+      // them, `A38` does not apply because nothing irreversible happens here, and a household that
+      // cannot finish joining because one screen failed is a worse product than one that explains
+      // itself a moment later.
+      //
+      // ⚠️ **IT FAILS OPEN ON EVERY OUTCOME, AND THAT IS THE LOAD-BEARING PART.** `/join` is the one
+      // screen a person with no session and no context sees. Any error, any 403, any 404, the flag
+      // being off, the household not being declared — every one of them falls through to exactly
+      // today's behaviour. A joiner stuck on a spinner because an arrangement lookup hung is a worse
+      // outcome than never seeing this screen at all.
+      if (SEPACCT_UI_ENABLED) {
+        try {
+          const config = await sepacct.getConfig();
+          if (config.separateAccounts) {
+            setArrangement({ config, viewerUserId: joined.member.userId });
+            return;   // the redirect below is NOT scheduled: this screen waits for a tap
+          }
+        } catch { /* fail open to the redirect */ }
+      }
       setTimeout(() => router.replace("/dashboard"), 1800);
+
     } catch (err) {
       // Old backend without the direct-join route → fall back to the legacy
       // enter-phone → magic-link loop instead of a dead end.
@@ -121,6 +158,54 @@ function JoinPageInner() {
         <main id="main" className="login-box status error">
           <h1 className="sr-only">הצטרפות לבית</h1>
           <div role="alert">{error}</div>
+        </main>
+      </div>
+    );
+  }
+
+  // ── `A63` / spec screen D — WHAT THE SECOND PERSON SEES, BEFORE THE APP ──────────────────────
+  if (phase === "done" && arrangement) {
+    const { config, viewerUserId } = arrangement;
+    const adults = config.members.filter((m) => m.role !== "limited_member");
+    const setter = adults.find((m) => m.userId !== viewerUserId);
+    const setterName = setter?.displayName?.trim() || "בן/בת הזוג";
+    const mine = config.defaultSplit.find((share) => share.userId === viewerUserId);
+    // ⚠️ THE RATIO IS STATED ONLY WHEN IT IS RESOLVED AND NAMES THIS READER. A household whose
+    // ratio is still pending, or which has gained a third adult, has no number that is true of
+    // this person yet — and `F-3` says a screen states what is true or stays quiet. Guessing
+    // "חצי חצי" here would be the product inventing the very percentage `A61` forbids it to invent.
+    const ratio =
+      mine === undefined ? null
+      : mine.shareBp === 5000 ? "חצי חצי"
+      : `${(mine.shareBp / 100).toFixed(2).replace(/\.?0+$/, "")}% / ${((10000 - mine.shareBp) / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+    return (
+      <div className="login-page">
+        <main id="main" className="login-box">
+          <h1 className="page-title" style={{ fontSize: 19, marginBottom: 14 }}>
+            {setterName} הגדיר/ה שאתם מנהלים חשבונות נפרדים
+          </h1>
+          <ul style={{ margin: "0 0 18px", paddingInlineStart: "1.2em", display: "grid", gap: "var(--sp-2)" }}>
+            <li>
+              {ratio
+                ? <>כל הוצאה משותפת תתחלק ביניכם <bdi dir="ltr">{ratio}</bdi>.</>
+                : "עדיין לא נקבע איך מתחלקות ההוצאות המשותפות. אחד ממנהלי הבית יקבע את היחס בהגדרות."}
+            </li>
+            <li>כל אחד רואה את החלק שלו בכל הוצאה משותפת.</li>
+            <li>ההכנסה של כל אחד נשארת פרטית ונראית רק לו.</li>
+          </ul>
+          <div className="form">
+            <button
+              type="button" className="button"
+              onClick={() => router.replace("/dashboard")}
+            >
+              ממשיכים
+            </button>
+            {/* The dissent link. A plain link to the surface that can change it, never a refusal
+                and never a control that argues back. `A63`: a way to object without a fight. */}
+            <Link className="button secondary" href="/settings/separate-accounts" style={{ textDecoration: "none" }}>
+              החלוקה נראית לי לא נכונה
+            </Link>
+          </div>
         </main>
       </div>
     );
