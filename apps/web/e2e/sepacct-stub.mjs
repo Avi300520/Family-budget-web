@@ -296,6 +296,19 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // ── SPEC SCREEN E — the ONE non-SEPACCT call `/dashboard` makes without a `.catch`. ──────────
+  // Every other panel's fetch degrades to an empty panel on failure; `budgetCurrent` does not, so
+  // without this the whole page renders its error state and the card is never reached. Deliberately
+  // OUTSIDE the `isSepacct` mode switch: the dashboard must load in `dormant` too, which is how the
+  // walk proves the card is ABSENT rather than broken when the feature is off.
+  if (p === `/api/v1/households/${HOUSEHOLD}/budget/current` && req.method === "GET") {
+    return send(res, 200, {
+      periodStart: "2026-08-01", periodEnd: "2026-08-31", budgetAmount: 12000, spentAmount: 4200,
+      remainingAmount: 7800, daysRemaining: 1, burnRateStatus: "on_track",
+      mySpentAmount: 2340, myPersonalSpent: 0
+    });
+  }
+
   if (p === `/api/v1/households/${HOUSEHOLD}/my-components` && req.method === "GET") return send(res, 200, components());
 
   if (p === `/api/v1/households/${HOUSEHOLD}/my-record-components` && req.method === "GET") {

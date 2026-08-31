@@ -213,6 +213,45 @@ await guard("legs 4 and 5", async () => {
   log(`   after: ${(await visible(page)).slice(2, 6).join(" / ")}`);
 });
 
+// ── SPEC SCREEN E — the dashboard card. Deferred at run 18, built now. ───────────────────────
+await guard("dashboard card", async () => {
+  screen("E · the dashboard card - what the arrangement means, on the page an adult opens");
+  await setMode("populated");
+  await page.goto(`${BASE}/dashboard`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(700);
+  const v = await visible(page);
+  // ⚠️ ANTI-VACUITY FIRST. A dashboard that failed to load renders LoadState and NOTHING below,
+  // and every "the card is absent" check would then be green about a page that has no cards at
+  // all. `שלום` is the greeting the page renders once `/me` and the budget have landed.
+  const dashboardLoaded = v.some((l) => l.includes("שלום"));
+  log(`   did the dashboard actually load? ${dashboardLoaded ? "yes" : "🔴 NO - every check below is vacuous"}`);
+  const hasCard = v.some((l) => l.includes("הכסף שלך"));
+  const hasRecorded = v.some((l) => l.includes("נרשמו על שמך"));
+  const hasShare = v.some((l) => l.includes("החלק שלך"));
+  const hasLink = v.some((l) => l.includes("מה שנרשם"));
+  log(`   card present?          ${hasCard ? "yes" : "🔴 no"}`);
+  log(`   נרשמו על שמך / החלק שלך: ${hasRecorded ? "yes" : "🔴 no"} / ${hasShare ? "yes" : "🔴 no"}`);
+  log(`   a way to the detail?   ${hasLink ? "yes" : "🔴 no"}`);
+  const window = v.find((l) => l.includes("מוצג מ־") || l.includes("כל ההיסטוריה"));
+  log(`   states its RANGE?      ${window ? `yes - "${window}"` : "🔴 no - two totals with no window is a number nobody can place"}`);
+  if (!dashboardLoaded || !hasCard || !hasRecorded || !hasShare || !hasLink || !window) {
+    failures.push(`screen E: loaded=${dashboardLoaded} card=${hasCard} recorded=${hasRecorded} share=${hasShare} link=${hasLink} window=${Boolean(window)}`);
+  }
+
+  // ⚠️ AND THE OTHER HALF, WHICH IS THE ONE PRODUCTION IS IN TODAY: an undeclared household must
+  // get NO card, and must still get a dashboard. Absent, not empty and not an error.
+  await setMode("dormant");
+  await page.goto(`${BASE}/dashboard`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(700);
+  const off = await visible(page);
+  const stillADashboard = off.some((l) => l.includes("שלום"));
+  const cardGone = !off.some((l) => l.includes("נרשמו על שמך"));
+  log(`   undeclared: dashboard still renders? ${stillADashboard ? "yes" : "🔴 no - a SEPACCT 404 broke an unrelated page"}`);
+  log(`   undeclared: card absent?             ${cardGone ? "yes" : "🔴 no"}`);
+  if (!stillADashboard || !cardGone) failures.push(`screen E dormant: dashboard=${stillADashboard} cardGone=${cardGone}`);
+  await setMode("populated");
+});
+
 // ── The shells: F, H and the income page ─────────────────────────────────────────────────────
 await guard("shells", async () => {
   screen("SHELLS · F, H and /my-income — the three pages that had no way back");

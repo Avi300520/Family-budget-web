@@ -22,7 +22,9 @@ import { WhatsAppCtaBanner } from "../../components/WhatsAppCta";
 import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut } from "../../components/charts";
 import { api } from "../../lib/api";
-import { heDate } from "../../lib/format";
+import { heDate, ilsFromAgorot } from "../../lib/format";
+import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
+import { sepacct, type MyComponentsDto } from "../../lib/sepacctApi";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
 import { requiresOnboarding } from "../../lib/authRouting";
 import { selectInsightPreview } from "../../lib/insightsPreview";
@@ -919,6 +921,66 @@ function LimitedMemberView({
   );
 }
 
+// ── SEPACCT spec screen E — **THE DASHBOARD CARD.** ──────────────────────────────
+//
+// Deferred from run 18 and correctly: it is a surface over numbers that did not exist until the
+// ratio started applying itself. It exists now, so the dashboard — the page an adult opens when
+// they open the web app at all — says what this household's arrangement means for them.
+//
+// ⚠️ **IT IS ABSENT, NEVER EMPTY AND NEVER AN ERROR.** Three independent reasons it does not
+// render, and all three are ordinary: the build has no `NEXT_PUBLIC_SEPACCT_UI`, the household has
+// not declared (the route answers `404`, deliberately indistinguishable from a missing resource —
+// §3), or the request failed. A dashboard is a page of panels; a panel that renders an error
+// because an unrelated feature is off is worse than one that is not there.
+//
+// ⚠️ **`הכסף שלך החודש` IS THE SPEC'S TITLE AND IT IS NOT USED, BECAUSE IT WOULD BE FALSE.**
+// `GET …/my-components` takes NO range — its own DTO says so — and returns all-history totals
+// bounded only by `windowOpenedAt`. Labelling them "this month" would put a wrong word on a right
+// number, which is the failure `A66` was struck for. The window line says what the range really is,
+// in the same two shapes `/my-record` uses, so the two pages cannot disagree.
+//
+// ⚠️ AND `חלקך 0₪` IS NOT RENDERED AS A TILE. `handlers.ts` on its own copy: *"arithmetically
+// true and semantically nonsense"*. A household that has declared but split nothing yet gets the
+// one number that means something and a way to the page that explains the rest.
+function MyMoneyCard({ householdId }: { householdId: string }) {
+  const [totals, setTotals] = useState<MyComponentsDto>();
+  const [hidden, setHidden] = useState(!SEPACCT_UI_ENABLED);
+
+  useEffect(() => {
+    if (!SEPACCT_UI_ENABLED) return;
+    void sepacct.getMyComponents(householdId)
+      .then(setTotals)
+      // `404` (undeclared household, or the flag off) and a transient failure are NOT told apart,
+      // and deliberately: the distinction matters to a caller that can act on it, and a dashboard
+      // panel cannot. Both hide the card, which is the only outcome either one has.
+      .catch(() => { setHidden(true); });
+  }, [householdId]);
+
+  if (hidden || !totals) return null;
+  const windowOpenedAt = heDate(totals.windowOpenedAt);
+  const nothingSplitYet = totals.shareAgorot === 0;
+
+  return (
+    <section className="panel">
+      <h2 style={{ marginTop: 0 }}>הכסף שלך</h2>
+      {windowOpenedAt
+        ? <p className="status">מוצג מ־<bdi dir="ltr">{windowOpenedAt}</bdi>.</p>
+        : <p className="muted">כולל את כל ההיסטוריה.</p>}
+      <div className="grid two">
+        <div className="panel"><span className="label">נרשמו על שמך</span><strong className="mono" dir="ltr">{ilsFromAgorot(totals.recordedAgorot)}</strong></div>
+        {!nothingSplitYet && (
+          <div className="panel"><span className="label">החלק שלך</span><strong className="mono" dir="ltr">{ilsFromAgorot(totals.shareAgorot)}</strong></div>
+        )}
+      </div>
+      {nothingSplitYet && <p className="muted">עדיין לא חולקה אף הוצאה, ולכן אין עדיין חלק משלך להציג.</p>}
+      {/* The spec's link is "כל ההוצאות המשותפות →". It points at the page these two numbers
+          come from, and it is labelled with that page's OWN title so the link and the heading a
+          person lands on are the same words. */}
+      <p style={{ marginBottom: 0 }}><Link href="/my-record">מה שנרשם ←</Link></p>
+    </section>
+  );
+}
+
 // ── FamilyView — DashboardA (story-first) ────────────────────────────────────
 function FamilyView({
   budget,
@@ -943,6 +1005,11 @@ function FamilyView({
     <div style={{ display: "grid", gap: "var(--sp-5)" }}>
       {/* Pending approvals alert (owner/admin only, empty state) */}
       <PendingApprovals role={role} />
+
+      {/* Spec screen E. Inside `FamilyView`, so a `limited_member` never reaches it — the page
+          renders `LimitedMemberView` for them instead, and the route would 403 anyway. Two
+          independent reasons, which is the posture decision #7 asks for. */}
+      <MyMoneyCard householdId={householdId} />
 
       {/* Hero row: MonthProgress + InsightsStrip placeholder */}
       <div className="grid two">
