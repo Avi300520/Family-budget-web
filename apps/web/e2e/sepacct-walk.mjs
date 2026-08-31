@@ -45,9 +45,26 @@ async function heading(page) {
   return (await h.count()) ? (await h.innerText()).trim() : "(no h1)";
 }
 /** Click by visible text and record it. Fails loudly: a walk that silently skips a click is a walk
- *  that proves the screens it could not reach are fine. */
+ *  that proves the screens it could not reach are fine.
+ *
+ *  🔴 **IT CLICKS A CONTROL, AND THE FIRST CUT CLICKED ANY TEXT CONTAINING THE WORD.** `getByText`
+ *  with `exact: false` is a SUBSTRING match over every node, and `בהמשך` — an ordinary Hebrew word
+ *  meaning "later on" — contains `המשך`, the label of the wizard's own continue button. §A68's new
+ *  sentence uses that word, so the paragraph matched before the button, every `click(page, "המשך")`
+ *  pressed a paragraph, and the wizard sat on step 3/8 for eleven consecutive clicks.
+ *
+ *  **And the walk called that success for two of its own checks**, because the assertions that
+ *  follow read whatever screen it was on: `asks for MY OWN income? yes` was answered by §A68's
+ *  sentence, on the separate-accounts step, about an income field two steps away. That is §A70's
+ *  exact shape — a green cell whose subject was never reached — found the same day §A70 was
+ *  written, and produced by the line added to satisfy §A68.
+ *
+ *  So the walk now clicks what a person clicks: a button or a link. Prose containing the word is
+ *  no longer a candidate, in this or any future leg. */
 async function click(page, text, note) {
-  const el = page.getByText(text, { exact: false }).first();
+  const control = page.getByRole("button", { name: new RegExp(text) })
+    .or(page.getByRole("link", { name: new RegExp(text) }));
+  const el = (await control.count()) ? control.first() : page.getByText(text, { exact: false }).first();
   await el.waitFor({ state: "visible", timeout: 5000 });
   await el.click();
   act(`click "${text}"${note ? `  — ${note}` : ""}`);
@@ -128,9 +145,17 @@ await guard("leg 1", async () => {
   // ⚠️ ANTI-VACUITY: the first cut of this check ran on the CYCLE screen, one step early, and
   // answered "no shared income asked" about a screen that never asks for one. Assert we are ON the
   // income step before believing its answer.
-  const onIncomeStep = income.some((l) => l.includes("ההכנסה שלך")) || income.some((l) => l.includes("תקציב חודשי לניהול"));
+  // 🔴 **THE ANTI-VACUITY CHECK WAS ITSELF DEFEATED, BY A SENTENCE ADDED TWO STEPS EARLIER.** It
+  // asked whether the visible TEXT contains `ההכנסה שלך` — and §A68's new line on the
+  // separate-accounts step contains exactly that phrase, so the check answered "yes, this is the
+  // income step" about the screen before it. **A text probe cannot tell a FIELD from a SENTENCE
+  // ABOUT that field**, and copy is exactly the thing that moves between runs. The income step is
+  // now identified by the INPUT it renders, which no paragraph anywhere can imitate.
+  const ownIncomeField = await page.locator('input[aria-label="ההכנסה שלך"]').count();
+  const managedField = await page.locator('input[aria-label="תקציב חודשי לניהול"]').count();
+  const onIncomeStep = ownIncomeField > 0 || managedField > 0;
   log(`   is this really the income step? ${onIncomeStep ? "yes" : "🔴 NO - the check below proves nothing"}`);
-  log(`   asks for MY OWN income?        ${income.some((l) => l.includes("ההכנסה שלך")) ? "yes" : "no"}`);
+  log(`   asks for MY OWN income?        ${ownIncomeField > 0 ? "yes" : "no"}   (the FIELD, not a sentence about it)`);
   log(`   asks for a SHARED household income? ${income.some((l) => l.includes("משק הבית")) ? "🔴 YES" : "no - this is the A56 root fix"}`);
   log(`   says it is private?            ${income.some((l) => l.includes("פרטית")) ? "yes" : "no"}`);
 
