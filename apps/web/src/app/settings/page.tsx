@@ -28,6 +28,7 @@ import {
   canViewCategoryBudgets,
   canViewHouseholdMembers,
   canViewHouseholdSettings,
+  canViewSeparateAccounts,
   type ViewerCaps
 } from "../../lib/settingsView";
 
@@ -88,7 +89,7 @@ const GROUPS: SettingGroup[] = [
         tint: "plum",
         // Dormant with the rest of SEPACCT: no card while the flag is off, so the hub never
         // points at a route that renders as absent.
-        can: (caps) => SEPACCT_UI_ENABLED && canViewHouseholdSettings(caps)
+        can: (caps) => SEPACCT_UI_ENABLED && canViewSeparateAccounts(caps)
       }
     ]
   },

@@ -638,6 +638,20 @@ export function redactDraftForStorage(state: WizardState): WizardState {
   return {
     ...state,
     income: "",
+    // ── 🔴 `R-3` FINDING 1 — **THE ONE FIGURE THE PRODUCT PROMISES NOBODY ELSE CAN SEE WAS THE
+    //    ONE IT WROTE TO PLAINTEXT `localStorage`.** ─────────────────────────────────────────────
+    //
+    // `ownIncome` is this sprint`s addition, and this redactor is a DENYLIST: a field it does not
+    // name rides out on `...state`. Typed under the promise *"פרטית. בן/בת הזוג לא רואה את המספר
+    // הזה"*, it was autosaved in cleartext 400ms later — and `coerceDraftState` below is an
+    // ALLOWLIST that never reads it back, so the value was write-only. It leaked and was not even
+    // returned to the person who typed it.
+    //
+    // ⚠️ THE SHAPE IS THE DEFECT, NOT THE FIELD. A denylist beside an allowlist, ninety lines
+    // apart, means every future field is private-by-forgetting. Named here because the fix below is
+    // the narrow one; inverting this to an allowlist is the durable one and is filed, not done, so
+    // that a privacy change and a refactor do not ship in the same commit.
+    ownIncome: "",
     managedBudget: "",
     displayName: "",
     householdName: "",

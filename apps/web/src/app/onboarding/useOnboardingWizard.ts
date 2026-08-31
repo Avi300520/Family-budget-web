@@ -253,7 +253,12 @@ export function useOnboardingWizard(): WizardController {
           } catch { missed.push("ההכנסה שלך"); }
         }
         if (missed.length > 0) {
-          setNotice(`הבית נוצר, אבל ${missed.join(" ו")} לא נשמרו. אפשר להשלים את זה בהגדרות, בעמוד ״הפרדת כספים״.`);
+          // ⚠️ THE VERB AGREES WITH THE COUNT. `missed.join(" ו")` with ONE item rendered
+          // "יחס החלוקה לא נשמרו" — a plural verb on a singular subject, on the single most
+          // anxious screen in the flow, in a sentence already telling somebody a money setting
+          // did not save.
+          const verb = missed.length === 1 ? "לא נשמר" : "לא נשמרו";
+          setNotice(`הבית נוצר, אבל ${missed.join(" ו")} ${verb}. אפשר להשלים את זה בהגדרות, בעמוד ״הפרדת כספים״.`);
         }
       }
       if (editMode) {

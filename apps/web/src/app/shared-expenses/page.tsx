@@ -89,7 +89,7 @@ export default function SharedExpensesPage() {
 
   if (absent) notFound();
   if (viewer.status === "error") {
-    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות את החשבון. נסו לרענן." /></AppShell>;
+    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות אתכם. נסו לרענן." /></AppShell>;
   }
   if (error) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
   if (!loaded) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
@@ -296,11 +296,17 @@ export default function SharedExpensesPage() {
         {mine.previousShareBp !== null && <p className="muted">החלק הקודם: <bdi className="mono" dir="ltr">{(mine.previousShareBp / 100).toFixed(2)}%</bdi></p>}
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
           <button type="button" className="button" onClick={() => void save()} aria-busy={saving}>{saving ? "שומרים..." : "שמירת חלוקה"}</button>
-          {/* `A65`. Offered only when it would actually change something: on an expense already at
-              100/0 the button would be a no-op wearing a decision's label. */}
+          {/* `A65`, and `R-2` FINDING 8 CORRECTED THE LABEL. The spec asked for "זו הוצאה שלי
+              בלבד", and a person reads that as "take it out of the shared pile". It does not: the
+              expense stays a household expense, stays in the household budget, and stays visible to
+              the other adult — what changes is that the tapper carries all of it. When the OTHER
+              person paid, that is agreeing to owe them the whole amount, which is a large decision
+              behind a label that read like a filing correction. The control is still the named
+              intention `A65` asks for; the name is now the one that is true.
+              Offered only when it would change something: at 100/0 already it is a no-op. */}
           {mine.shareBp !== 10000 && (
             <button type="button" className="button secondary" onClick={() => void save(10000)} aria-busy={saving}>
-              זו הוצאה שלי בלבד
+              אני נושא/ת בכל הסכום
             </button>
           )}
           {mine.disputedAt ? <span className="status">סימנת שהחלוקה אינה מוסכמת.</span> : <button type="button" className="button secondary" onClick={() => void dispute()}>החלוקה אינה מוסכמת</button>}

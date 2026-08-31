@@ -10,10 +10,14 @@ import { heDate } from "../../../lib/format";
 import { isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../../lib/sepacct";
 import { sepacct, type SepacctConfigDto } from "../../../lib/sepacctApi";
 import { useViewer } from "../../../lib/useViewer";
+import { isHouseholdManager } from "../../../lib/settingsView";
 
 const TITLE = "הפרדת כספים";
 
 /** §1 — `displayName` may be "". */
+/** `6000` → `60%`, trailing zeros trimmed: a whole percentage printed to two decimals reads as a
+ *  measurement rather than a number somebody typed. */
+const percentText = (bp: number) => `${(bp / 100).toFixed(2).replace(/.?0+$/, "")}%`;
 const nameOf = (displayName: string) => displayName.trim() || "חבר/ה";
 
 /**
@@ -131,7 +135,7 @@ export default function SeparateAccountsSettingsPage() {
     );
   }
   if (viewer.status === "error") {
-    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות את החשבון. נסו לרענן." /></AppShell>;
+    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות אתכם. נסו לרענן." /></AppShell>;
   }
   if (error) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
   if (!data) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
@@ -191,6 +195,44 @@ export default function SeparateAccountsSettingsPage() {
     }
   };
 
+  // ── `R-2` BLOCKING 3 — **A DOOR THAT OPENS ONTO A REFUSAL.** ─────────────────────────────────
+  //
+  // The GET is open to every active adult (§A49) and the PUT is manager-only, so this page used to
+  // render a plain `adult_member` a live checkbox, a working ratio control and a save button — and
+  // tell them only on SAVE that they were never allowed, replacing the page and discarding the edit.
+  // The join screen's dissent button, *"החלוקה נראית לי לא נכונה"*, pointed them straight at it.
+  //
+  // The role is known before the first paint (`useViewer` already resolves it), so the refusal is
+  // made honest at render: the reader sees the arrangement, the ratio and their two own screens, and
+  // is told who can change it. Same information, no promise the route will not keep.
+  const canEdit = isHouseholdManager(viewer.caps);
+  if (!canEdit) {
+    const pairNames = first && second ? `${nameOf(first.displayName)} ${percentText(firstShareBp)} · ${nameOf(second.displayName)} ${percentText(10000 - firstShareBp)}` : null;
+    return (
+      <AppShell>
+        <h1 className="page-title">{TITLE}</h1>
+        <section className="panel" style={{ maxWidth: 680 }}>
+          <h2>{declared ? "ההסדר של הבית" : "אין כרגע הסדר של הפרדת כספים"}</h2>
+          {declared ? (
+            <>
+              <p>בבית הזה כל אחד רואה את החלק שלו בהוצאה משותפת, וההכנסה של כל אחד נשארת פרטית ונראית רק לו.</p>
+              {declaredAt && <p className="muted">{"ההסדר נרשם ב־"}<bdi dir="ltr">{declaredAt}</bdi>.</p>}
+              {pairNames && <p>{"הוצאות משותפות חדשות מתחלקות כך: "}<bdi dir="ltr">{pairNames}</bdi>.</p>}
+              <p className="muted">הוצאה שילד רושם נכנסת לסך ההוצאות של הבית ואינה מתחלקת ביניכם.</p>
+            </>
+          ) : (
+            <p>ההוצאות המשותפות אינן מתחלקות כרגע בין חברי הבית.</p>
+          )}
+          <p className="status">את ההסדר ואת יחס החלוקה קובעים מנהלי הבית. אם היחס לא נראה לכם נכון, דברו איתם - הם יכולים לשנות אותו כאן.</p>
+          <div className="row" style={{ marginTop: "var(--sp-4)" }}>
+            <Link className="button" href="/my-record">מה נרשם עליי</Link>
+            <Link className="button secondary" href="/my-income">ההכנסה שלי</Link>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <h1 className="page-title">{TITLE}</h1>
@@ -241,6 +283,7 @@ export default function SeparateAccountsSettingsPage() {
               firstShareBp={firstShareBp}
               onChange={change}
               disabled={!data.separateAccounts}
+              scope="household"
             />
           : <p>יחס החלוקה נקבע כאן אחרי ששני חברים בוגרים מצטרפים. את ההסדר עצמו אפשר לכבות גם עכשיו.</p>}
         {blocked && <p className="status" role="alert">כדי להפעיל את ההסדר דרושים שני חברים בוגרים. לכבות אפשר תמיד.</p>}

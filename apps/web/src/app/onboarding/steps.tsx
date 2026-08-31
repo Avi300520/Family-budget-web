@@ -21,6 +21,9 @@ export interface StepProps {
   state: WizardState;
   set: (partial: Partial<WizardState>) => void;
   totals: WizardTotals;
+  /** `?mode=edit` — the household already exists. Some answers can only be written on a FIRST run,
+   *  and a step that asks for one anyway is a control with no power. */
+  editMode?: boolean;
 }
 
 const fmt = (n: number) => `₪${Math.round(n).toLocaleString("he-IL")}`;
@@ -140,7 +143,6 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
   const pct = typeof state.separateSharePct === "number" ? state.separateSharePct : 50;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <p className="muted" style={{ margin: 0 }}>אפשר לשנות בכל שלב.</p>
       <OptionCards
         cols={1}
         value={separate ? "apart" : "together"}
@@ -239,7 +241,7 @@ export function CycleStep({ state, set }: StepProps) {
 }
 
 // ── Income / managed budget ──────────────────────────────────────────────────────
-export function IncomeStep({ state, set }: StepProps) {
+export function IncomeStep({ state, set, editMode }: StepProps) {
   // ── SEPACCT `CC_UX_BUILD` item 4, spec screen B — **THE ROOT FIX FOR THE VANISHING INCOME.**
   //
   // A household that has just answered "בנפרד" is never asked for a shared household figure. It is
@@ -261,9 +263,21 @@ export function IncomeStep({ state, set }: StepProps) {
   if (state.separateAccounts && !state.incomeRedacted) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <Field label="ההכנסה שלך" hint="פרטית. בן/בת הזוג לא רואה את המספר הזה.">
+        {/* ── 🔴 `R-3` — **A FIELD THAT CANNOT SAVE MUST NOT ASK.** ───────────────────────────────
+            The own-income write runs only on a FIRST run: in `?mode=edit` the household already
+            exists and `PUT …/my-income` is not called, so anything typed here would have gone to
+            plaintext `localStorage` and nowhere else — under a promise that it is private. That is
+            this program`s recurring "a control with no power" class, and the honest form of it is
+            to point at the surface that does have the power. */}
+        {editMode ? (
+          <p className="status" style={{ display: "block" }}>
+            {"את ההכנסה שלכם עורכים בעמוד הייעודי לכך, והיא נשמרת רק שם. מהמסך הזה עורכים את התקציב המשותף של הבית."}
+          </p>
+        ) : (
+        <Field label="ההכנסה שלך" hint="פרטית. בן/בת הזוג לא רואה את המספר הזה, וגם לא מנהלי הבית.">
           <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })} placeholder="18,000" autoFocus ariaLabel="ההכנסה שלך" />
         </Field>
+        )}
         {/* The budget is the household's either way — the spec's own table. It is the one figure on
             this screen that both partners see, and it is not derived from either income. */}
         <Field label="תקציב חודשי לניהול" hint="הסכום המשותף של הבית. את זה שניכם רואים.">

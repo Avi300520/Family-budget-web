@@ -17,13 +17,18 @@ export function SplitControl({
   second,
   firstShareBp,
   onChange,
-  disabled = false
+  disabled = false,
+  scope = "expense"
 }: {
   first: SplitPerson;
   second: SplitPerson;
   firstShareBp: number;
   onChange: (firstShareBp: number) => void;
   disabled?: boolean;
+  /** WHICH ratio this control edits. `expense` is one purchase; `household` is the default that
+   *  every future shared expense is divided by. The two are not the same statement and the control
+   *  must not make the same one on both screens. */
+  scope?: "expense" | "household";
 }) {
   const id = useId();
   const safe = Math.max(0, Math.min(10000, Math.round(firstShareBp)));
@@ -36,8 +41,17 @@ export function SplitControl({
 
   return (
     <fieldset className={styles.control} disabled={disabled}>
-      <legend className={styles.legend}>חלוקת ההוצאה</legend>
-      <p className={styles.help}>הסכום נשמר באגורות. שינוי כאן משפיע על ההוצאה הזו בלבד.</p>
+      {/* ── `R-2` FINDING 4 — **THE SAME CONTROL MEANS OPPOSITE THINGS ON ITS TWO SCREENS.** ──────
+          This copy was written for the per-expense page and rendered unchanged on the household
+          default, three lines below a sentence saying the ratio applies to every FUTURE expense.
+          Two sentences, three lines apart, contradicting each other, on a money screen.
+          `הסכום נשמר באגורות` also went: it is a storage detail, shown to a parent. */}
+      <legend className={styles.legend}>{scope === "household" ? "חלוקת ההוצאות המשותפות" : "חלוקת ההוצאה"}</legend>
+      <p className={styles.help}>
+        {scope === "household"
+          ? "כך מתחלקות הוצאות משותפות חדשות בין שניכם."
+          : "שינוי כאן משפיע על ההוצאה הזו בלבד."}
+      </p>
 
       {/* A READOUT, not a label. These were <label htmlFor> and gave each percent field a SECOND
           label (axe form-field-multiple-labels): the accessible name became the readout plus the

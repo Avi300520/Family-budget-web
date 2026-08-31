@@ -76,6 +76,24 @@ export function canViewHouseholdSettings(c: ViewerCaps): boolean {
   return isHouseholdManager(c);
 }
 
+/**
+ * ── `CC_UX_BUILD` / `R-2` BLOCKING 1 — **THE SECOND PERSON HAD NO DOOR.** ─────────────────────
+ *
+ * The separate-accounts card was gated on `canViewHouseholdSettings`, i.e. on being a MANAGER —
+ * and the arrangement`s backend GET is open to every active adult (§A49; `household-routes.ts`
+ * refuses only a `limited_member`). So the invited partner, who is the person this whole feature
+ * exists for, was told on the join screen that they would see their share and that their income
+ * stays private, and then given no route to either: not in the sidebar, not on the dashboard, and
+ * not in the settings hub. The two screens built for them were reachable only by typing a URL.
+ *
+ * This mirrors the GET, which is the read the card leads to. The PUT stays manager-only and the
+ * page itself renders read-only for everybody else — a door that opens onto a refusal is the same
+ * defect one screen along.
+ */
+export function canViewSeparateAccounts(c: ViewerCaps): boolean {
+  return roleIn(c.role, ["owner", "admin", "adult_member"]);
+}
+
 /** Change household settings. Backend PATCH /households/:id/settings is a manager op. */
 export function canEditHouseholdSettings(c: ViewerCaps): boolean {
   return isHouseholdManager(c);

@@ -14,7 +14,8 @@ import styles from "./onboarding.module.css";
 const STEP_META: Record<StepKey, { title: string; sub: string }> = {
   welcome: { title: "ברוכים הבאים לפינגטלי", sub: "כמה שאלות קצרות ונכין תקציב שמתנהל בוואטסאפ." },
   profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
-  separate: { title: "איך הכספים מתנהלים", sub: "אפשר להפריד כספים ועדיין לנהל הוצאות משותפות." },
+  // The step ASKS now, so the subtitle is the question and not a description of the feature.
+  separate: { title: "איך אתם מנהלים את הכסף?", sub: "אפשר לשנות בכל שלב." },
   cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
   income: { title: "כמה כסף נכנס - וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
   fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות - שכירות, חשבונות, מנויים ועוד." },
@@ -149,7 +150,7 @@ export default function OnboardingPage() {
         <div className={`${styles.content} ${styles.contentInner}`}>
           <h1 className={styles.stepHeading}>{meta.title}</h1>
           {meta.sub && <p className={styles.stepSub}>{meta.sub}</p>}
-          <StepComponent state={wizard.state} set={wizard.set} totals={totals} />
+          <StepComponent state={wizard.state} set={wizard.set} totals={totals} editMode={wizard.editMode} />
         </div>
       </main>
 

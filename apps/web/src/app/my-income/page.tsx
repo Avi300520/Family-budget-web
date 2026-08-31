@@ -38,7 +38,7 @@ export default function MyIncomePage() {
 
   if (absent) notFound();
   if (viewer.status === "error") {
-    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות את החשבון. נסו לרענן." /></AppShell>;
+    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות אתכם. נסו לרענן." /></AppShell>;
   }
   if (error) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
   if (!loaded) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
@@ -68,7 +68,13 @@ export default function MyIncomePage() {
       <h1 className="page-title">{TITLE}</h1>
       <section className="panel" style={{ maxWidth: 520 }}>
         <h2>סכום חודשי</h2>
-        <p className="muted">הסכום פרטי. הוא לא משותף ולא מצטרף לסכום אחר.</p>
+        {/* `R-3`: this is the screen with the actual input box, and it gave the WEAKEST of the six
+            sibling guarantees in the product - it said "private" and never said from whom. The
+            strongest sentence the code supports is stated here, because this is where a person
+            decides whether to type the number at all. All three clauses are true: `member_income`
+            is read only by its owner (there is no route at any role that serves another member`s),
+            and `A61` forbids any ratio computed from it. */}
+        <p className="muted">הסכום פרטי: לא רואים אותו בן/בת הזוג ולא מנהלי הבית, הוא לא מצטרף לשום סכום משותף, והוא לא משפיע על יחס החלוקה של ההוצאות.</p>
         <label htmlFor="own-income" style={{ display: "block", fontWeight: 600, marginBottom: "var(--sp-2)" }}>הכנסה בשקלים</label>
         <input id="own-income" className="input mono" inputMode="decimal" dir="ltr" value={value} onChange={(event) => setValue(event.target.value.replace(/[^\d.]/g, ""))} aria-invalid={invalid || undefined} aria-describedby={invalid ? "own-income-error" : undefined} />
         {invalid && <p id="own-income-error" className="status error" role="alert">אפשר להזין מספר עם עד שתי ספרות אחרי הנקודה.</p>}

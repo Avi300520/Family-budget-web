@@ -590,3 +590,27 @@ test("CC_UX item 4: under separate accounts the managed budget is required, the 
   s.managedBudget = 9000;
   assert.equal(validateStep("income", s), null, "the own income was made compulsory - it is private and optional");
 });
+
+test("R-3: the private own-income NEVER reaches the autosaved draft", () => {
+  // 🔴 THE DEFECT, AS AN ASSERTION. `redactDraftForStorage` is a DENYLIST, so a field it does not
+  //    name rides out on `...state`. `ownIncome` was typed under the promise that nobody else sees
+  //    it and was written to plaintext localStorage 400ms later — and `coerceDraftState` never
+  //    reads it back, so it leaked without even being returned to the person who typed it.
+  const s = createDefaultState();
+  s.separateAccounts = true;
+  s.ownIncome = 18000;
+  s.income = 24000;
+  s.managedBudget = 9000;
+  s.displayName = "אבי";
+  const redacted = redactDraftForStorage(s);
+  assert.equal(redacted.ownIncome, "", "the private own-income survived redaction");
+  // The serialized form is what actually lands in localStorage, so assert against THAT: a field
+  // stripped from the object but re-added by a spread somewhere else would pass the check above.
+  const json = JSON.stringify({ savedAt: 0, userId: "u", state: redacted });
+  assert.equal(json.includes("18000"), false, "the private figure is present in the serialized draft");
+  // Non-vacuity: the sibling figures this redactor has always stripped are still stripped, so the
+  // cell cannot be green because redaction stopped working altogether.
+  assert.equal(redacted.income, "");
+  assert.equal(redacted.managedBudget, "");
+  assert.equal(redacted.displayName, "");
+});

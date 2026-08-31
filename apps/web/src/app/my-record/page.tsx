@@ -56,7 +56,7 @@ export default function MyRecordPage() {
 
   if (absent) notFound();
   if (viewer.status === "error") {
-    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות את החשבון. נסו לרענן." /></AppShell>;
+    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות אתכם. נסו לרענן." /></AppShell>;
   }
   if (error) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
   if (!totals || !list || !range) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
@@ -128,7 +128,11 @@ export default function MyRecordPage() {
                 sentence with its original destination would have re-created the dead end with
                 better grammar. `וגם ההעברות` stays OUT - SETTLE is still 0 on the live process. */}
             <p className="muted">ההוצאות ממשיכות להירשם כרגיל. הרשימה שלמטה מציגה הוצאות שכבר נקבעה בהן חלוקה, ולכן היא ריקה כרגע.</p>
-            <p>כדי לחלק הוצאה, פותחים אותה מתוך <Link href="/dashboard/spending">הוצאות החודש</Link> וקובעים בה את היחס. אחרי החלוקה הראשונה יופיע כאן גם החלק שלכם.</p>
+            {/* `R-2` FINDING 6 — this used to say "to split an expense, open it and set the ratio"
+                directly after saying expenses split themselves. A person reads two consecutive
+                sentences that contradict each other as an app that does not know its own behaviour.
+                It now offers the ACTION for the exception rather than restating the rule. */}
+            <p>אפשר לקבוע חלוקה ידנית לכל הוצאה, מתוך <Link href="/dashboard/spending">הוצאות החודש</Link>.</p>
           </>
         ) : (
           <div className="grid two">

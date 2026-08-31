@@ -127,7 +127,7 @@ export default function FamilyWishlistsPage() {
       const result = await api.contributeToWishlist(item.id, amount, crypto.randomUUID());
       setItems((previous) => (previous ?? []).map((current) => current.id === item.id ? result.item : current));
     } catch {
-      setError("לא הצלחנו להוסיף תרומה. נסו שוב.");
+      setError("לא הצלחנו להוסיף לחיסכון. נסו שוב.");
     }
   }
 
@@ -390,13 +390,20 @@ export default function FamilyWishlistsPage() {
                             {w.priority === "high" && <span aria-hidden="true">⭐ </span>}
                             <span style={{ textDecoration: fulfilled ? "line-through" : "none" }}>{w.title}</span>
                             {typeof w.priceEst === "number" && (
-                              <span className="mono muted" style={{ fontSize: 12, marginInlineStart: 6 }}>
-                                ₪{w.priceEst.toLocaleString("he-IL")}
-                              </span>
+                              <>
+                                {" · "}
+                                {/* The visible separator prevents adjacent digit runs from merging;
+                                    bdi keeps the currency-and-number run independent in RTL text. */}
+                                <bdi dir="ltr" className="mono muted" style={{ fontSize: 12 }}>
+                                  ₪{w.priceEst.toLocaleString("he-IL")}
+                                </bdi>
+                              </>
                             )}
                             {typeof w.priceEst === "number" && (
                               <span className="muted" style={{ display: "block", fontSize: 12, marginTop: 4 }}>
-                                נחסכו {(w.totalContributed ?? 0).toLocaleString("he-IL")} מתוך {w.priceEst.toLocaleString("he-IL")} ₪ ({w.fundedPercentage ?? 0}%)
+                                <bdi>
+                                  נחסכו {(w.totalContributed ?? 0).toLocaleString("he-IL")} מתוך {w.priceEst.toLocaleString("he-IL")} ₪ ({w.fundedPercentage ?? 0}%)
+                                </bdi>
                               </span>
                             )}
                             {typeof w.priceEst !== "number" && !fulfilled && (
@@ -439,7 +446,7 @@ export default function FamilyWishlistsPage() {
                             <div style={{ display: "flex", gap: "var(--sp-2)", flexShrink: 0 }}>
                               {typeof w.priceEst === "number" && (
                                 <button type="button" className="btn sm" onClick={() => contribute(w)}>
-                                  תרומה
+                                  לעזור
                                 </button>
                               )}
                               <button
