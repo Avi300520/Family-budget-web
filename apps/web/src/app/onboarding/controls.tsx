@@ -88,8 +88,8 @@ export function ChipSelect({ options, value, onChange, multi = false }: {
 
 // ── OptionCards — big selectable cards ─────────────────────────────────────────
 export function OptionCards({ options, value, onChange, cols = 2 }: {
-  options: ReadonlyArray<{ id: string; emoji?: string; title?: string; label?: string; sub?: string }>;
-  value: string;
+  options: ReadonlyArray<{ id: string; emoji?: string; title?: string; label?: string; sub?: string; dataAction?: string }>;
+  value: string | null;
   onChange: (id: string) => void;
   cols?: number;
 }) {
@@ -98,7 +98,7 @@ export function OptionCards({ options, value, onChange, cols = 2 }: {
       {options.map((o) => {
         const on = value === o.id;
         return (
-          <button type="button" key={o.id} onClick={() => onChange(o.id)} aria-pressed={on} style={{
+          <button type="button" key={o.id} data-action={o.dataAction ?? `choose-${o.id}`} onClick={() => onChange(o.id)} aria-pressed={on} style={{
             textAlign: "start", padding: 16, borderRadius: 16, cursor: "pointer",
             border: on ? "2px solid var(--teal)" : "1.5px solid var(--cream-4)",
             background: on ? "var(--teal-bg)" : "var(--cream-2)",
@@ -155,7 +155,7 @@ export function MiniToggle({ label, on, onChange }: { label: string; on: boolean
 }
 
 // ── MoneyInput (₪ prefixed, mono, LTR digits) ──────────────────────────────────
-export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = false, size = "md", ariaLabel, id, invalid = false, describedById }: {
+export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = false, size = "md", ariaLabel, id, dataAction, invalid = false, describedById }: {
   value: number | "";
   onChange: (v: number | "") => void;
   placeholder?: string;
@@ -166,6 +166,8 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
   /** id for the <input>, so an external <label htmlFor> can target it (and so a
    *  failed validation can move focus here). Mirrors PhoneInput. */
   id?: string;
+  /** Stable purpose locator for browser automation; never derived from visible copy. */
+  dataAction?: string;
   /** Mark the field invalid for assistive tech + the error border. */
   invalid?: boolean;
   /** id of the external error text, wired as aria-describedby (3.3.1). Pass
@@ -198,6 +200,7 @@ export function MoneyInput({ value, onChange, placeholder = "0", autoFocus = fal
       <input
         ref={ref}
         id={id}
+        data-action={dataAction}
         inputMode="decimal"
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
@@ -297,17 +300,20 @@ export function Field({ label, hint, htmlFor, children, style }: {
 }
 
 // ── TextInput — plain RTL text field (reuses the site .input class) ────────────
-export function TextInput({ value, onChange, placeholder, autoComplete, ariaLabel, id }: {
+export function TextInput({ value, onChange, placeholder, autoComplete, ariaLabel, id, dataAction }: {
   value: string; onChange: (v: string) => void; placeholder?: string; autoComplete?: string;
   /** Accessible name - the field's visible label. A placeholder is NOT a label. */
   ariaLabel?: string;
   /** id for the <input>, so an external <label htmlFor> can target it. */
   id?: string;
+  /** Stable purpose locator for browser automation; never derived from visible copy. */
+  dataAction?: string;
 }) {
   return (
     <input
       className="input"
       id={id}
+      data-action={dataAction}
       value={value}
       aria-label={ariaLabel}
       placeholder={placeholder}

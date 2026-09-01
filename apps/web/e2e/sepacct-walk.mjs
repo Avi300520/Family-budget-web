@@ -44,8 +44,8 @@ async function heading(page) {
   const h = page.locator("h1").first();
   return (await h.count()) ? (await h.innerText()).trim() : "(no h1)";
 }
-/** Click by visible text and record it. Fails loudly: a walk that silently skips a click is a walk
- *  that proves the screens it could not reach are fine.
+/** Click by stable purpose and assert visible copy separately. Fails loudly: a walk that silently
+ *  skips a click is a walk that proves the screens it could not reach are fine.
  *
  *  🔴 **IT CLICKS A CONTROL, AND THE FIRST CUT CLICKED ANY TEXT CONTAINING THE WORD.** `getByText`
  *  with `exact: false` is a SUBSTRING match over every node, and `בהמשך` — an ordinary Hebrew word
@@ -61,13 +61,12 @@ async function heading(page) {
  *
  *  So the walk now clicks what a person clicks: a button or a link. Prose containing the word is
  *  no longer a candidate, in this or any future leg. */
-async function click(page, text, note) {
-  const control = page.getByRole("button", { name: new RegExp(text) })
-    .or(page.getByRole("link", { name: new RegExp(text) }));
-  const el = (await control.count()) ? control.first() : page.getByText(text, { exact: false }).first();
+async function clickAction(page, action, expectedCopy, note) {
+  const el = page.locator(`[data-action="${action}"]`).first();
   await el.waitFor({ state: "visible", timeout: 5000 });
+  if (expectedCopy && !(await el.innerText()).includes(expectedCopy)) throw new Error(`${action} copy moved: expected ${expectedCopy}`);
   await el.click();
-  act(`click "${text}"${note ? `  — ${note}` : ""}`);
+  act(`click purpose ${action}${note ? `  — ${note}` : ""}`);
   await page.waitForTimeout(350);
 }
 async function fill(page, selector, value, note) {
@@ -96,26 +95,19 @@ await guard("leg 1", async () => {
   await setMode("fresh");
   await page.goto(`${BASE}/onboarding`, { waitUntil: "networkidle" });
   log(`   screen: ${await heading(page)}`);
-  await click(page, "מתחילים", "welcome");
+  await clickAction(page, "onboarding-next", "מתחילים", "welcome");
   log(`   screen: ${await heading(page)}  (household type)`);
-  await click(page, "זוג", "household type — this is what makes the money question appear at all");
-  // `TextInput` renders a bare `<input className="input">` with NO `type`, so a `[type="text"]`
-  // selector matches nothing. Selecting on the class is what a person's eye does anyway.
-  const texts = page.locator("input.input:not([type])");
-  const n = await texts.count();
-  for (let i = 0; i < n; i += 1) {
-    const v = ["אבי", "בית שלנו", "חיפה"][i] ?? "x";
-    await texts.nth(i).fill(v);
-    act(`type "${v}" into text field ${i + 1} of ${n}`);
-  }
-  await click(page, "המשך");
+  await clickAction(page, "choose-couple", "זוג", "household type — this is what makes the money question appear at all");
+  await fill(page, '[data-action="set-display-name"]', "אבי", "profile display name");
+  await fill(page, '[data-action="set-household-name"]', "בית שלנו", "household name");
+  await clickAction(page, "onboarding-next", "המשך");
   log(`   screen: ${await heading(page)}`);
   const lines = await visible(page);
   log(`   reads: ${lines.slice(0, 6).join(" / ")}`);
-  await click(page, "בנפרד", "THE question this whole run is about");
+  await clickAction(page, "choose-apart", "בנפרד", "THE question this whole run is about");
   log(`   the ratio opened inline: ${(await visible(page)).includes("איך מתחלק?") ? "YES" : "NO"}`);
-  await click(page, "יחס אחר", "not half-and-half");
-  await fill(page, "#sep-share", 60, "the recorder's own share");
+  await clickAction(page, "choose-other", "יחס אחר", "not half-and-half");
+  await fill(page, '[data-action="set-own-share"]', 60, "the recorder's own share");
   log(`   partner's share shown as: ${(await visible(page)).find((l) => l.includes("החלק של בן")) ?? "(absent)"}`);
   // ── `AMENDMENT_18` §A68 / §A70 — **THE SCREEN THAT TAKES THE ANSWER, ASSERTED ON THAT SCREEN.**
   // §A70: a cell is not counted until it has been seen RED with the control removed — delete either
@@ -135,9 +127,9 @@ await guard("leg 1", async () => {
       failures.push(`§A68: separateStep=${onSeparateStep} event=${namesTheEvent} income=${namesTheIncome}`);
     }
   }
-  await click(page, "המשך");
+  await clickAction(page, "onboarding-next", "המשך");
   log(`   screen: ${await heading(page)}   ← the CYCLE step comes between`);
-  await click(page, "המשך");
+  await clickAction(page, "onboarding-next", "המשך");
   const incomeHeading = await heading(page);
   log(`   screen: ${incomeHeading}   ← the income step`);
   const income = await visible(page);
@@ -162,10 +154,7 @@ await guard("leg 1", async () => {
   // ⚠️ **WALK IT TO THE END. A SCREEN THAT ASKS AND AN ANSWER THAT LANDS ARE DIFFERENT CLAIMS,**
   // and the second is the one that was broken for sixteen runs. Everything below is asserted
   // against what the SERVER received, not against what the browser displayed.
-  await page.locator("input.input.mono, input[inputmode=decimal]").first().fill("18000");
-  act('type 18000 as MY OWN income');
-  const budgets = page.locator("input[inputmode=decimal]");
-  if (await budgets.count() > 1) { await budgets.nth(1).fill("9000"); act('type 9000 as the household budget'); }
+  await fill(page, '[data-action="set-private-income"]', 18000, "MY OWN income");
   // ⚠️ **PRESS ON UNTIL THE WIZARD IS ACTUALLY FINISHED, AND ASSERT THAT IT WAS.** The first cut
   // clicked a fixed list of four labels, stopped on step 7 of 8, and then read `/__onboarding` —
   // which was still empty, so "no shared income in the payload" was answered about a payload that
@@ -173,9 +162,13 @@ await guard("leg 1", async () => {
   // screen. A walk that stops early and then asks a question gets a green that means nothing.
   for (let i = 0; i < 8; i += 1) {
     if ((await visible(page)).some((l) => l.includes("הבית מוכן"))) break;
+    const managedBudget = page.locator('[data-action="set-managed-budget"]');
+    if (await managedBudget.count() && await managedBudget.first().isVisible()) {
+      await fill(page, '[data-action="set-managed-budget"]', 9000, "household budget");
+    }
     let moved = false;
-    for (const label of ["סיום", "המשך", "דילוג"]) {
-      try { await click(page, label); moved = true; break; } catch { /* try the next affordance */ }
+    for (const action of ["onboarding-next", "onboarding-skip"]) {
+      try { await clickAction(page, action); moved = true; break; } catch { /* try the next affordance */ }
     }
     if (!moved) break;
     await page.waitForTimeout(400);
@@ -202,7 +195,11 @@ await guard("leg 3", async () => {
   await setMode("populated");
   await page.goto(`${BASE}/join?token=walk-token`, { waitUntil: "networkidle" });
   log(`   screen: ${await heading(page)}`);
-  await click(page, "הצטרף לבית", "the only button on the invite preview");
+  const joinName = page.locator('[data-action="set-join-display-name"]');
+  if (await joinName.count() && await joinName.first().isVisible()) {
+    await fill(page, '[data-action="set-join-display-name"]', "נועה", "joining adult display name");
+  }
+  await clickAction(page, "join-household", "הצטרף לבית", "the join action on the invite preview");
   await page.waitForTimeout(900);
   log(`   screen: ${await heading(page)}`);
   const d = await visible(page);
@@ -233,7 +230,7 @@ await guard("legs 4 and 5", async () => {
   log(`   reads: ${g.slice(0, 8).join(" / ")}`);
   log(`   a way back?  ${g.some((l) => l.includes("חזרה")) ? `yes — "${g.find((l) => l.includes("חזרה"))}"` : "🔴 NO"}`);
   log(`   "mine alone" offered as a NAMED action? ${g.some((l) => l.includes("אני נושא/ת בכל הסכום")) ? "yes" : "🔴 no"}`);
-  await click(page, "אני נושא/ת בכל הסכום", "A65 — an intention, not a drag to 100; the LABEL says what it does");
+  await clickAction(page, "mark-expense-personal", undefined, "explicit personal-scope correction");
   await page.waitForTimeout(600);
   log(`   after: ${(await visible(page)).slice(2, 6).join(" / ")}`);
 });
@@ -305,7 +302,7 @@ await guard("partner", async () => {
   const hub = await visible(page);
   const hasCard = hub.some((l) => l.includes("הפרדת כספים"));
   log(`   settings hub offers הפרדת כספים? ${hasCard ? "yes - they have a door" : "🔴 NO - no route to their own money"}`);
-  if (hasCard) await click(page, "הפרדת כספים", "the only entrance a non-manager has");
+  if (hasCard) await clickAction(page, "open-settings-separate-accounts", "הפרדת כספים", "the settings entrance");
   else await page.goto(`${BASE}/settings/separate-accounts`, { waitUntil: "networkidle" });
   await page.waitForTimeout(600);
   const v = await visible(page);

@@ -46,8 +46,11 @@ export default function SharedExpensesPage() {
   const [names, setNames] = useState<Names>(new Map());
   const [roster, setRoster] = useState<RosterMember[]>([]);
   const [draftBp, setDraftBp] = useState<number>();
-  /** The FIRST split's ratio. Separate from `draftBp`, which edits a SAVED one. */
-  const [newBp, setNewBp] = useState(5000);
+  const [draftShares, setDraftShares] = useState<Record<string, number>>();
+  const [remainderUserId, setRemainderUserId] = useState("");
+  /** The FIRST split uses the current live household ratio, including N-adult arrangements. */
+  const [newShares, setNewShares] = useState<Record<string, number>>({});
+  const [newRemainderUserId, setNewRemainderUserId] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
   const [absent, setAbsent] = useState(false);
@@ -61,15 +64,22 @@ export default function SharedExpensesPage() {
   const load = useCallback(async () => {
     if (!householdId || !purchaseId) return;
     try {
-      const [next, roster] = await Promise.all([
+      const [next, roster, arrangement] = await Promise.all([
         sepacct.getSplit(householdId, purchaseId),
         // The roster is a nice-to-have: a name that will not load must not hide the money.
-        api.listMembers(householdId).catch(() => ({ members: [] as RosterMember[] }))
+        api.listMembers(householdId).catch(() => ({ members: [] as RosterMember[] })),
+        sepacct.getConfig().catch(() => null)
       ]);
       setSplit(next);
       setNames(new Map(roster.members.map((member) => [member.userId, member.displayName ?? ""])));
       setRoster(roster.members as RosterMember[]);
+      const activeAdultIds = new Set(adultsOf(roster.members as RosterMember[]).map((adult) => adult.userId));
+      const currentShares = arrangement?.state === "live" ? arrangement.shares : [];
+      setNewShares(Object.fromEntries(currentShares.map((share) => [share.userId, share.shareBp])));
+      setNewRemainderUserId(currentShares.at(-1)?.userId ?? "");
       setDraftBp(undefined);
+      setDraftShares(undefined);
+      setRemainderUserId(next.allocation?.shares.filter((share) => activeAdultIds.has(share.userId)).at(-1)?.userId ?? "");
       setLoaded(true);
     } catch (cause) {
       // §3 — a child gets `404 split.not_found` on this route, the same answer a disabled feature
@@ -134,21 +144,32 @@ export default function SharedExpensesPage() {
   // apply to this very expense. 50/50 is offered as what it is: a starting point the person edits,
   // unsaved until they press the button, decided in front of them.
   const adults = adultsOf(roster);
-  const [adultA, adultB] = adults;
-  const firstSplitPair: [RosterMember, RosterMember] | null =
-    adults.length === 2 && adultA && adultB
-      ? (adultB.userId === purchase.userId ? [adultB, adultA] : [adultA, adultB])
+  const firstSplitAdults = split.capabilities.canCreateAllocation
+    && adults.length >= 2
+    && adults.every((adult) => Number.isInteger(newShares[adult.userId]))
+    && adults.reduce((sum, adult) => sum + (newShares[adult.userId] ?? 0), 0) === 10000
+      ? adults
       : null;
 
+  const setNewShare = (userId: string, percentage: number) => {
+    const requestedBp = Math.round(Math.max(0, Math.min(100, percentage)) * 100);
+    const fixedUsed = adults.reduce((sum, adult) =>
+      adult.userId === newRemainderUserId || adult.userId === userId ? sum : sum + (newShares[adult.userId] ?? 0), 0);
+    const next = { ...newShares, [userId]: Math.min(requestedBp, Math.max(0, 10000 - fixedUsed)) };
+    if (userId !== newRemainderUserId) {
+      const used = adults.reduce((sum, adult) => adult.userId === newRemainderUserId ? sum : sum + (next[adult.userId] ?? 0), 0);
+      next[newRemainderUserId] = Math.max(0, 10000 - used);
+    }
+    setNewShares(next);
+  };
+
   const createSplit = async () => {
-    if (saving || !firstSplitPair) return;
+    if (saving || !firstSplitAdults) return;
     setSaving(true);
     setError(undefined);
     try {
-      setSplit(await sepacct.setSplit(viewer.householdId!, purchase.id, [
-        { userId: firstSplitPair[0].userId, shareBp: newBp },
-        { userId: firstSplitPair[1].userId, shareBp: 10000 - newBp }
-      ]));
+      setSplit(await sepacct.setSplit(viewer.householdId!, purchase.id,
+        firstSplitAdults.map((adult) => ({ userId: adult.userId, shareBp: newShares[adult.userId] ?? 0 }))));
     } catch (cause) {
       if (isAbsent(cause)) setAbsent(true);
       else if (cause instanceof SepacctError && cause.code === "split.child_excluded") setAbsent(true);
@@ -157,7 +178,7 @@ export default function SharedExpensesPage() {
       // refusal that will never succeed.
       else if (cause instanceof SepacctError && cause.code === "split.no_payer") setError("להוצאה הזו אין משלם רשום, ולכן אי אפשר לחלק אותה.");
       else if (cause instanceof SepacctError && cause.code === "split.before_arrangement") setError("ההוצאה הזו נרשמה לפני שהתחלתם לנהל חשבונות נפרדים, ולכן אי אפשר לחלק אותה.");
-      else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setError("רק מי שרשם את ההוצאה או מנהלי הבית יכולים לקבוע את החלוקה.");
+      else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setError("רק המשלם/ת של הוצאה חדשה יכול/ה ליצור לה חלוקה.");
       else if (cause instanceof SepacctError && cause.code === "split.not_a_member") setError("אחד המשתתפים אינו חבר בוגר פעיל בבית. רעננו את העמוד ונסו שוב.");
       else if (cause instanceof SepacctError && cause.code === "split.invalid") setError("החלוקה אינה תקינה. נסו שוב.");
       else setError("לא הצלחנו לשמור את החלוקה. נסו שוב.");
@@ -167,6 +188,36 @@ export default function SharedExpensesPage() {
   };
   const recordedBy = purchase.userId === null ? null : nameOf(names, purchase.userId);
   const purchaseDate = heDate(purchase.purchaseDate) ?? purchase.purchaseDate;
+  const changeScope = async (expenseType: "household" | "personal") => {
+    if (saving) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      await sepacct.setPurchaseScope(viewer.householdId!, purchase.id, expenseType);
+      await load();
+    } catch (cause) {
+      if (isAbsent(cause)) setAbsent(true);
+      else if (cause instanceof SepacctError && cause.code === "split.child_excluded") setAbsent(true);
+      else if (cause instanceof SepacctError && cause.code === "purchase.payer_only") setError("רק מי שרשם את ההוצאה יכול לשנות את הסיווג שלה.");
+      else setError(expenseType === "personal"
+        ? "לא הצלחנו לסמן את ההוצאה כאישית. נסו שוב."
+        : "לא הצלחנו להחזיר את ההוצאה להוצאות המשותפות. נסו שוב.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (purchase.expenseType === "personal") {
+    return (
+      <AppShell><h1 className="page-title">{TITLE}</h1><section className="panel" style={{ maxWidth: 680 }}>
+        <h2>{merchant}</h2><p>ההוצאה מסומנת כאישית ואינה מתחלקת.</p>
+        <div className="row">
+          {split.capabilities.canMarkShared && <button type="button" className="button" data-action="mark-expense-shared" onClick={() => void changeScope("household")} aria-busy={saving}>החזרה להוצאות המשותפות</button>}
+          <Link className="button secondary" data-action="back-month-expenses" href="/dashboard/spending">חזרה להוצאות החודש</Link>
+        </div>
+      </section></AppShell>
+    );
+  }
 
   // §2 — `allocation: null` is NORMAL for a purchase with no split rows, not a failure.
   if (!allocation) {
@@ -188,26 +239,57 @@ export default function SharedExpensesPage() {
               this identical page. Both this and the "set a default ratio" button it replaced
               pointed at a no-op. What is left is only what is true in either ruling. */}
           <p>עדיין לא נקבעה חלוקה להוצאה הזו, ולכן היא רשומה במלואה על מי שרשם אותה.</p>
-          {firstSplitPair
+          {firstSplitAdults
             ? (
               <>
-                <SplitControl
-                  first={{ userId: firstSplitPair[0].userId, displayName: nameOf(names, firstSplitPair[0].userId) }}
-                  second={{ userId: firstSplitPair[1].userId, displayName: nameOf(names, firstSplitPair[1].userId) }}
-                  firstShareBp={newBp}
-                  onChange={setNewBp}
-                />
+                {firstSplitAdults.length === 2 ? (
+                  <SplitControl
+                    first={{ userId: firstSplitAdults[0]!.userId, displayName: nameOf(names, firstSplitAdults[0]!.userId) }}
+                    second={{ userId: firstSplitAdults[1]!.userId, displayName: nameOf(names, firstSplitAdults[1]!.userId) }}
+                    firstShareBp={newShares[firstSplitAdults[0]!.userId] ?? 0}
+                    onChange={(shareBp) => setNewShares((current) => ({
+                      ...current,
+                      [firstSplitAdults[0]!.userId]: shareBp,
+                      [firstSplitAdults[1]!.userId]: 10000 - shareBp
+                    }))}
+                  />
+                ) : (
+                  <section aria-label="חלוקה ראשונה" style={{ display: "grid", gap: 12 }}>
+                    <label>השדה שמשלים ל־100%
+                      <select className="select" data-action="choose-new-expense-remainder" value={newRemainderUserId} onChange={(event) => {
+                        const remainder = event.target.value;
+                        setNewRemainderUserId(remainder);
+                        const used = firstSplitAdults.reduce((sum, adult) => adult.userId === remainder ? sum : sum + (newShares[adult.userId] ?? 0), 0);
+                        setNewShares((current) => ({ ...current, [remainder]: Math.max(0, 10000 - used) }));
+                      }}>
+                        {firstSplitAdults.map((adult) => <option key={adult.userId} value={adult.userId}>{nameOf(names, adult.userId)}</option>)}
+                      </select>
+                    </label>
+                    {firstSplitAdults.map((adult) => (
+                      <label key={adult.userId} style={{ display: "grid", gridTemplateColumns: "1fr 110px", alignItems: "center", gap: 12 }}>
+                        <span>{nameOf(names, adult.userId)}</span>
+                        <span className="row" style={{ gap: 6 }}>
+                          <input className="input mono" type="number" min={0} max={100} step={1}
+                            data-action={`set-new-expense-share-${adult.userId}`} disabled={adult.userId === newRemainderUserId}
+                            value={(newShares[adult.userId] ?? 0) / 100}
+                            onChange={(event) => setNewShare(adult.userId, Number(event.target.value))} />
+                          <span aria-hidden>%</span>
+                        </span>
+                      </label>
+                    ))}
+                  </section>
+                )}
                 <div className="row" style={{ marginTop: "var(--sp-3)" }}>
-                  <button type="button" className="button" onClick={() => void createSplit()} aria-busy={saving}>
+                  <button type="button" className="button" data-action="save-expense-allocation" onClick={() => void createSplit()} aria-busy={saving}>
                     {saving ? "שומרים..." : "שמירת חלוקה"}
                   </button>
-                  <Link className="button secondary" href="/dashboard/spending">חזרה להוצאות החודש</Link>
+                  <Link className="button secondary" data-action="back-month-expenses" href="/dashboard/spending">חזרה להוצאות החודש</Link>
                 </div>
               </>
             )
             : (
               <>
-                <p className="muted">חלוקה נקבעת בין שני חברים בוגרים בבית. כרגע אין שניים כאלה, ולכן אי אפשר לחלק את ההוצאה הזו.</p>
+                <p className="muted">אפשר ליצור חלוקה רק כשההסדר פעיל ויש יחס מלא לכל המבוגרים הפעילים בבית.</p>
                 <div className="row">
                   <Link className="button secondary" href="/dashboard/spending">חזרה להוצאות החודש</Link>
                   <Link className="button secondary" href="/settings/separate-accounts">הגדרות ההסדר</Link>
@@ -220,15 +302,24 @@ export default function SharedExpensesPage() {
   }
 
   const mine = allocation.shares.find((share) => share.userId === viewer.userId);
-  const other = allocation.shares.find((share) => share.userId !== viewer.userId);
-  if (!mine || !other || allocation.shares.length !== 2) {
-    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="החלוקה אינה בין שני חברים ולכן לא נציג אותה כאן." /></AppShell>;
+  if (!mine) {
+    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="ההוצאה אינה משויכת אליך." /></AppShell>;
   }
+  const activeAdultIds = new Set(adults.map((adult) => adult.userId));
+  const editableAllocationShares = allocation.shares.filter((share) => activeAdultIds.has(share.userId));
+  const other = allocation.shares.length === 2 && editableAllocationShares.length === 2
+    ? allocation.shares.find((share) => share.userId !== viewer.userId)
+    : undefined;
 
   // The saved ratio and the edited ratio are kept apart on purpose: `agorot` is resolved by the
   // server (§2) and must be rendered verbatim, so an unsaved slider move never restates money.
   const editedBp = draftBp ?? mine.shareBp;
-  const dirty = editedBp !== mine.shareBp;
+  const currentShares = Object.fromEntries(allocation.shares.map((share) => [share.userId, share.shareBp]));
+  const editedShares = draftShares ?? currentShares;
+  const dirty = other
+    ? editedBp !== mine.shareBp
+    : allocation.shares.some((share) => editedShares[share.userId] !== share.shareBp);
+  const validEditedShares = allocation.shares.reduce((sum, share) => sum + (editedShares[share.userId] ?? share.shareBp), 0) === 10000;
 
   // ── `A65` — **AN INTENTION IS NOT ENTERED AS ARITHMETIC.** ────────────────────────────────────
   //
@@ -240,39 +331,28 @@ export default function SharedExpensesPage() {
   // Same route, same payload, same refusals — only the control carries the name. `shareBp` takes an
   // explicit argument so the named action and the ratio control share one write path and one error
   // map; a second `setSplit` call site would be a second place for those seven codes to drift.
-  const save = async (shareBp: number = editedBp) => {
+  const save = async () => {
     if (saving) return;
     setSaving(true);
     setError(undefined);
     try {
-      setSplit(await sepacct.setSplit(viewer.householdId!, purchase.id, [
-        { userId: mine.userId, shareBp },
-        { userId: other.userId, shareBp: 10000 - shareBp }
-      ]));
+      const shares = other
+        ? [{ userId: mine.userId, shareBp: editedBp }, { userId: other.userId, shareBp: 10000 - editedBp }]
+        : allocation.shares.map((share) => ({ userId: share.userId, shareBp: editedShares[share.userId] ?? share.shareBp }));
+      setSplit(await sepacct.setSplit(viewer.householdId!, purchase.id, shares));
       setDraftBp(undefined);
+      setDraftShares(undefined);
     } catch (cause) {
       if (isAbsent(cause)) setAbsent(true);
       // §2 — a child is `403 split.child_excluded` on the PUT even though the GET 404s. Both mean
       // the same thing to a reader: this is not theirs to change.
       else if (cause instanceof SepacctError && cause.code === "split.child_excluded") setAbsent(true);
-      else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setError("רק מי שרשם את ההוצאה או מנהלי הבית יכולים לשנות את החלוקה.");
+      else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setError("רק מבוגר/ת ששמם מופיע בחלוקה יכול/ה לשנות אותה.");
       else if (cause instanceof SepacctError && cause.code === "purchase.not_found") setAbsent(true);
       else if (cause instanceof SepacctError && cause.code === "split.invalid") setError("החלוקה אינה תקינה. נסו שוב.");
       else setError("לא הצלחנו לשמור את החלוקה. נסו שוב.");
     } finally {
       setSaving(false);
-    }
-  };
-
-  // §6 #4 — the dispute returns NOTHING at all, so the allocation is re-read afterwards.
-  const dispute = async () => {
-    try {
-      await sepacct.disputeMyShare(viewer.householdId!, purchase.id);
-      await load();
-    } catch (cause) {
-      if (isAbsent(cause)) setAbsent(true);
-      else if (cause instanceof SepacctError && cause.code === "split.child_excluded") setAbsent(true);
-      else setError("לא הצלחנו לסמן את ההסתייגות. נסו שוב.");
     }
   };
 
@@ -284,18 +364,46 @@ export default function SharedExpensesPage() {
         <p className="muted"><bdi dir="ltr">{purchaseDate}</bdi>{recordedBy ? ` · נרשם על ידי ${recordedBy}` : ""}</p>
         <div className="grid two" style={{ marginBottom: "var(--sp-4)" }}>
           <div className="panel"><span className="label">נרשם</span><strong className="mono" dir="ltr">{ilsFromAgorot(allocation.totalAgorot)}</strong></div>
-          <div className="panel"><span className="label">חלקך לפי החלוקה השמורה</span><strong className="mono" dir="ltr">{ilsFromAgorot(mine.agorot)}</strong></div>
+          <div className="panel"><span className="label">חלקך לפי החלוקה השמורה</span><strong className="mono" dir="ltr">{mine.agorot === null ? "לא חושב" : ilsFromAgorot(mine.agorot)}</strong></div>
         </div>
-        <SplitControl
+        {split.capabilities.canEditArithmetic && <>
+        {other ? <SplitControl
           first={{ userId: mine.userId, displayName: nameOf(names, mine.userId) }}
           second={{ userId: other.userId, displayName: nameOf(names, other.userId) }}
           firstShareBp={editedBp}
           onChange={setDraftBp}
-        />
-        {dirty && <p className="muted">היחס טרם נשמר. הסכום יתעדכן אחרי השמירה.</p>}
+        /> : <section aria-label="יחס החלוקה להוצאה" style={{ display: "grid", gap: 12 }}>
+          <label>השדה שמשלים ל־100%
+            <select className="select" data-action="choose-expense-remainder" value={remainderUserId} onChange={(event) => {
+              const nextRemainder = event.target.value;
+              setRemainderUserId(nextRemainder);
+              const used = allocation.shares.reduce((sum, share) => share.userId === nextRemainder ? sum : sum + (editedShares[share.userId] ?? share.shareBp), 0);
+              setDraftShares({ ...editedShares, [nextRemainder]: Math.max(0, 10000 - used) });
+            }}>
+              {editableAllocationShares.map((share) => <option key={share.userId} value={share.userId}>{nameOf(names, share.userId)}</option>)}
+            </select>
+          </label>
+          {allocation.shares.map((share) => <label key={share.userId} className="row between">
+            <span>{nameOf(names, share.userId)}{!activeAdultIds.has(share.userId) ? " · חלק קבוע מהעבר" : ""}</span>
+            <span className="row"><input className="input mono" type="number" min={0} max={100} step={1}
+              data-action={`set-expense-share-${share.userId}`} disabled={!activeAdultIds.has(share.userId) || share.userId === remainderUserId}
+              value={(editedShares[share.userId] ?? share.shareBp) / 100}
+              onChange={(event) => {
+                const requestedBp = Math.round(Math.max(0, Math.min(100, Number(event.target.value))) * 100);
+                const fixedUsed = allocation.shares.reduce((sum, candidate) =>
+                  candidate.userId === remainderUserId || candidate.userId === share.userId
+                    ? sum : sum + (editedShares[candidate.userId] ?? candidate.shareBp), 0);
+                const next = { ...editedShares, [share.userId]: Math.min(requestedBp, Math.max(0, 10000 - fixedUsed)) };
+                const used = allocation.shares.reduce((sum, candidate) => candidate.userId === remainderUserId ? sum : sum + (next[candidate.userId] ?? candidate.shareBp), 0);
+                next[remainderUserId] = Math.max(0, 10000 - used);
+                setDraftShares(next);
+              }} /><span aria-hidden>%</span></span>
+          </label>)}
+        </section>}
+        {dirty && <p className="muted">היחס טרם נשמר. הסכום יתעדכן אחרי השמירה.</p>}</>}
         {mine.previousShareBp !== null && <p className="muted">החלק הקודם: <bdi className="mono" dir="ltr">{(mine.previousShareBp / 100).toFixed(2)}%</bdi></p>}
         <div className="row" style={{ marginTop: "var(--sp-3)" }}>
-          <button type="button" className="button" onClick={() => void save()} aria-busy={saving}>{saving ? "שומרים..." : "שמירת חלוקה"}</button>
+          {split.capabilities.canEditArithmetic && <button type="button" className="button" data-action="save-expense-split" disabled={!dirty || !validEditedShares} onClick={() => void save()} aria-busy={saving}>{saving ? "שומרים..." : "שמירת חלוקה"}</button>}
           {/* `A65`, and `R-2` FINDING 8 CORRECTED THE LABEL. The spec asked for "זו הוצאה שלי
               בלבד", and a person reads that as "take it out of the shared pile". It does not: the
               expense stays a household expense, stays in the household budget, and stays visible to
@@ -304,12 +412,11 @@ export default function SharedExpensesPage() {
               behind a label that read like a filing correction. The control is still the named
               intention `A65` asks for; the name is now the one that is true.
               Offered only when it would change something: at 100/0 already it is a no-op. */}
-          {mine.shareBp !== 10000 && (
-            <button type="button" className="button secondary" onClick={() => void save(10000)} aria-busy={saving}>
-              אני נושא/ת בכל הסכום
+          {split.capabilities.canMarkPersonal && (
+            <button type="button" className="button secondary" data-action="mark-expense-personal" onClick={() => void changeScope("personal")} aria-busy={saving}>
+              זו הוצאה שלי בלבד
             </button>
           )}
-          {mine.disputedAt ? <span className="status">סימנת שהחלוקה אינה מוסכמת.</span> : <button type="button" className="button secondary" onClick={() => void dispute()}>החלוקה אינה מוסכמת</button>}
         </div>
       </section>
     </AppShell>

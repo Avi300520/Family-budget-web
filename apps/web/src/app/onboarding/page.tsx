@@ -1,21 +1,25 @@
 "use client";
 
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { Home, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { computeTotals, type StepKey } from "../../lib/onboarding/model";
 import { WhatsAppCtaButton, botWhatsAppLink } from "../../components/WhatsAppCta";
 import { useOnboardingWizard } from "./useOnboardingWizard";
 import {
-  WelcomeStep, ProfileStep, SeparateAccountsStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
+  WelcomeStep, ProfileStep, SeparateAccountsStep, PrivateIncomeStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
 } from "./steps";
 import styles from "./onboarding.module.css";
+import { api } from "../../lib/api";
+import { PhoneInput } from "../../components/PhoneInput";
+import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../lib/countryCodes";
 
 const STEP_META: Record<StepKey, { title: string; sub: string }> = {
   welcome: { title: "ברוכים הבאים לפינגטלי", sub: "כמה שאלות קצרות ונכין תקציב שמתנהל בוואטסאפ." },
   profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
   // The step ASKS now, so the subtitle is the question and not a description of the feature.
   separate: { title: "איך אתם מנהלים את הכסף?", sub: "אפשר לשנות בכל שלב." },
+  privateIncome: { title: "ההכנסה שלי", sub: "רשות. המספר נשמר רק אצלכם ואינו מוצג למבוגרים אחרים בבית." },
   cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
   income: { title: "כמה כסף נכנס - וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
   fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות - שכירות, חשבונות, מנויים ועוד." },
@@ -28,6 +32,7 @@ const STEP_COMPONENTS: Record<Exclude<StepKey, "done">, (props: StepProps) => Re
   welcome: WelcomeStep,
   profile: ProfileStep,
   separate: SeparateAccountsStep,
+  privateIncome: PrivateIncomeStep,
   cycle: CycleStep,
   income: IncomeStep,
   fixed: FixedStep,
@@ -37,6 +42,18 @@ const STEP_COMPONENTS: Record<Exclude<StepKey, "done">, (props: StepProps) => Re
 
 export default function OnboardingPage() {
   const wizard = useOnboardingWizard();
+  const [inviteCountry, setInviteCountry] = useState(DEFAULT_COUNTRY_ISO);
+  const [invitePhone, setInvitePhone] = useState("");
+  const [inviteStatus, setInviteStatus] = useState<string>();
+
+  const sendInvite = async () => {
+    const e164 = toE164(dialForIso(inviteCountry), invitePhone);
+    if (!e164 || !wizard.completedHouseholdId) { setInviteStatus("מספר הטלפון לא נראה תקין."); return; }
+    try {
+      await api.inviteMember(wizard.completedHouseholdId, { phone: e164, role: "adult_member" });
+      setInviteStatus("ההזמנה נשלחה בוואטסאפ.");
+    } catch { setInviteStatus("לא הצלחנו לשלוח את ההזמנה. אפשר לנסות שוב או להמשיך אחר כך."); }
+  };
 
   if (!wizard.ready) {
     return (
@@ -97,10 +114,14 @@ export default function OnboardingPage() {
           )}
           <div className="form" style={{ marginInline: "auto" }}>
             {separate && (
-              <Link className="button" href="/settings/members" style={{ textDecoration: "none" }}>
-                <UserPlus size={18} aria-hidden />
-                שליחת הזמנה
-              </Link>
+              <>
+                <label className="auth-field-label" htmlFor="onboarding-invite-phone">מספר הטלפון של המבוגר/ת הנוסף/ת</label>
+                <PhoneInput id="onboarding-invite-phone" countryIso={inviteCountry} onCountryChange={setInviteCountry} phone={invitePhone} onPhoneChange={setInvitePhone} />
+                <button className="button" type="button" data-action="send-final-invite" onClick={() => void sendInvite()}>
+                  <UserPlus size={18} aria-hidden />שליחת הזמנה
+                </button>
+                {inviteStatus && <p className="status" role="status">{inviteStatus}</p>}
+              </>
             )}
             <WhatsAppCtaButton />
             {!separate && wizard.householdType === "family" && (
@@ -109,7 +130,7 @@ export default function OnboardingPage() {
                 הוסיפו בני משפחה
               </Link>
             )}
-            <Link className="button secondary" href="/dashboard" style={{ textDecoration: "none" }}>
+            <Link className="button secondary" data-action="invite-later" href="/dashboard" style={{ textDecoration: "none" }}>
               <Home size={18} aria-hidden />
               {separate ? "אחר כך" : "לדשבורד"}
             </Link>
@@ -124,6 +145,8 @@ export default function OnboardingPage() {
   const meta =
     wizard.editMode && wizard.stepKey === "welcome"
       ? { title: "עדכון פרטי משק הבית", sub: "כל הפרטים כבר מלאים - אפשר לעבור ולעדכן מה שצריך." }
+      : wizard.stepKey === "income" && wizard.state.separateAccounts
+        ? { title: "התקציב המשותף לניהול", sub: "הסכום המשותף שתרצו לנהל בבית, בלי לערב את ההכנסה הפרטית שלכם." }
       : STEP_META[wizard.stepKey];
   const StepComponent = STEP_COMPONENTS[wizard.stepKey as Exclude<StepKey, "done">];
   const totals = computeTotals(wizard.state);
@@ -162,13 +185,13 @@ export default function OnboardingPage() {
           {wizard.notice && <div className="status" role="status" style={{ marginBottom: 10, display: "inline-block" }}>{wizard.notice}</div>}
           <div className={`${styles.footerRow} a11y-sticky-cta`}>
             {wizard.stepIndex > 1 ? (
-              <button type="button" className="button secondary" onClick={wizard.back} disabled={wizard.working}>חזרה</button>
+              <button type="button" className="button secondary" data-action="onboarding-back" onClick={wizard.back} disabled={wizard.working}>חזרה</button>
             ) : <span />}
             <span className={styles.grow} />
             {wizard.canSkip && (
-              <button type="button" className={styles.skip} onClick={wizard.skip} disabled={wizard.working}>דלגו</button>
+              <button type="button" className={styles.skip} data-action="onboarding-skip" onClick={wizard.skip} disabled={wizard.working}>דלגו</button>
             )}
-            <button type="button" className="button" onClick={wizard.next} disabled={wizard.working}>
+            <button type="button" className="button" data-action="onboarding-next" onClick={wizard.next} disabled={wizard.working}>
               {wizard.working ? "שומר…" : wizard.primaryLabel}
             </button>
           </div>

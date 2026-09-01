@@ -2,326 +2,174 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { SplitControl } from "../../../components/SplitControl";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { SeparateAccountsArrangement } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
 import { LoadState } from "../../../components/LoadState";
 import { heDate } from "../../../lib/format";
 import { isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../../lib/sepacct";
-import { sepacct, type SepacctConfigDto } from "../../../lib/sepacctApi";
+import { sepacct } from "../../../lib/sepacctApi";
+import { separateAccountsStateTitle } from "../../../lib/sepacctView";
 import { useViewer } from "../../../lib/useViewer";
-import { isHouseholdManager } from "../../../lib/settingsView";
 
 const TITLE = "הפרדת כספים";
+const pct = (bp: number) => `${(bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+const name = (value: string) => value.trim() || "חבר/ה בבית";
 
-/** §1 — `displayName` may be "". */
-/** `6000` → `60%`, trailing zeros trimmed: a whole percentage printed to two decimals reads as a
- *  measurement rather than a number somebody typed. */
-const percentText = (bp: number) => `${(bp / 100).toFixed(2).replace(/.?0+$/, "")}%`;
-const nameOf = (displayName: string) => displayName.trim() || "חבר/ה";
+function sharesOf(arrangement: SeparateAccountsArrangement) {
+  return "shares" in arrangement ? arrangement.shares : [];
+}
 
-/**
- * ── BRIEF 2c + 2d — WHAT DECLARING ACTUALLY DOES, AND NOTHING ELSE. ──────────────────────────
- *
- * The wizard no longer declares, so THIS is the only door into the arrangement, and until now it
- * opened on a bare checkbox: a person could tick it without being told a single consequence, and
- * the one consequence it did state afterwards was false.
- *
- * ONE list, rendered TWICE — before the box is ticked, so nobody agrees to something they were not
- * told, and again after the household has declared, so the surface they declared on shows what
- * changed. The second rendering is the whole of 2c: the arrangement's only outward evidence is the
- * weekly summary, that summary is a SUNDAY fan-out, and a family that declared on a Monday would
- * otherwise watch a product that behaves identically for six days after being told it changed.
- *
- * 🔴 EVERY CLAUSE MEASURED AGAINST THE DEPLOYED BACKEND (`41680ca`), NOT AGAINST THE SPEC:
- *   1. `stripSharedIncomeUnderSeparateAccounts` keys on the raw arrangement and deletes
- *      `budget.income` from EVERY read; `carryOwnIncome` carries the STORED key back verbatim on a
- *      refused write, so "not deleted, only hidden" is true and reversible — turning the
- *      arrangement off un-strips the same figure.
- *   2. `F-3`, and it is still the sharpest thing on this screen. `profile.defaultSplit` is written
- *      by this route and read by exactly ONE surface — the arrangement DTO this page renders.
- *      `flags.ts` says it plainly: *"Stage 1 stores them and nothing reads them."* The line this
- *      list replaced promised *"new shared expenses will be split according to the ratio below"*,
- *      which is the same false promise `F-3` already took out of the WhatsApp notice once.
- *   3. `apps/workers/src/index.ts` — `if (now.getUTCDay() !== 0) return;`, 06:00–10:00 UTC. Sunday,
- *      and no other day. So the notice's one true promise is up to six days from being visible.
- *   4. The fan-out at `household-routes.ts` skips `peer.userId === auth.user.id`: **the actor is
- *      excluded.** "Both sides are notified" — which the onboarding step used to say — is false for
- *      the one person reading this screen.
- */
-const WHAT_CHANGES: ReadonlyArray<React.ReactNode> = [
-  "ההכנסה המשותפת מפסיקה להופיע במסכי הבית. הסכום שכבר נשמר אינו נמחק, הוא רק מפסיק להיות מוצג, וחוזר אם מכבים את ההסדר.",
-  "מכאן כל אחד שומר את ההכנסה שלו בעמוד ״ההכנסה שלי״, והיא נראית רק לו.",
-  // `R-1` — the second half named the expense page, and was withheld for one run because no
-  // reader could reach it. The door on /dashboard/spending exists now, so it is restored: the
-  // sentence is true AND followable. The first half is unchanged and still the load-bearing one.
-  // `R-1` F1 — THE DESTINATION WAS NAMED IN QUOTE MARKS AND LINKED NOWHERE. The rendered `<main>`
-  // of this screen carried exactly three hrefs, none of them here, and no sidebar item is called
-  // "הוצאות החודש": the only way there is a ghost button labelled `פירוט` on a CATEGORIES card,
-  // three screens away. Naming a place a reader cannot find is the same defect as naming an action
-  // they cannot take - the one that stopped the previous run - one degree weaker.
-  // 🔴 `CC_UX_BUILD` ITEM 1 FLIPPED THIS SENTENCE'S TRUTH VALUE, WHICH IS `F-3` WITH THE SIGN
-  // REVERSED. It read *"שום הוצאה לא מתחלקת מעצמה"* — true for sixteen runs, and the exact
-  // defect the run was called to fix. A shared expense recorded by this household now divides at
-  // the ratio below, in the same write. Saying otherwise would send a reader off to split by hand
-  // work the product has already done.
-  <>הוצאות משותפות חדשות מתחלקות מעצמן לפי היחס שלמטה. אפשר לשנות כל חלוקה בנפרד מתוך <Link href="/dashboard/spending">הוצאות החודש</Link>.</>,
-  // `A64`, CORRECTED. The amendment asked for *"הוצאות של הילדים מתחלקות ביניכם באותו יחס"*,
-  // and `sepacct.ts`'s `holdsPosition` docstring had already ruled the opposite: a child's approved
-  // household expense counts in the HOUSEHOLD total *"and in NOBODY's position"*. Dividing it would
-  // make two debtors with no creditor, because the child is the payer and holds no position.
-  "הוצאה שילד רושם נכנסת לסך ההוצאות של הבית ואינה מתחלקת ביניכם. ילדים אינם צד בחלוקה.",
-  "הסיכום השבועי שמגיע בוואטסאפ יציג רק את ההוצאות שלכם. הוא נשלח בימי ראשון, אז זה ייראה בפעם הבאה שהוא מגיע.",
-  "בן או בת הזוג יקבלו הודעה בוואטסאפ על ההפעלה ועל הכיבוי. אתם לא מקבלים אותה, כי אתם עושים את השינוי כאן."
-];
+function StateSummary({ arrangement }: { arrangement: SeparateAccountsArrangement }) {
+  switch (arrangement.state) {
+    case "absent": return null;
+    case "joint": return <p>הכסף בבית מנוהל יחד.</p>;
+    case "pending": return <><p>היחס נשמר ומחכה למבוגר/ת נוסף/ת בבית.</p><p className="muted">נשמר ב־<bdi dir="ltr">{heDate(arrangement.configuredAt)}</bdi></p></>;
+    case "live": return <><p>הוצאות משותפות חדשות מתחלקות לפי היחס שמופיע כאן.</p><p className="muted">פעיל מ־<bdi dir="ltr">{heDate(arrangement.liveSince)}</bdi></p></>;
+    case "stalled": return <><p>החלוקה האוטומטית נעצרה בעקבות שינוי בהרכב המבוגרים בבית. הוצאות חדשות נשמרות בלי חלוקה עד לתיקון היחס.</p><p className="muted">נעצר ב־<bdi dir="ltr">{heDate(arrangement.stalledAt)}</bdi></p><p className="muted">{arrangement.repairerNames.length > 0 ? `מי שיכולים לתקן את היחס: ${arrangement.repairerNames.join(" ו")}.` : "מנהלי הבית יכולים לתקן את היחס."}</p></>;
+    case "inactive": return <><p>החלוקה האוטומטית כבויה. ההיסטוריה וההכנסה הפרטית שלך נשארו זמינות.</p><p className="muted">כבוי מ־<bdi dir="ltr">{heDate(arrangement.disabledAt)}</bdi></p></>;
+    default: {
+      const exhaustive: never = arrangement;
+      return exhaustive;
+    }
+  }
+}
 
-function WhatChanges({ heading, lead }: { heading: string; lead: string }) {
+function RatioEditor({ arrangement, saving, onSave }: {
+  arrangement: SeparateAccountsArrangement;
+  saving: boolean;
+  onSave: (shares: Array<{ userId: string; shareBp: number }>) => Promise<void>;
+}) {
+  const adults = arrangement.activeAdults;
+  const initial = useMemo(() => {
+    const saved = new Map(sharesOf(arrangement).map((share) => [share.userId, share.shareBp]));
+    const equal = adults.length ? Math.floor(10000 / adults.length) : 0;
+    return Object.fromEntries(adults.map((adult, index) => [adult.userId, saved.get(adult.userId) ?? (index === adults.length - 1 ? 10000 - equal * index : equal)]));
+  }, [arrangement, adults]);
+  const [values, setValues] = useState<Record<string, number>>(initial);
+  const [remainderId, setRemainderId] = useState(adults.at(-1)?.userId ?? "");
+
+  useEffect(() => { setValues(initial); setRemainderId(adults.at(-1)?.userId ?? ""); }, [initial, adults]);
+  if (adults.length === 0) return null;
+
+  const setShare = (userId: string, percentage: number) => {
+    const requestedBp = Math.round(Math.max(0, Math.min(100, percentage)) * 100);
+    const fixedUsed = adults.reduce((sum, adult) =>
+      adult.userId === remainderId || adult.userId === userId ? sum : sum + (values[adult.userId] ?? 0), 0);
+    const shareBp = Math.min(requestedBp, Math.max(0, 10000 - fixedUsed));
+    const next = { ...values, [userId]: shareBp };
+    if (adults.length > 1 && userId !== remainderId) {
+      const used = adults.reduce((sum, adult) => adult.userId === remainderId ? sum : sum + (next[adult.userId] ?? 0), 0);
+      next[remainderId] = Math.max(0, 10000 - used);
+    }
+    setValues(next);
+  };
+  const total = adults.reduce((sum, adult) => sum + (values[adult.userId] ?? 0), 0);
+  const pendingSingle = arrangement.state === "pending" && adults.length === 1;
+  const valid = (pendingSingle ? total >= 0 && total <= 10000 : total === 10000)
+    && adults.every((adult) => Number.isInteger(values[adult.userId]));
+
   return (
-    <section className="panel" style={{ maxWidth: 680, marginTop: "var(--sp-4)" }}>
-      <h2>{heading}</h2>
-      <p className="muted">{lead}</p>
-      <ul style={{ margin: 0, paddingInlineStart: "1.2em", display: "grid", gap: "var(--sp-2)" }}>
-        {WHAT_CHANGES.map((line, i) => <li key={i}>{line}</li>)}
-      </ul>
+    <section style={{ display: "grid", gap: 12, marginTop: 18 }} aria-label="יחס החלוקה">
+      {adults.length >= 3 && (
+        <label>השדה שמשלים ל־100%
+          <select className="select" value={remainderId} data-action="choose-remainder" onChange={(event) => {
+            const nextId = event.target.value;
+            setRemainderId(nextId);
+            const used = adults.reduce((sum, adult) => adult.userId === nextId ? sum : sum + (values[adult.userId] ?? 0), 0);
+            setValues((current) => ({ ...current, [nextId]: Math.max(0, 10000 - used) }));
+          }}>
+            {adults.map((adult) => <option key={adult.userId} value={adult.userId}>{name(adult.displayName)}</option>)}
+          </select>
+        </label>
+      )}
+      {adults.map((adult) => (
+        <label key={adult.userId} style={{ display: "grid", gridTemplateColumns: "1fr 110px", alignItems: "center", gap: 12 }}>
+          <span>{name(adult.displayName)}</span>
+          <span className="row" style={{ gap: 6 }}>
+            <input className="input mono" type="number" min={0} max={100} step={1}
+              data-action={`set-share-${adult.userId}`} disabled={adults.length > 1 && adult.userId === remainderId}
+              value={(values[adult.userId] ?? 0) / 100}
+              onChange={(event) => setShare(adult.userId, Number(event.target.value))} />
+            <span aria-hidden>%</span>
+          </span>
+        </label>
+      ))}
+      {pendingSingle && <p className="muted">החלק שמחכה למבוגר/ת שיצטרף/תצטרף: <bdi dir="ltr">{pct(10000 - total)}</bdi></p>}
+      <p className={valid ? "muted" : "status warn"} aria-live="polite">סה״כ מוגדר: <bdi dir="ltr">{pct(pendingSingle ? 10000 : total)}</bdi></p>
+      <button className="button" type="button" data-action="save-ratio" disabled={!valid || saving}
+        onClick={() => void onSave(adults.map((adult) => ({ userId: adult.userId, shareBp: values[adult.userId] ?? 0 })))}>
+        {saving ? "שומר…" : arrangement.state === "stalled" ? "תיקון והפעלת החלוקה" : arrangement.state === "inactive" ? "הפעלת החלוקה מחדש" : "שמירת היחס"}
+      </button>
     </section>
   );
 }
 
 export default function SeparateAccountsSettingsPage() {
-  // Dormant until armed: the route is registered and renders as absent, exactly as the API does.
   if (!SEPACCT_UI_ENABLED) notFound();
-
   const viewer = useViewer();
-  const [data, setData] = useState<SepacctConfigDto>();
+  const [arrangement, setArrangement] = useState<SeparateAccountsArrangement>();
   const [error, setError] = useState<string>();
-  const [absent, setAbsent] = useState(false);
-  // §1 — a non-manager is 403 `auth.forbidden` here, which is NOT the dormant 404 and must not be
-  // rendered as one: the feature exists, this reader is simply not the one who configures it.
-  const [forbidden, setForbidden] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [missing, setMissing] = useState(false);
 
   const fail = useCallback((cause: unknown) => {
-    if (isAbsent(cause)) setAbsent(true);
-    else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setForbidden(true);
-    else setError("לא הצלחנו לטעון את ההגדרה. נסו שוב.");
+    if (isAbsent(cause)) setMissing(true);
+    else setError(cause instanceof SepacctError && cause.code === "auth.forbidden" ? "אין לך הרשאה לבצע את השינוי הזה." : "לא הצלחנו לטעון את ההסדר. נסו שוב.");
   }, []);
 
   useEffect(() => {
     if (viewer.status !== "ready") return;
-    // §1 — the GET is keyed `current`, not by id, so it needs no household from the viewer. The
-    // PUT below does, and a user with no household has no arrangement to configure.
-    if (!viewer.householdId) {
-      setAbsent(true);
-      return;
-    }
-    void sepacct.getConfig().then(setData).catch(fail);
+    if (!viewer.householdId) { setMissing(true); return; }
+    void sepacct.getConfig().then(setArrangement).catch(fail);
   }, [viewer.status, viewer.householdId, fail]);
 
-  // §3 — a 404 is "not turned on", never a failure. No error panel, no empty state, no retry.
-  if (absent) notFound();
-  if (forbidden) {
-    return (
-      <AppShell>
-        <h1 className="page-title">{TITLE}</h1>
-        <section className="panel" style={{ maxWidth: 680 }}>
-          <h2>ההגדרה בידי מנהלי הבית</h2>
-          <p className="muted">רק מנהלי הבית קובעים את ההסדר ואת יחס החלוקה. אפשר לראות את מה שנרשם עליכם ואת ההכנסה שלכם.</p>
-          <div className="row">
-            <Link className="button secondary" href="/my-record">מה שנרשם</Link>
-            <Link className="button secondary" href="/my-income">ההכנסה שלי</Link>
-          </div>
-        </section>
-      </AppShell>
-    );
-  }
-  if (viewer.status === "error") {
-    return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות אתכם. נסו לרענן." /></AppShell>;
-  }
-  if (error) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
-  if (!data) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState /></AppShell>;
+  if (missing || arrangement?.state === "absent") notFound();
+  if (viewer.status === "error") return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error="לא הצלחנו לזהות אתכם." /></AppShell>;
+  if (!arrangement) return <AppShell><h1 className="page-title">{TITLE}</h1><LoadState error={error} /></AppShell>;
 
-  // §1 — `members` includes children and `defaultSplit` may not name one, so the ratio is offered
-  // between adults only. Picking members[0]/members[1] blind could hand a child a share.
-  const adults = data.members.filter((member) => member.role !== "limited_member");
-  const first = adults[0];
-  const second = adults[1];
-  const pair = Boolean(first && second);
-  const firstShareBp = (first && data.defaultSplit.find((share) => share.userId === first.userId)?.shareBp) ?? 5000;
-  const declaredAt = heDate(viewer.separateAccountsDeclaredAt);
-
-  const change = (shareBp: number) =>
-    setData({
-      ...data,
-      defaultSplit: first && second ? [{ userId: first.userId, shareBp }, { userId: second.userId, shareBp: 10000 - shareBp }] : data.defaultSplit
-    });
-
-  // The OFF direction is the SAME route, the same form and the same button as ON: the wire takes
-  // `separateAccounts: false` explicitly, and §1 accepts a stale or empty split alongside it. An
-  // arrangement one partner can start and neither can stop is the asymmetry this screen must not
-  // have, so switching it off stays reachable even when the second adult is gone and ON is not.
-  const setEnabled = (separateAccounts: boolean) => setData({ ...data, separateAccounts });
-
-  const blocked = data.separateAccounts && !pair;
-  // ── `CC_UX_BUILD` item 2 — **A RATIO BETWEEN TWO OF THREE ADULTS APPLIES TO NOTHING.** ────────
-  //
-  // `defaultSplit` must name EVERY active adult, or `resolveHouseholdSplit` answers `extra_adults`
-  // and auto-split refuses rather than inventing a percentage for the person nobody named. The
-  // control below picks `adults[0]` and `adults[1]`, so on a three-adult household it happily
-  // offers a ratio the backend will then decline to apply, silently and for ever. That is the
-  // shape this run exists to remove — a control that looks like a decision and is not — so the
-  // screen says so instead of pretending.
-  const tooManyAdults = adults.length > 2;
-  // 2c — "מה השתנה" is a claim about the STORED arrangement, so it needs the server's own stamp and
-  // not the checkbox: an unsaved tick would otherwise announce a change that has not happened.
-  const declared = data.separateAccounts && Boolean(declaredAt);
-
-  const save = async () => {
-    if (saving || blocked) return;
-    setSaving(true);
-    setError(undefined);
-    try {
-      setData(await sepacct.saveConfig(viewer.householdId!, { separateAccounts: data.separateAccounts, defaultSplit: data.defaultSplit }));
-      // The server mints the declaration instant on the way through, so re-read /me and show the
-      // stored date rather than a guess.
-      viewer.retry();
-    } catch (cause) {
-      if (isAbsent(cause)) setAbsent(true);
-      else if (cause instanceof SepacctError && cause.code === "split.not_a_member") setError("אחד המשתתפים אינו חבר בוגר פעיל בבית. רעננו את העמוד ונסו שוב.");
-      else if (cause instanceof SepacctError && cause.code === "split.invalid") setError("יחס החלוקה אינו תקין. שני החלקים יחד חייבים להסתכם ב-100%.");
-      else if (cause instanceof SepacctError && cause.code === "auth.forbidden") setForbidden(true);
-      else setError("לא הצלחנו לשמור את ההגדרה. נסו שוב.");
-    } finally {
-      setSaving(false);
-    }
+  const write = async (next: { separateAccounts: boolean; defaultSplit: Array<{ userId: string; shareBp: number }> }) => {
+    if (!viewer.householdId || saving) return;
+    setSaving(true); setError(undefined);
+    try { setArrangement(await sepacct.saveConfig(viewer.householdId, next)); }
+    catch (cause) { fail(cause); }
+    finally { setSaving(false); }
   };
 
-  // ── `R-2` BLOCKING 3 — **A DOOR THAT OPENS ONTO A REFUSAL.** ─────────────────────────────────
-  //
-  // The GET is open to every active adult (§A49) and the PUT is manager-only, so this page used to
-  // render a plain `adult_member` a live checkbox, a working ratio control and a save button — and
-  // tell them only on SAVE that they were never allowed, replacing the page and discarding the edit.
-  // The join screen's dissent button, *"החלוקה נראית לי לא נכונה"*, pointed them straight at it.
-  //
-  // The role is known before the first paint (`useViewer` already resolves it), so the refusal is
-  // made honest at render: the reader sees the arrangement, the ratio and their two own screens, and
-  // is told who can change it. Same information, no promise the route will not keep.
-  const canEdit = isHouseholdManager(viewer.caps);
-  if (!canEdit) {
-    const pairNames = first && second ? `${nameOf(first.displayName)} ${percentText(firstShareBp)} · ${nameOf(second.displayName)} ${percentText(10000 - firstShareBp)}` : null;
-    return (
-      <AppShell>
-        <h1 className="page-title">{TITLE}</h1>
-        <section className="panel" style={{ maxWidth: 680 }}>
-          <h2>{declared ? "ההסדר של הבית" : "אין כרגע הסדר של הפרדת כספים"}</h2>
-          {declared ? (
-            <>
-              <p>בבית הזה כל אחד רואה את החלק שלו בהוצאה משותפת, וההכנסה של כל אחד נשארת פרטית ונראית רק לו.</p>
-              {declaredAt && <p className="muted">{"ההסדר נרשם ב־"}<bdi dir="ltr">{declaredAt}</bdi>.</p>}
-              {pairNames && <p>{"הוצאות משותפות חדשות מתחלקות כך: "}<bdi dir="ltr">{pairNames}</bdi>.</p>}
-              <p className="muted">הוצאה שילד רושם נכנסת לסך ההוצאות של הבית ואינה מתחלקת ביניכם.</p>
-            </>
-          ) : (
-            <p>ההוצאות המשותפות אינן מתחלקות כרגע בין חברי הבית.</p>
-          )}
-          {/* `R-2` FINDING 5 — a third adult stops the splitting SILENTLY, and until this the only
-              place that said so was a manager-only panel. The partner is the person most likely to
-              notice their share quietly stop appearing, so they are told here too. */}
-          {declared && tooManyAdults && (
-            <p className="status warn" role="alert">
-              בבית הזה יש יותר משני חברים בוגרים, ולכן הוצאות חדשות לא מתחלקות מעצמן כרגע. מנהלי הבית יכולים לקבוע את היחס מחדש.
-            </p>
-          )}
-          <p className="status">את ההסדר ואת יחס החלוקה קובעים מנהלי הבית. אם היחס לא נראה לכם נכון, דברו איתם - הם יכולים לשנות אותו כאן.</p>
-          <div className="row" style={{ marginTop: "var(--sp-4)" }}>
-            <Link className="button" href="/my-record">מה נרשם עליי</Link>
-            <Link className="button secondary" href="/my-income">ההכנסה שלי</Link>
-          </div>
-        </section>
-      </AppShell>
-    );
-  }
+  const canEdit = arrangement.capabilities.canEditRatio
+    && !(arrangement.state === "stalled" && arrangement.reason === "single_adult");
+  const canDisable = arrangement.capabilities.canDisable;
 
   return (
     <AppShell>
       <h1 className="page-title">{TITLE}</h1>
-      <section className="panel" style={{ maxWidth: 680 }}>
-        <h2>ההסדר של הבית</h2>
-        {/* 2d — the entry point. This is the ONLY place a household can start, so the question is
-            answered here before the control is offered, not after it is used. */}
-        <p>בהסדר הזה כל אחד רואה את החלק שלו בהוצאה משותפת, וההכנסה של כל אחד נשארת פרטית.</p>
-        <p>
-          <label>
-            <input type="checkbox" checked={data.separateAccounts} onChange={(event) => setEnabled(event.target.checked)} />
-            {" אנחנו מנהלים חשבונות נפרדים"}
-          </label>
-        </p>
-        {declaredAt && <p className="muted">{"ההסדר נרשם ב־"}<bdi dir="ltr">{declaredAt}</bdi>.</p>}
-        {/* 🔴 `F-3` — the line that stood here said "new shared expenses will be split according to
-            the ratio below". Nothing in this product does that, and the ratio is stored and read by
-            nobody. The consequences now live in one measured list, in BOTH states. */}
-        {!data.separateAccounts && (
-          <p className="status">כיבוי עוצר את היכולת לקבוע חלוקה על הוצאות חדשות. הוצאות שכבר חולקו נשארות כפי שנרשמו, וגם התאריך שבו ההסדר נרשם נשמר. אפשר להפעיל שוב בכל עת.</p>
+      <section className="panel" style={{ maxWidth: 680 }} data-state={arrangement.state}>
+        <h2>{separateAccountsStateTitle(arrangement.state)}</h2>
+        <StateSummary arrangement={arrangement} />
+        {"shares" in arrangement && arrangement.shares.length > 0 && (
+          <ul>
+            {arrangement.shares.map((share) => <li key={share.userId}>{name(share.displayName)} - <bdi dir="ltr">{pct(share.shareBp)}</bdi></li>)}
+            {arrangement.state === "pending" && arrangement.activeAdults.length === 1 && (
+              <li>המבוגר/ת שיצטרף/תצטרף - <bdi dir="ltr">{pct(10000 - arrangement.shares[0]!.shareBp)}</bdi></li>
+            )}
+          </ul>
         )}
-      </section>
-
-      {/* 2c — after declaring, the surface they declared on says what changed. Before declaring,
-          the same list is what they are agreeing to. The heading is the only difference. */}
-      {declared
-        ? <WhatChanges heading="מה השתנה" lead="ההסדר פעיל. אלה הדברים שהשתנו בפועל, ומתי כל אחד מהם נראה." />
-        : <WhatChanges heading="מה קורה כשמפעילים" lead="כדאי לקרוא לפני שמסמנים. אלה כל השינויים, ואין אחרים." />}
-
-      <section className="panel" style={{ maxWidth: 680, marginTop: "var(--sp-4)" }}>
-        <h2>איך מחלקים הוצאות משותפות</h2>
-        {/* `F-3` again: this ratio is a DEFAULT that no allocator reads. Saying it "applies to new
-            expenses" is the same promise, one panel down, and it was equally untrue. */}
-        {/* `R-1` F3 — "ברירת המחדל של הבית" IS WHAT THE WORD MEANS IN HEBREW UI: the value that
-            appears unless you change it. It is not that. `defaultSplit` is written by this route and
-            read only to echo back into this screen's own GET (`flags.ts`: *"Stage 1 stores them and
-            nothing reads them"*), and the expense page deliberately seeds at 50/50 because the
-            arrangement GET is manager-only and the payer need not be a manager. So a couple could
-            set 70/30 here, open an expense, and find the slider at half - `ואפשר לבחור יחס אחר`
-            made it worse, because *אחר* implies one was already there.
-            Seeding from it would work for one role and 403 for the other, so the copy tells the
-            truth instead and names the number they will actually see. */}
-        <p className="muted">היחס הזה מוחל על כל הוצאה משותפת חדשה, ברגע שהיא נרשמת. שינוי כאן משפיע קדימה בלבד. הוצאות שכבר חולקו נשארות כפי שנרשמו.</p>
-        {first && second
-          ? <SplitControl
-              first={{ userId: first.userId, displayName: nameOf(first.displayName) }}
-              second={{ userId: second.userId, displayName: nameOf(second.displayName) }}
-              firstShareBp={firstShareBp}
-              onChange={change}
-              disabled={!data.separateAccounts}
-              scope="household"
-            />
-          : <p>יחס החלוקה נקבע כאן אחרי ששני חברים בוגרים מצטרפים. את ההסדר עצמו אפשר לכבות גם עכשיו.</p>}
-        {blocked && <p className="status" role="alert">כדי להפעיל את ההסדר דרושים שני חברים בוגרים. לכבות אפשר תמיד.</p>}
-        {tooManyAdults && (
-          <p className="status warn" role="alert">
-            בבית הזה יש יותר משני חברים בוגרים, והיחס כאן מחלק בין שניים בלבד. כל עוד זה המצב, הוצאות חדשות לא מתחלקות מעצמן, ואפשר לקבוע חלוקה על כל הוצאה בנפרד.
-          </p>
+        {arrangement.state === "live" && <p className="muted">הוצאה שילד רושם נכנסת לסך הוצאות הבית ואינה מתחלקת ביניכם. ילדים אינם צד בחלוקה.</p>}
+        {arrangement.state === "pending" && arrangement.capabilities.canInviteAdult && <Link className="button secondary" data-action="invite-adult" href="/settings/members">שליחת הזמנה</Link>}
+        {arrangement.state === "stalled" && arrangement.reason === "single_adult" && arrangement.capabilities.canInviteAdult && <Link className="button secondary" data-action="invite-adult" href="/settings/members">הזמנת מבוגר/ת</Link>}
+        {arrangement.state === "joint" && arrangement.capabilities.canChangeMode && (
+          <button className="button" type="button" data-action="choose-separate" disabled={saving} onClick={() => {
+            const adults = arrangement.activeAdults;
+            const equal = adults.length ? Math.floor(10000 / adults.length) : 0;
+            const shares = adults.map((adult, index) => ({ userId: adult.userId, shareBp: index === adults.length - 1 ? 10000 - equal * index : equal }));
+            void write({ separateAccounts: true, defaultSplit: shares });
+          }}>מעבר לניהול בנפרד</button>
         )}
-        <div className="row" style={{ marginTop: "var(--sp-4)" }}>
-          {/* Never `disabled` on a control that its own activation disables (2.4.3): aria-busy plus
-              the re-entrancy guard above, so focus is never dropped to <body> mid-save. */}
-          <button type="button" className="button" onClick={() => void save()} aria-busy={saving} aria-disabled={blocked || undefined}>
-            {saving ? "שומרים..." : "שמירה"}
-          </button>
-          <Link className="button secondary" href="/my-record">מה שנרשם</Link>
-          <Link className="button secondary" href="/my-income">ההכנסה שלי</Link>
-        </div>
+        {canEdit && <RatioEditor arrangement={arrangement} saving={saving} onSave={(shares) => write({ separateAccounts: true, defaultSplit: shares })} />}
+        {canDisable && <button className="button secondary" type="button" data-action="disable-arrangement" disabled={saving} onClick={() => void write({ separateAccounts: false, defaultSplit: [] })}>כיבוי החלוקה</button>}
+        {error && <p className="status error" role="alert">{error}</p>}
       </section>
-
-      {/* 🔴 `R-1` — A PANEL HEADED "כך נשאל בוואטסאפ" STOOD HERE, QUOTING TWO QUESTIONS THE BOT
-          ASKS. IT ASKS NEITHER. `grep -rn "מפרידים כספים\|הפרדת כספים" apps/api/src` returns
-          nothing, and the complete set of sepacct message builders in `messages.ts` is the two
-          notices, the components line, the conclusion line, the balance reply and the
-          nothing-recorded line. There is no ask, and there is no plan in this release to add one.
-
-          It cost twice over: a reader could leave this screen believing the decision would come
-          back to them in WhatsApp - so they would wait for a message that never arrives - and its
-          second line re-promised the very thing `F-3` had already been taken out of the notice
-          for, that a ratio governs how expenses divide. Deleted rather than reworded: there is no
-          true version of a panel about a conversation that does not happen. */}
+      {arrangement.capabilities.canManageOwnIncome && <nav className="row" aria-label="המידע שלי" style={{ marginTop: 16 }}><Link data-action="open-own-income" href="/my-income">ההכנסה שלי</Link><Link data-action="open-my-record" href="/my-record">מה נרשם עליי</Link></nav>}
     </AppShell>
   );
 }

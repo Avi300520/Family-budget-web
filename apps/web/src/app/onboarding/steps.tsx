@@ -72,10 +72,10 @@ export function ProfileStep({ state, set }: StepProps) {
       </Field>
 
       <Field label="השם שלך">
-        <TextInput value={state.displayName} onChange={(v) => set({ displayName: v })} placeholder="השם שלך" autoComplete="given-name" ariaLabel="השם שלך" />
+        <TextInput value={state.displayName} onChange={(v) => set({ displayName: v })} placeholder="השם שלך" autoComplete="given-name" ariaLabel="השם שלך" dataAction="set-display-name" />
       </Field>
       <Field label="שם הבית">
-        <TextInput value={state.householdName} onChange={(v) => set({ householdName: v })} placeholder="למשל: משפחת לוי" ariaLabel="שם הבית" />
+        <TextInput value={state.householdName} onChange={(v) => set({ householdName: v })} placeholder="למשל: משפחת לוי" ariaLabel="שם הבית" dataAction="set-household-name" />
       </Field>
       {precise && (
         <Field label="עיר / אזור" hint="אופציונלי - עוזר להשוואות בעתיד">
@@ -145,7 +145,7 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <OptionCards
         cols={1}
-        value={separate ? "apart" : "together"}
+        value={separate === null ? null : separate ? "apart" : "together"}
         onChange={(id) => set({ separateAccounts: id === "apart" })}
         options={[
           { id: "together", emoji: "🤝", title: "יחד", sub: "קופה אחת. רואים את אותם מספרים." },
@@ -178,18 +178,29 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
                 <div className="row" style={{ gap: 6, alignItems: "center" }}>
                   <input
                     id="sep-share" className="input mono" type="number" inputMode="decimal"
-                    min={1} max={99} step={1} dir="ltr" style={{ width: 96 }}
+                    min={0} max={100} step={1} dir="ltr" style={{ width: 96 }}
+                    data-action="set-own-share"
                     value={state.separateSharePct}
                     onChange={(e) => set({ separateSharePct: e.target.value === "" ? "" : Number(e.target.value) })}
                   />
                   <span aria-hidden>%</span>
                 </div>
               </Field>
-              <p className="muted" style={{ margin: 0 }}>
-                {"החלק של בן/בת הזוג: "}
-                <bdi className="mono" dir="ltr">{Math.max(0, Math.min(100, 100 - pct))}</bdi>
-                {"%"}
-              </p>
+              <Field label="החלק של בן/בת הזוג" htmlFor="sep-partner-share">
+                <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                  <input
+                    id="sep-partner-share" className="input mono" type="number" inputMode="decimal"
+                    min={0} max={100} step={1} dir="ltr" style={{ width: 96 }}
+                    data-action="set-partner-share"
+                    value={Math.max(0, Math.min(100, 100 - pct))}
+                    onChange={(event) => {
+                      const partner = Math.max(0, Math.min(100, Number(event.target.value)));
+                      set({ separateSharePct: 100 - partner });
+                    }}
+                  />
+                  <span aria-hidden>%</span>
+                </div>
+              </Field>
             </div>
           )}
           {/* ── `AMENDMENT_18` §A68 — **THE SCREEN THAT TAKES THE ANSWER NAMES WHAT HAPPENS NEXT.**
@@ -264,6 +275,24 @@ export function CycleStep({ state, set }: StepProps) {
 }
 
 // ── Income / managed budget ──────────────────────────────────────────────────────
+export function PrivateIncomeStep({ state, set, editMode }: StepProps) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {editMode ? (
+        <p className="status" style={{ display: "block" }}>
+          את ההכנסה הפרטית עורכים בעמוד ״ההכנסה שלי״, כדי שלא תישמר בטיוטת ההצטרפות.
+        </p>
+      ) : (
+        <Field label="ההכנסה שלך" hint="רשות. המספר פרטי ונראה רק לך.">
+          <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })}
+            placeholder="18,000" autoFocus ariaLabel="ההכנסה שלך" dataAction="set-private-income" />
+        </Field>
+      )}
+      <p className="muted" style={{ margin: 0 }}>אפשר להמשיך בלי למלא סכום, ולהוסיף או למחוק אותו אחר כך.</p>
+    </div>
+  );
+}
+
 export function IncomeStep({ state, set, editMode }: StepProps) {
   // ── SEPACCT `CC_UX_BUILD` item 4, spec screen B — **THE ROOT FIX FOR THE VANISHING INCOME.**
   //
@@ -286,28 +315,11 @@ export function IncomeStep({ state, set, editMode }: StepProps) {
   if (state.separateAccounts && !state.incomeRedacted) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        {/* ── 🔴 `R-3` — **A FIELD THAT CANNOT SAVE MUST NOT ASK.** ───────────────────────────────
-            The own-income write runs only on a FIRST run: in `?mode=edit` the household already
-            exists and `PUT …/my-income` is not called, so anything typed here would have gone to
-            plaintext `localStorage` and nowhere else — under a promise that it is private. That is
-            this program`s recurring "a control with no power" class, and the honest form of it is
-            to point at the surface that does have the power. */}
-        {editMode ? (
-          <p className="status" style={{ display: "block" }}>
-            {"את ההכנסה שלכם עורכים בעמוד הייעודי לכך, והיא נשמרת רק שם. מהמסך הזה עורכים את התקציב המשותף של הבית."}
-          </p>
-        ) : (
-        <Field label="ההכנסה שלך" hint="פרטית. בן/בת הזוג לא רואה את המספר הזה, וגם לא מנהלי הבית.">
-          <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })} placeholder="18,000" autoFocus ariaLabel="ההכנסה שלך" />
-        </Field>
-        )}
-        {/* The budget is the household's either way — the spec's own table. It is the one figure on
-            this screen that both partners see, and it is not derived from either income. */}
         <Field label="תקציב חודשי לניהול" hint="הסכום המשותף של הבית. את זה שניכם רואים.">
-          <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder="10,000" ariaLabel="תקציב חודשי לניהול" />
+          <MoneyInput size="lg" value={state.managedBudget} onChange={(v) => set({ managedBudget: v, managedTouched: true })} placeholder="10,000" ariaLabel="תקציב חודשי לניהול" dataAction="set-managed-budget" />
         </Field>
         <p className="muted" style={{ margin: 0 }}>
-          אפשר לדלג על ההכנסה. היא לא נדרשת לשום חישוב כאן, והיא נשמרת רק אצלכם.
+          ההכנסה הפרטית נשמרת בנפרד ואינה נדרשת לחישוב התקציב או יחס החלוקה.
         </p>
       </div>
     );
@@ -326,7 +338,7 @@ export function IncomeStep({ state, set, editMode }: StepProps) {
             The other two surfaces already say the stored amount survives and where their own now
             lives; this one said neither, which is exactly the "the app lost our data" reading. */}
         <p className="status" style={{ display: "block" }}>
-          בבית הזה החשבונות מנוהלים בנפרד, ולכן אין הכנסה משותפת לשמור כאן. הסכום שנשמר קודם לא נמחק - הוא רק מפסיק להיות מוצג, וחוזר אם ההסדר מכובה.
+          בבית הזה החשבונות מנוהלים בנפרד, ולכן אין הכנסה משותפת לשמור כאן. הסכום שנשמר קודם נשאר בהיסטוריית המעבר לקריאה בלבד, אינו חלק מהתקציב הנוכחי, וכיבוי ההסדר לא מחזיר אותו אוטומטית.
           {SEPACCT_UI_ENABLED && <> ההכנסה שלכם עצמכם נשמרת בעמוד ״ההכנסה שלי״ ונראית רק לכם.</>}
         </p>
         <Field label="תקציב חודשי לניהול" hint="הסכום המשותף שתרצו לנהל מדי חודש.">

@@ -139,6 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="nav-link"
               href={link.href}
               key={link.href}
+              data-action={`navigate-${link.href.replace(/^\//, "").replaceAll("/", "-") || "home"}`}
               aria-current={isActivePath(pathname, link.href) ? "page" : undefined}
             >
               <Icon size={18} aria-hidden />
@@ -186,6 +187,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           type="button"
           ref={burgerRef}
           className="topbar-btn"
+          data-action="open-navigation"
           aria-label="פתיחת תפריט"
           aria-expanded={drawerOpen}
           onClick={() => setDrawerOpen(true)}
@@ -221,6 +223,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {backLink && (
           <Link
             href={backLink.href}
+            data-action="navigate-back"
             style={{
               display: "inline-flex",
               alignItems: "center",

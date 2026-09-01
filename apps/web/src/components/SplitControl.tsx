@@ -49,7 +49,7 @@ export function SplitControl({
       <legend className={styles.legend}>{scope === "household" ? "חלוקת ההוצאות המשותפות" : "חלוקת ההוצאה"}</legend>
       <p className={styles.help}>
         {scope === "household"
-          ? "כך מתחלקות הוצאות משותפות חדשות בין שניכם."
+          ? "כך מתחלקות הוצאות משותפות חדשות בין המבוגרים המשתתפים."
           : "שינוי כאן משפיע על ההוצאה הזו בלבד."}
       </p>
 

@@ -186,11 +186,14 @@ test("draft: user-scoped save/load round-trips; expired + wrong-user are ignored
   };
   const s = createDefaultState();
   s.alerts = { ...s.alerts, weekly: true }; // non-sensitive structural progress — survives redaction
+  s.separateAccounts = true;
+  s.separateSharePct = 63;
   s.displayName = "אבי";                    // sensitive — must NOT round-trip (WP-DRAFT-PRIVACY)
   const now = 1_000_000;
   saveDraft("user-1", s, now);
   const loaded = loadDraft("user-1", now);
   assert.equal(loaded?.alerts.weekly, true); // structural draft restored
+  assert.equal(loaded?.separateSharePct, 63); // the saved ratio must not silently reset to 50/50
   assert.equal(loaded?.displayName, "");     // name redacted, never persisted
   // different user → null
   assert.equal(loadDraft("user-2", now), null);
@@ -219,6 +222,7 @@ test("coerceDraftState repairs a corrupt/stale draft onto defaults; the result n
   assert.equal(safe!.alerts.cat80, true);
   assert.equal(safe!.budgetMode, "income");
   assert.equal(safe!.income, "");
+  assert.equal(safe!.separateSharePct, 50);
   assert.deepEqual(safe!.kidAges, ["7-12"]);
   assert.doesNotThrow(() => computeTotals(safe!)); // the pre-fix crash site
 });
@@ -523,18 +527,20 @@ test("SEPACCT A60: the wizard can never change the arrangement, in EITHER direct
 // ── `CC_UX_BUILD` item 4 — the wizard asks, and the answer becomes a ratio the backend can store ──
 
 test("CC_UX item 4: a יחיד/ה household is never asked how it divides money with nobody", () => {
-  const single = { householdType: "single" as const };
-  const couple = { householdType: "couple" as const };
+  const single = { householdType: "single" as const, separateAccounts: false };
+  const couple = { householdType: "couple" as const, separateAccounts: true };
   // The step is only in STEP_ORDER at all when the UI flag is set; when it is, a one-person
   // household must still not see it. Both halves asserted so the cell cannot be green because the
   // flag happens to be unset in this process.
   assert.equal(visibleSteps(single).includes("separate"), false);
+  assert.equal(visibleSteps(single).includes("privateIncome"), false);
   assert.equal(visibleSteps(couple).includes("separate"), STEP_ORDER.includes("separate"));
+  assert.equal(visibleSteps(couple).includes("privateIncome"), STEP_ORDER.includes("privateIncome"));
   // And nothing ELSE moved: skipping one step must not reorder or drop the other eight.
   assert.deepEqual(
     visibleSteps(single),
-    STEP_ORDER.filter((s) => s !== "separate"),
-    "the single-household spine is not STEP_ORDER minus one step"
+    STEP_ORDER.filter((s) => s !== "separate" && s !== "privateIncome"),
+    "the single-household spine did not remove both separate-money steps"
   );
 });
 
@@ -545,10 +551,10 @@ test("CC_UX item 4: pendingSplitBp converts by string surgery and refuses what i
   //    and the wire refuses a non-integer shareBp with 400 split.invalid.
   assert.equal(pendingSplitBp(62.5), 6250);
   assert.equal(pendingSplitBp(33.33), 3333);
-  // Not a ratio: nothing typed, the whole thing, nothing at all, and out of range.
+  // Empty and out-of-range values are not ratios; the two explicit extremes are supported.
   assert.equal(pendingSplitBp(""), null);
-  assert.equal(pendingSplitBp(100), null, "100/0 is not a split, it is 'I pay everything'");
-  assert.equal(pendingSplitBp(0), null);
+  assert.equal(pendingSplitBp(100), 10000, "100/0 is an explicit supported ratio");
+  assert.equal(pendingSplitBp(0), 0, "0/100 is an explicit supported ratio");
   assert.equal(pendingSplitBp(-5), null);
   assert.equal(pendingSplitBp(120), null);
   assert.equal(pendingSplitBp(Number.NaN), null);

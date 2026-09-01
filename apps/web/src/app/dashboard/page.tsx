@@ -13,6 +13,8 @@ import type {
   SpendingByCategoryEntry,
   User,
   WeeklyInsightsResponse,
+  SeparateAccountsFinancialCycle,
+  PurchaseUnallocatedReason,
 } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../components/AppShell";
 import { InsightCard } from "../../components/InsightCard";
@@ -24,7 +26,8 @@ import { Donut } from "../../components/charts";
 import { api } from "../../lib/api";
 import { heDate, ilsFromAgorot } from "../../lib/format";
 import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
-import { sepacct, type MyComponentsDto } from "../../lib/sepacctApi";
+import { sepacct } from "../../lib/sepacctApi";
+import { shouldShowSeparateAccountsCard, uniformViewerPercentage } from "../../lib/sepacctView";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
 import { requiresOnboarding } from "../../lib/authRouting";
 import { selectInsightPreview } from "../../lib/insightsPreview";
@@ -942,26 +945,34 @@ function LimitedMemberView({
 // ⚠️ AND `חלקך 0₪` IS NOT RENDERED AS A TILE. `handlers.ts` on its own copy: *"arithmetically
 // true and semantically nonsense"*. A household that has declared but split nothing yet gets the
 // one number that means something and a way to the page that explains the rest.
-function MyMoneyCard({ householdId }: { householdId: string }) {
-  const [totals, setTotals] = useState<MyComponentsDto>();
+const UNALLOCATED_LABELS: Record<PurchaseUnallocatedReason, string> = {
+  child_payer: "הוצאות שילדים רשמו נכנסות להוצאות הבית ואינן מתחלקות",
+  pending: "היחס מחכה למבוגר/ת נוסף/ת",
+  inactive: "החלוקה הייתה כבויה",
+  stalled: "יחס החלוקה דרש תיקון",
+  missing_payer: "לא נשמר מי שילם",
+  ineligible_payer: "המשלם/ת לא היה/תה מבוגר/ת פעיל/ה",
+  allocation_failure: "החלוקה לא הושלמה"
+};
+
+function MyMoneyCard({ householdId, from, to }: { householdId: string; from: string; to: string }) {
+  const [totals, setTotals] = useState<SeparateAccountsFinancialCycle>();
   const [hidden, setHidden] = useState(!SEPACCT_UI_ENABLED);
 
   useEffect(() => {
     if (!SEPACCT_UI_ENABLED) return;
-    void sepacct.getMyComponents(householdId)
+    void sepacct.getFinancialCycle(householdId, from, to)
       .then(setTotals)
       // `404` (undeclared household, or the flag off) and a transient failure are NOT told apart,
       // and deliberately: the distinction matters to a caller that can act on it, and a dashboard
       // panel cannot. Both hide the card, which is the only outcome either one has.
       .catch(() => { setHidden(true); });
-  }, [householdId]);
+  }, [householdId, from, to]);
 
-  if (hidden || !totals) return null;
-  const windowOpenedAt = heDate(totals.windowOpenedAt);
-  const nothingSplitYet = totals.shareAgorot === 0;
+  if (hidden || !shouldShowSeparateAccountsCard(totals)) return null;
 
   return (
-    <section className="panel">
+    <section className="panel" data-sepacct-card="computed-share">
       <h2 style={{ marginTop: 0 }}>הכסף שלך</h2>
       {/* ── F534 `R-2` R2-4 — **TWO TILES IN ONE GRID READ AS PARTS OF EACH OTHER.** A 60/40
           household sees `נרשמו על שמך ₪1,000` beside `החלק שלך ₪900` and reads 90%. The
@@ -969,20 +980,17 @@ function MyMoneyCard({ householdId }: { householdId: string }) {
           household, not just the ones they recorded. `/my-record` carries exactly this sentence
           and the card, added this run, dropped it. */}
       <p className="muted" style={{ marginTop: 0 }}>מוצגים רכיבים בלבד, כל אחד בפני עצמו. החלק שלך מחושב מכל ההוצאות המשותפות בבית, לא רק מאלה שרשמתם.</p>
-      {windowOpenedAt
-        ? <p className="status">מוצג מ־<bdi dir="ltr">{windowOpenedAt}</bdi>.</p>
-        : <p className="muted">כולל את כל ההיסטוריה.</p>}
+      <p className="status">המחזור <bdi dir="ltr">{heDate(totals.from)}</bdi> עד <bdi dir="ltr">{heDate(totals.to)}</bdi>.</p>
       <div className="grid two">
         <div className="panel"><span className="label">נרשמו על שמך</span><strong className="mono" dir="ltr">{ilsFromAgorot(totals.recordedAgorot)}</strong></div>
-        {!nothingSplitYet && (
-          <div className="panel"><span className="label">החלק שלך</span><strong className="mono" dir="ltr">{ilsFromAgorot(totals.shareAgorot)}</strong></div>
-        )}
+        <div className="panel"><span className="label">החלק שלך</span><strong className="mono" dir="ltr">{ilsFromAgorot(totals.viewerShareAgorot)}</strong></div>
       </div>
-      {nothingSplitYet && <p className="muted">עדיין לא חולקה אף הוצאה, ולכן אין עדיין חלק משלך להציג.</p>}
+      {uniformViewerPercentage(totals) !== null && <p className="muted">האחוז האחיד במחזור: <bdi dir="ltr">{uniformViewerPercentage(totals)}</bdi></p>}
+      {totals.unallocated.map((bucket) => <p className="status warn" key={bucket.reason}>{UNALLOCATED_LABELS[bucket.reason]}: <bdi dir="ltr">{ilsFromAgorot(bucket.agorot)}</bdi> ({bucket.count})</p>)}
       {/* The spec's link is "כל ההוצאות המשותפות →". It points at the page these two numbers
           come from, and it is labelled with that page's OWN title so the link and the heading a
           person lands on are the same words. */}
-      <p style={{ marginBottom: 0 }}><Link href="/my-record">מה שנרשם ←</Link></p>
+      <p style={{ marginBottom: 0 }}><Link data-action="open-my-record" href="/my-record">מה שנרשם ←</Link></p>
     </section>
   );
 }
@@ -1015,7 +1023,7 @@ function FamilyView({
       {/* Spec screen E. Inside `FamilyView`, so a `limited_member` never reaches it — the page
           renders `LimitedMemberView` for them instead, and the route would 403 anyway. Two
           independent reasons, which is the posture decision #7 asks for. */}
-      <MyMoneyCard householdId={householdId} />
+      <MyMoneyCard householdId={householdId} from={budget.periodStart} to={budget.periodEnd} />
 
       {/* Hero row: MonthProgress + InsightsStrip placeholder */}
       <div className="grid two">

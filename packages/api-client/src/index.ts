@@ -47,7 +47,8 @@ import type {
   BillingPlan,
   BillingStatusDto,
   Entitlement,
-  PaidPlanCode
+  PaidPlanCode,
+  SeparateAccountsArrangement
 } from "@shopping-assistant/shared-types";
 
 export interface ApiClientOptions {
@@ -525,7 +526,7 @@ export function createApiClient(options: ApiClientOptions) {
     lookupInvite: (token: string) =>
       request<{ invite: HouseholdInvite; household: { id: string; name: string } | undefined }>(`/api/v1/households/join?token=${encodeURIComponent(token)}`),
     joinHousehold: (inviteToken: string, displayName?: string) =>
-      request<{ member: HouseholdMember; household: Household | undefined }>("/api/v1/households/join", {
+      request<{ member: HouseholdMember; household: Household | undefined; arrangementIntro?: SeparateAccountsArrangement }>("/api/v1/households/join", {
         method: "POST",
         body: JSON.stringify({ inviteToken, ...(displayName ? { displayName } : {}) })
       }),
@@ -533,7 +534,7 @@ export function createApiClient(options: ApiClientOptions) {
     // the INVITED phone's user directly — the server consumes the invite, opens a
     // session (Set-Cookie), and returns a csrfToken (stored via setCsrfToken above).
     joinHouseholdDirect: (inviteToken: string, displayName?: string) =>
-      request<{ member: HouseholdMember; household: Household | undefined; user: User; csrfToken: string }>("/api/v1/households/join/direct", {
+      request<{ member: HouseholdMember; household: Household | undefined; user: User; csrfToken: string; arrangementIntro?: SeparateAccountsArrangement }>("/api/v1/households/join/direct", {
         method: "POST",
         body: JSON.stringify({ inviteToken, ...(displayName ? { displayName } : {}) })
       })

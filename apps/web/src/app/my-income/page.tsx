@@ -62,6 +62,21 @@ export default function MyIncomePage() {
       setSaving(false);
     }
   };
+  const clear = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      const result = await sepacct.saveOwnIncome(viewer.householdId!, null);
+      setSaved(result.monthlyAgorot);
+      setValue("");
+    } catch (cause) {
+      if (isAbsent(cause)) setAbsent(true);
+      else setError("לא הצלחנו למחוק את ההכנסה. נסו שוב.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <AppShell>
@@ -76,10 +91,13 @@ export default function MyIncomePage() {
             and `A61` forbids any ratio computed from it. */}
         <p className="muted">הסכום פרטי: לא רואים אותו בן/בת הזוג ולא מנהלי הבית, הוא לא מצטרף לשום סכום משותף, והוא לא משפיע על יחס החלוקה של ההוצאות.</p>
         <label htmlFor="own-income" style={{ display: "block", fontWeight: 600, marginBottom: "var(--sp-2)" }}>הכנסה בשקלים</label>
-        <input id="own-income" className="input mono" inputMode="decimal" dir="ltr" value={value} onChange={(event) => setValue(event.target.value.replace(/[^\d.]/g, ""))} aria-invalid={invalid || undefined} aria-describedby={invalid ? "own-income-error" : undefined} />
+        <input id="own-income" className="input mono" data-action="set-own-income" inputMode="decimal" dir="ltr" value={value} onChange={(event) => setValue(event.target.value.replace(/[^\d.]/g, ""))} aria-invalid={invalid || undefined} aria-describedby={invalid ? "own-income-error" : undefined} />
         {invalid && <p id="own-income-error" className="status error" role="alert">אפשר להזין מספר עם עד שתי ספרות אחרי הנקודה.</p>}
         <p className="muted">{saved === null ? "עדיין לא נשמר סכום. שדה ריק מוחק את מה שנשמר." : <>נשמר: <bdi className="mono" dir="ltr">{ilsFromAgorot(saved)}</bdi></>}</p>
-        <button type="button" className="button" onClick={() => void save()} aria-busy={saving} aria-disabled={invalid || undefined}>{saving ? "שומרים..." : "שמירה"}</button>
+        <div className="row">
+          <button type="button" className="button" data-action="save-own-income" onClick={() => void save()} aria-busy={saving} aria-disabled={invalid || undefined}>{saving ? "שומרים..." : "שמירה"}</button>
+          {saved !== null && <button type="button" className="button secondary" data-action="delete-own-income" onClick={() => void clear()} aria-busy={saving}>מחיקת הסכום</button>}
+        </div>
       </section>
     </AppShell>
   );

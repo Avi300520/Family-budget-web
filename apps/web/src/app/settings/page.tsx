@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Bell,
   ChevronLeft,
@@ -20,6 +20,7 @@ import { planForCode, type BillingTier, type Subscription } from "@shopping-assi
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
 import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
+import { sepacct } from "../../lib/sepacctApi";
 import { activeMemberCount } from "../../lib/roster";
 import { api } from "../../lib/api";
 import { useViewer } from "../../lib/useViewer";
@@ -179,7 +180,7 @@ interface BannerData {
 function CardLink({ card }: { card: SettingCard }) {
   const Icon = card.icon;
   return (
-    <Link className="panel settings-card" href={card.href}>
+    <Link className="panel settings-card" href={card.href} data-action={`open-${card.href.replace(/^\//, "").replaceAll("/", "-")}`}>
       <span
         className="settings-card__icon"
         style={{ background: `var(--${card.tint}-bg)`, color: `var(--${card.tint}-dark)` }}
@@ -199,6 +200,8 @@ function CardLink({ card }: { card: SettingCard }) {
 export default function SettingsPage() {
   const viewer = useViewer();
   const [banner, setBanner] = useState<BannerData>({});
+  const [moneyState, setMoneyState] = useState<string | null>(null);
+  const [moneyStateError, setMoneyStateError] = useState(false);
 
   // Banner data is best-effort and additive. Only fetch once we know the viewer has a
   // household; each step is wrapped so a failure degrades to fewer meta pills (never a crash).
@@ -230,6 +233,26 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [viewer.status, viewer.hasHousehold]);
+
+  const loadMoneyState = useCallback(() => {
+    setMoneyStateError(false);
+    void sepacct.getConfig()
+      .then((value) => setMoneyState(value.state))
+      .catch(() => { setMoneyState(null); setMoneyStateError(true); });
+  }, []);
+
+  useEffect(() => {
+    if (!SEPACCT_UI_ENABLED || viewer.status !== "ready" || !viewer.hasHousehold) return;
+    // Children must keep the ordinary settings experience. Sensitive routes deliberately answer
+    // an absent-shaped 404 for them, so do not probe the route and turn that privacy boundary into
+    // a feature-specific error banner.
+    if (viewer.role === "limited_member") {
+      setMoneyState("absent");
+      setMoneyStateError(false);
+      return;
+    }
+    loadMoneyState();
+  }, [viewer.status, viewer.hasHousehold, viewer.role, loadMoneyState]);
 
   // Still resolving who the viewer is — show a loader, never the degraded (privacy-only) menu.
   if (viewer.status === "loading") {
@@ -288,7 +311,7 @@ export default function SettingsPage() {
   // (limited_member is left with only קבלות + פרטיות ותנאים under their groups).
   const visibleGroups = GROUPS.map((group) => ({
     ...group,
-    cards: group.cards.filter((card) => card.can(viewer.caps))
+    cards: group.cards.filter((card) => card.can(viewer.caps) && (card.href !== "/settings/separate-accounts" || (moneyState !== null && moneyState !== "absent")))
   })).filter((group) => group.cards.length > 0);
 
   // Banner meta order mirrors the design: members · plan · region. The plan tier is
@@ -304,6 +327,11 @@ export default function SettingsPage() {
     <AppShell>
       <h1 className="page-title">הגדרות</h1>
       <p className="muted" style={{ marginBottom: 20 }}>ניהול משק הבית, התקציב, החיוב והפרטיות במקום אחד.</p>
+
+      {moneyStateError && <div className="status error" role="alert" style={{ marginBottom: 16 }}>
+        לא הצלחנו לטעון את מצב ניהול הכסף. שום הגדרה לא שונתה.
+        <button type="button" className="button secondary" data-action="retry-money-state" onClick={loadMoneyState}>נסו שוב</button>
+      </div>}
 
       <div className="settings-banner">
         <div className="settings-banner__tile" aria-hidden>🏡</div>

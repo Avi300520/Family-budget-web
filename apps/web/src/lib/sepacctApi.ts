@@ -9,6 +9,7 @@
 "use client";
 
 import { ApiClientError } from "@shopping-assistant/api-client";
+import type { SeparateAccountsArrangement, SeparateAccountsFinancialCycle } from "@shopping-assistant/shared-types";
 import { api } from "./api";
 import { SepacctError } from "./sepacct";
 
@@ -21,10 +22,12 @@ export interface SepacctMemberDto {
   role: SepacctRole;
 }
 
-export interface SepacctConfigDto {
+export type SepacctConfigDto = SeparateAccountsArrangement;
+
+export interface SaveSepacctConfigDto {
   separateAccounts: boolean;
-  members: SepacctMemberDto[];
   defaultSplit: Array<{ userId: string; shareBp: number }>;
+  pending?: boolean;
 }
 
 /** §2 — no `displayName`: join `userId` against the arrangement's `members` (§6 #1). */
@@ -32,9 +35,9 @@ export interface SplitShareDto {
   userId: string;
   shareBp: number;
   /** Server-resolved. Render VERBATIM; never recompute from shareBp × total (§2). */
-  agorot: number;
+  /** Present only for the viewing adult's own share. Peer amounts are never sent. */
+  agorot: number | null;
   previousShareBp: number | null;
-  disputedAt: string | null;
 }
 
 export interface SplitPurchaseDto {
@@ -43,6 +46,7 @@ export interface SplitPurchaseDto {
   purchaseDate: string;
   /** Who recorded it — a UUID, nullable, not a display name (§6 #6). */
   userId: string | null;
+  expenseType: "household" | "personal";
 }
 
 export interface PurchaseAllocationDto {
@@ -55,6 +59,12 @@ export interface PurchaseAllocationDto {
 export interface PurchaseSplitDto {
   purchase: SplitPurchaseDto;
   allocation: PurchaseAllocationDto | null;
+  capabilities: {
+    canEditArithmetic: boolean;
+    canMarkPersonal: boolean;
+    canMarkShared: boolean;
+    canCreateAllocation: boolean;
+  };
 }
 
 /** §3 — explicitly `null` when unset, and `null` for a child. Never absent. */
@@ -62,29 +72,6 @@ export interface OwnIncomeDto {
   monthlyAgorot: number | null;
 }
 
-/** §4 — the two totals, from `my-components`, which takes NO range. */
-export interface MyComponentsDto {
-  recordedAgorot: number;
-  shareAgorot: number;
-  settledOutAgorot: number;
-  settledInAgorot: number;
-  /** Non-null ⇒ the totals START here and must be labelled as such on the same surface (§4). */
-  windowOpenedAt: string | null;
-}
-
-/** §4 — the itemised list, from `my-record-components`, over a REQUIRED window on purchaseDate. */
-export interface RecordEntryDto {
-  purchaseId: string;
-  merchantNameRaw: string | null;
-  purchaseDate: string;
-  recordedAgorot: number;
-  myShareAgorot: number;
-  disputedAt: string | null;
-}
-
-export interface RecordComponentsDto {
-  entries: RecordEntryDto[];
-}
 
 /**
  * The api-client raises `ApiClientError`; SEPACCT surfaces branch on `SepacctError` via `isAbsent`,
@@ -123,7 +110,7 @@ export const sepacct = {
   getConfig: () => call<SepacctConfigDto>("/api/v1/households/current/separate-accounts"),
 
   /** §1 — PUT /households/:householdId/separate-accounts. Returns the same body as the GET. */
-  saveConfig: (householdId: string, next: Pick<SepacctConfigDto, "separateAccounts" | "defaultSplit">) =>
+  saveConfig: (householdId: string, next: SaveSepacctConfigDto) =>
     call<SepacctConfigDto>(`/api/v1/households/${householdId}/separate-accounts`, { method: "PUT", ...body(next) }),
 
   /** §2 — GET …/purchases/:purchaseId/split. Child caller: `404 split.not_found`. */
@@ -137,14 +124,11 @@ export const sepacct = {
       ...body({ shares }),
     }),
 
-  /**
-   * §2 / §6 #4 — POST …/split/dispute marks the CALLER's own share and returns an EMPTY BODY, not
-   * the updated allocation. `Promise<void>` so no call site can await a shape that never arrives;
-   * re-GET the split afterwards.
-   */
-  disputeMyShare: async (householdId: string, purchaseId: string): Promise<void> => {
-    await call<unknown>(`/api/v1/households/${householdId}/purchases/${purchaseId}/split/dispute`, { method: "POST" });
-  },
+  setPurchaseScope: (householdId: string, purchaseId: string, expenseType: "household" | "personal") =>
+    call<{ purchase: SplitPurchaseDto; allocation: PurchaseAllocationDto | null }>(
+      `/api/v1/households/${householdId}/purchases/${purchaseId}/scope`,
+      { method: "PATCH", ...body({ expenseType }) },
+    ),
 
   /** §3 — GET …/my-income. Self only, at every role. `{ monthlyAgorot: null }` for a child. */
   getOwnIncome: (householdId: string) => call<OwnIncomeDto>(`/api/v1/households/${householdId}/my-income`),
@@ -153,15 +137,9 @@ export const sepacct = {
   saveOwnIncome: (householdId: string, monthlyAgorot: number | null) =>
     call<OwnIncomeDto>(`/api/v1/households/${householdId}/my-income`, { method: "PUT", ...body({ monthlyAgorot }) }),
 
-  /** §4 — GET …/my-components. The two totals plus the settled pair, and NO range parameter. */
-  getMyComponents: (householdId: string) => call<MyComponentsDto>(`/api/v1/households/${householdId}/my-components`),
-
-  /**
-   * §4 — GET …/my-record-components?from=&to=. The itemised list. BOTH bounds are REQUIRED and
-   * `from <= to`, or the server answers `400 split.invalid`.
-   */
-  getMyRecordComponents: (householdId: string, from: string, to: string) =>
-    call<RecordComponentsDto>(
-      `/api/v1/households/${householdId}/my-record-components?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+  /** One truthful cycle contract: viewer-only amounts, presence, and reconciliation buckets. */
+  getFinancialCycle: (householdId: string, from: string, to: string) =>
+    call<SeparateAccountsFinancialCycle>(
+      `/api/v1/households/${householdId}/separate-accounts/financial-cycle?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     ),
 };

@@ -156,7 +156,8 @@ export interface WizardState {
   city: string; // doubles as defaultCity (required by the backend contract)
   cars: number;
   /** The household's declaration; the named default is selected after a second adult joins. */
-  separateAccounts: boolean;
+  /** Null until the household explicitly answers; neither card is a default. */
+  separateAccounts: boolean | null;
   /**
    * `CC_UX_BUILD` item 4 — THE RECORDER'S OWN SHARE, AS A PERCENTAGE, AND NOTHING ELSE.
    *
@@ -232,7 +233,7 @@ export function createDefaultState(): WizardState {
     householdName: "",
     city: "",
     cars: 1,
-    separateAccounts: false,
+    separateAccounts: null,
     separateSharePct: 50,
     ownIncome: "",
     // Consent is captured passively at /login (browse-wrap per the /privacy page) and the backend
@@ -283,7 +284,7 @@ export function pendingSplitBp(pct: number | ""): number | null {
   const match = /^(\d+)\.(\d{2})$/.exec(text);
   if (!match) return null;
   const bp = Number(match[1]) * 100 + Number(match[2]);
-  if (!Number.isInteger(bp) || bp <= 0 || bp >= 10000) return null;
+  if (!Number.isInteger(bp) || bp < 0 || bp > 10000) return null;
   return bp;
 }
 function num(v: number | ""): number {
@@ -327,7 +328,7 @@ export function effectiveCycleDay(state: WizardState): number {
 }
 
 // ── Validation (per step) ───────────────────────────────────────────────────────
-export type StepKey = "welcome" | "profile" | "separate" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
+export type StepKey = "welcome" | "profile" | "separate" | "privateIncome" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
 
 // The separate-accounts step ships DORMANT with the rest of SEPACCT: with the flag off the wizard
 // has no such step and asks no household about a feature whose every route answers 404.
@@ -335,7 +336,7 @@ export type StepKey = "welcome" | "profile" | "separate" | "cycle" | "income" | 
 // runtime-import-free (see the header); ../sepacct.SEPACCT_UI_ENABLED is the same expression and is
 // what every other call site uses.
 export const STEP_ORDER: ReadonlyArray<StepKey> = ([
-  "welcome", "profile", "separate", "cycle", "income", "fixed", "budget", "alerts", "done"
+  "welcome", "profile", "separate", "privateIncome", "cycle", "income", "fixed", "budget", "alerts", "done"
 ] as StepKey[]).filter((step) => step !== "separate" || process.env.NEXT_PUBLIC_SEPACCT_UI === "1");
 
 /**
@@ -356,13 +357,21 @@ export const STEP_ORDER: ReadonlyArray<StepKey> = ([
  * ⚠️ IT IS DERIVED FROM `STEP_ORDER`, NEVER RE-LISTED. A second hand-written array is the shape
  * that drifts the first time a step is inserted into one of them.
  */
-export function visibleSteps(state: Pick<WizardState, "householdType">): ReadonlyArray<StepKey> {
-  return STEP_ORDER.filter((step) => step !== "separate" || state.householdType !== "single");
+export function visibleSteps(state: Pick<WizardState, "householdType" | "separateAccounts">): ReadonlyArray<StepKey> {
+  return STEP_ORDER.filter((step) =>
+    (step !== "separate" || state.householdType !== "single")
+    && (step !== "privateIncome" || (state.householdType !== "single" && state.separateAccounts === true)));
 }
 
 /** Returns null when the step is valid, or a Hebrew error message when it is not. */
 export function validateStep(step: StepKey, state: WizardState): string | null {
   switch (step) {
+    case "privateIncome":
+      return null;
+    case "separate":
+      if (state.separateAccounts === null) return "בחרו איך תרצו לנהל את הכסף.";
+      if (state.separateAccounts && pendingSplitBp(state.separateSharePct) === null) return "כתבו אחוז בין 0 ל-100.";
+      return null;
     case "profile":
       if (!state.displayName.trim()) return "כתבו את השם שלכם.";
       if (!state.householdName.trim()) return "כתבו שם לבית.";
@@ -734,6 +743,8 @@ export function coerceDraftState(raw: unknown): WizardState | null {
   if (typeof raw.city === "string") s.city = raw.city;
   s.cars = finiteNumber(raw.cars, s.cars);
   if (typeof raw.separateAccounts === "boolean") s.separateAccounts = raw.separateAccounts;
+  const restoredShare = numberOrEmpty(raw.separateSharePct);
+  if (restoredShare !== "" && restoredShare >= 0 && restoredShare <= 100) s.separateSharePct = restoredShare;
   // Consent is no longer a wizard field — a stale draft must not re-introduce a false consent and
   // re-block the profile step (the seeded `true` default always wins). See createDefaultState.
   if (inEnum(raw.basis, BUDGET_BASES)) s.basis = raw.basis;

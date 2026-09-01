@@ -2,21 +2,14 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import type { HouseholdInvite, User } from "@shopping-assistant/shared-types";
+import type { HouseholdInvite, SeparateAccountsArrangement, User } from "@shopping-assistant/shared-types";
 import { ApiClientError } from "@shopping-assistant/api-client";
 import { api } from "../../lib/api";
 import { PhoneInput } from "../../components/PhoneInput";
 import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../lib/countryCodes";
 import Link from "next/link";
-import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
-import { sepacct, type SepacctConfigDto } from "../../lib/sepacctApi";
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: "בעלים",
-  admin: "מנהל",
-  adult_member: "חבר מבוגר",
-  limited_member: "בן/בת בית"
-};
+import { agorotFromInput, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
+import { sepacct } from "../../lib/sepacctApi";
 
 type Phase = "loading" | "auth" | "link_sent" | "preview" | "joining" | "done" | "error";
 
@@ -44,7 +37,8 @@ function JoinPageInner() {
   const [error, setError] = useState<string>();
   // `A63` — the arrangement this person is joining INTO, plus their own id so their share can be
   // picked out of it. Null on every failure path, which is what keeps screen D fail-open.
-  const [arrangement, setArrangement] = useState<{ config: SepacctConfigDto; viewerUserId: string } | null>(null);
+  const [arrangement, setArrangement] = useState<SeparateAccountsArrangement | null>(null);
+  const [ownIncome, setOwnIncome] = useState("");
 
   useEffect(() => {
     if (!token) { setPhase("error"); setError("קישור הזמנה חסר"); return; }
@@ -115,14 +109,9 @@ function JoinPageInner() {
       // being off, the household not being declared — every one of them falls through to exactly
       // today's behaviour. A joiner stuck on a spinner because an arrangement lookup hung is a worse
       // outcome than never seeing this screen at all.
-      if (SEPACCT_UI_ENABLED) {
-        try {
-          const config = await sepacct.getConfig();
-          if (config.separateAccounts) {
-            setArrangement({ config, viewerUserId: joined.member.userId });
-            return;   // the redirect below is NOT scheduled: this screen waits for a tap
-          }
-        } catch { /* fail open to the redirect */ }
+      if (SEPACCT_UI_ENABLED && joined.arrangementIntro && joined.arrangementIntro.state !== "absent" && joined.arrangementIntro.state !== "joint") {
+        setArrangement(joined.arrangementIntro);
+        return;   // atomic disclosure from the successful join response; no lossy second fetch
       }
       setTimeout(() => router.replace("/dashboard"), 1800);
 
@@ -165,46 +154,68 @@ function JoinPageInner() {
 
   // ── `A63` / spec screen D — WHAT THE SECOND PERSON SEES, BEFORE THE APP ──────────────────────
   if (phase === "done" && arrangement) {
-    const { config, viewerUserId } = arrangement;
-    const adults = config.members.filter((m) => m.role !== "limited_member");
-    const setter = adults.find((m) => m.userId !== viewerUserId);
-    const setterName = setter?.displayName?.trim() || "בן/בת הזוג";
-    const mine = config.defaultSplit.find((share) => share.userId === viewerUserId);
-    // ⚠️ THE RATIO IS STATED ONLY WHEN IT IS RESOLVED AND NAMES THIS READER. A household whose
-    // ratio is still pending, or which has gained a third adult, has no number that is true of
-    // this person yet — and `F-3` says a screen states what is true or stays quiet. Guessing
-    // "חצי חצי" here would be the product inventing the very percentage `A61` forbids it to invent.
-    const ratio =
-      mine === undefined ? null
-      : mine.shareBp === 5000 ? "חצי חצי"
-      : `${(mine.shareBp / 100).toFixed(2).replace(/\.?0+$/, "")}% / ${((10000 - mine.shareBp) / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+    const config = arrangement;
+    const shares = "shares" in config ? config.shares : [];
+    const managerText = config.managerNames.filter(Boolean).join(" ו");
+    const continueFromIntro = async (saveIncome: boolean) => {
+      if (saveIncome && ownIncome.trim() && household?.id) {
+        const parsed = agorotFromInput(ownIncome.replace(/,/g, ""));
+        if (!parsed.ok || parsed.agorot === null) {
+          setError("כתבו סכום חיובי עם עד שתי ספרות אחרי הנקודה, או דלגו.");
+          return;
+        }
+        try {
+          await sepacct.saveOwnIncome(household.id, parsed.agorot);
+        } catch {
+          setError("לא הצלחנו לשמור את ההכנסה. הסכום נשאר כאן כדי שתוכלו לנסות שוב.");
+          return;
+        }
+      }
+      router.replace(config.capabilities.canEditRatio ? "/settings/separate-accounts" : "/dashboard");
+    };
+    const operatingCopy = (() => {
+      switch (config.state) {
+        case "pending": return "היחס נשמר, אבל חלוקת הוצאות חדשות תתחיל רק אחרי שמבוגר/ת נוסף/ת יצטרף/תצטרף.";
+        case "live": return "החלוקה פעילה. בכל הוצאה משותפת שהוקצתה, כל אחד רואה רק את הסכום שלו.";
+        case "stalled": return "החלוקה האוטומטית נעצרה בגלל שינוי במבוגרים בבית. הוצאות חדשות נשמרות בלי חלוקה עד לתיקון היחס.";
+        case "inactive": return "החלוקה האוטומטית כבויה. ההיסטוריה נשמרת, אבל הוצאות חדשות אינן מתחלקות.";
+        case "absent":
+        case "joint": return "";
+        default: { const exhaustive: never = config; return exhaustive; }
+      }
+    })();
+    const draft = encodeURIComponent(`היי${managerText ? ` ${managerText}` : ""}, רציתי לדבר על יחס החלוקה של ההוצאות המשותפות בבית.`);
     return (
       <div className="login-page">
         <main id="main" className="login-box">
-          <h1 className="page-title" style={{ fontSize: 19, marginBottom: 14 }}>
-            {setterName} הגדיר/ה שאתם מנהלים חשבונות נפרדים
-          </h1>
+          <h1 className="page-title" style={{ fontSize: 19, marginBottom: 14 }}>בבית הזה הכסף מנוהל בנפרד</h1>
           <ul style={{ margin: "0 0 18px", paddingInlineStart: "1.2em", display: "grid", gap: "var(--sp-2)" }}>
             <li>
-              {ratio
-                ? <>כל הוצאה משותפת תתחלק ביניכם <bdi dir="ltr">{ratio}</bdi>.</>
-                : "עדיין לא נקבע איך מתחלקות ההוצאות המשותפות. אחד ממנהלי הבית יקבע את היחס בהגדרות."}
+              {shares.length > 0
+                ? <>יחס ההוצאות המשותפות: {shares.map((share, index) => <span key={share.userId}>{index > 0 ? " · " : ""}{share.displayName.trim() || "חבר/ה"} <bdi dir="ltr">{(share.shareBp / 100).toFixed(2).replace(/\.?0+$/, "")}%</bdi></span>)}</>
+                : "עדיין לא נקבע יחס מלא להוצאות המשותפות."}
             </li>
-            <li>כל אחד רואה את החלק שלו בכל הוצאה משותפת.</li>
+            <li>{operatingCopy}</li>
             <li>ההכנסה של כל אחד נשארת פרטית ונראית רק לו.</li>
           </ul>
+          {!config.capabilities.canEditRatio && <p className="muted">{managerText ? `מנהלי הבית שאפשר לפנות אליהם: ${managerText}.` : "אפשר לפנות למנהלי הבית כדי לדבר על היחס."}</p>}
+          <label style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+            ההכנסה הפרטית שלך (לא חובה)
+            <input className="input mono" inputMode="decimal" data-action="set-own-income" value={ownIncome} onChange={(event) => setOwnIncome(event.target.value)} />
+            <span className="muted">רק את/ה יכול/ה לראות ולשנות את הסכום.</span>
+          </label>
+          {error && <div className="status error" role="alert">{error}</div>}
           <div className="form">
             <button
-              type="button" className="button"
-              onClick={() => router.replace("/dashboard")}
+              type="button" className="button" data-action="continue-arrangement-intro"
+              onClick={() => void continueFromIntro(true)}
             >
-              ממשיכים
+              המשך
             </button>
-            {/* The dissent link. A plain link to the surface that can change it, never a refusal
-                and never a control that argues back. `A63`: a way to object without a fight. */}
-            <Link className="button secondary" href="/settings/separate-accounts" style={{ textDecoration: "none" }}>
-              החלוקה נראית לי לא נכונה
-            </Link>
+            <button type="button" className="button secondary" data-action="skip-own-income" onClick={() => void continueFromIntro(false)}>דלג/י</button>
+            {config.capabilities.canEditRatio
+              ? <Link className="button secondary" data-action="edit-ratio" href="/settings/separate-accounts">עריכת היחס</Link>
+              : <a className="button secondary" data-action="open-ratio-message" href={`https://wa.me/?text=${draft}`} target="_blank" rel="noreferrer">פתיחת הודעה למנהלי הבית</a>}
           </div>
         </main>
       </div>
@@ -232,12 +243,6 @@ function JoinPageInner() {
   const householdCard = invite && household && (
     <div style={{ background: "var(--surface, #f8f9fa)", borderRadius: 10, padding: "14px 18px", marginBottom: 20, textAlign: "center" }}>
       <div style={{ fontSize: "1.2rem", fontWeight: 700 }}>{household.name}</div>
-      <div className="muted" style={{ marginTop: 4 }}>תפקיד: <strong>{ROLE_LABELS[invite.role] ?? invite.role}</strong></div>
-      {invite.personalBudgetMonthly !== undefined && (
-        <div className="muted" style={{ marginTop: 2 }}>
-          תקציב אישי: {invite.personalBudgetMonthly.toLocaleString()} ₪/חודש
-        </div>
-      )}
     </div>
   );
 
@@ -315,6 +320,7 @@ function JoinPageInner() {
                 השם שלך (יוצג לשאר חברי הבית)
                 <input
                   className="input"
+                  data-action="set-join-display-name"
                   value={displayName}
                   placeholder="שם פרטי"
                   autoComplete="given-name"
@@ -324,6 +330,7 @@ function JoinPageInner() {
             )}
             <button
               className="button"
+              data-action="join-household"
               type="submit"
               style={{ width: "100%" }}
               disabled={phase === "joining" || (needsName && !displayName.trim())}

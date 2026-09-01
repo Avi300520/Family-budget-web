@@ -15,7 +15,7 @@ import { sepacct } from "../../lib/sepacctApi";
 import { agorotFromInput } from "../../lib/sepacct";
 
 // Steps where an empty answer is acceptable and a "skip" affordance is offered.
-const SKIPPABLE: ReadonlySet<StepKey> = new Set(["fixed", "alerts"]);
+const SKIPPABLE: ReadonlySet<StepKey> = new Set(["privateIncome", "fixed", "alerts"]);
 
 /** Edit mode (?mode=edit): re-enter the wizard to complete/correct an existing
  *  household baseline instead of creating a new one. Read once from the URL. */
@@ -49,6 +49,7 @@ export interface WizardController {
   notice?: string;
   working: boolean;
   householdType: WizardState["householdType"];
+  completedHouseholdId?: string;
   next: () => void;
   back: () => void;
   skip: () => void;
@@ -67,6 +68,7 @@ export function useOnboardingWizard(): WizardController {
   const [error, setError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [working, setWorking] = useState(false);
+  const [completedHouseholdId, setCompletedHouseholdId] = useState<string>();
   const [editMode, setEditMode] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -188,6 +190,7 @@ export function useOnboardingWizard(): WizardController {
       // Same endpoint for first-time and edit: the backend UPSERTs the existing household
       // in place (no duplicate), keeps members/invites/expenses, and re-redacts the result.
       const saved = await api.completeOnboarding(payload);
+      if (saved.household?.id) setCompletedHouseholdId(saved.household.id);
       // SEPACCT §A60 — the save landed, and one field of it may not have. This happens when the
       // arrangement was declared between our prefill and this POST (a partner in WhatsApp, another
       // tab): the income we sent was dropped, and the SERVER says so on the response. Say it ON THE
@@ -228,11 +231,15 @@ export function useOnboardingWizard(): WizardController {
       // one-share shape would be refused `400 split.invalid` and the person would be told their
       // ratio failed to save when nothing was wrong with it. An existing household changes its
       // arrangement on `/settings/separate-accounts`, which is the only surface that can.
-      if (!editMode && state.separateAccounts && saved.household?.id && saved.user?.id) {
+      if (!editMode && state.separateAccounts !== null && saved.household?.id && saved.user?.id) {
         const householdId = saved.household.id;
         const missed: string[] = [];
         const shareBp = pendingSplitBp(state.separateSharePct);
-        if (shareBp === null) {
+        if (state.separateAccounts === false) {
+          try {
+            await sepacct.saveConfig(householdId, { separateAccounts: false, defaultSplit: [] });
+          } catch { missed.push("בחירת אופן ניהול הכסף"); }
+        } else if (shareBp === null) {
           missed.push("יחס החלוקה");
         } else {
           try {
@@ -247,7 +254,7 @@ export function useOnboardingWizard(): WizardController {
           } catch { missed.push("יחס החלוקה"); }
         }
         const income = agorotFromInput(String(state.ownIncome ?? ""));
-        if (income.ok && income.agorot !== null) {
+        if (state.separateAccounts && income.ok && income.agorot !== null) {
           try {
             await sepacct.saveOwnIncome(householdId, income.agorot);
           } catch { missed.push("ההכנסה שלך"); }
@@ -316,6 +323,7 @@ export function useOnboardingWizard(): WizardController {
     notice,
     working,
     householdType: state.householdType,
+    completedHouseholdId,
     next,
     back,
     skip
