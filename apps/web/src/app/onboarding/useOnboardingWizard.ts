@@ -229,11 +229,9 @@ export function useOnboardingWizard(): WizardController {
       // go backwards — it finishes, and the done screen names the surface that can complete what
       // did not land. Silence here would leave a household believing it is splitting when it is not,
       // which is the exact failure this whole run exists to close.
-      // ⚠️ FIRST RUN ONLY, AND `?mode=edit` IS THE CASE THAT MATTERS. In edit mode the household
-      // already exists and may already be DECLARED with two adults named, so posting the pending
-      // one-share shape would be refused `400 split.invalid` and the person would be told their
-      // ratio failed to save when nothing was wrong with it. An existing household changes its
-      // arrangement on `/settings/separate-accounts`, which is the only surface that can.
+      // Edit mode uses the same validated route. The roster is read below at save time so the
+      // request is either the one-adult pending shape or a complete two-adult split, never a stale
+      // partial shape from the onboarding prefill.
       if (state.separateAccounts !== null && saved.household?.id && saved.user?.id) {
         const householdId = saved.household.id;
         const missed: string[] = [];

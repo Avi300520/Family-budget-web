@@ -504,14 +504,9 @@ test("SEPACCT A60: the notice reads the SERVER's answer, and never infers one fr
   assert.equal(incomeRefusedNotice({ incomeRefused: false }), null);
 });
 
-test("SEPACCT A60: the wizard can never change the arrangement, in EITHER direction", () => {
-  // R-1, run 16, Finding 1. `separateAccounts: state.separateAccounts || undefined` made the
-  // together card a one-way door - `false || undefined` drops the key - so the card moved, the save
-  // returned 200, and the arrangement that hides every member's income stayed on. Sending the
-  // boolean honestly is worse: carrySeparateAccounts refuses it for a STAMPED household (silently)
-  // and lands an UNSTAMPED one otherwise, which /settings/separate-accounts then reports as joint
-  // while the income step says separate. The key is not sent at all, and with it absent the server
-  // carries the stored answer forward in both directions.
+test("SEPACCT A60: the baseline payload never carries the arrangement answer", () => {
+  // The arrangement is deliberately written by its validated, announcing route after baseline
+  // completion. A whole-document onboarding overwrite must never mint or silently erase it.
   const off = createDefaultState();
   off.displayName = "a"; off.householdName = "b"; off.city = "c"; off.managedBudget = 9000;
   const on: WizardState = { ...off, separateAccounts: true };
