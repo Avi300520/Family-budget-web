@@ -11,6 +11,7 @@ import { heDate, ilsFromAgorot } from "../../lib/format";
 import { isAbsent, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
 import { sepacct } from "../../lib/sepacctApi";
 import { useViewer } from "../../lib/useViewer";
+import styles from "../sepacct.module.css";
 
 const REASONS: Record<PurchaseUnallocatedReason, string> = {
   child_payer: "הוצאות שילדים רשמו נכנסות להוצאות הבית ואינן מתחלקות",
@@ -42,16 +43,15 @@ export default function MyRecordPage() {
 
   return (
     <AppShell>
-      <p><Link href="/dashboard" data-action="back-dashboard">חזרה לדשבורד</Link></p>
       <h1 className="page-title">מה שנרשם</h1>
-      <p className="muted">מחזור כלכלי: <bdi dir="ltr">{heDate(cycle.from)}</bdi> עד <bdi dir="ltr">{heDate(cycle.to)}</bdi>. המספרים מוצגים זה לצד זה ואינם מופחתים זה מזה.</p>
-      <section className="grid two" style={{ maxWidth: 680 }}>
-        <div className="panel"><span className="label">נרשם על שמי</span><strong className="mono" dir="ltr">{ilsFromAgorot(cycle.recordedAgorot)}</strong></div>
-        {cycle.viewerShareAgorot !== null && <div className="panel"><span className="label">החלק שלי</span><strong className="mono" dir="ltr">{ilsFromAgorot(cycle.viewerShareAgorot)}</strong></div>}
+      <p className={styles.recordIntro}>מחזור כלכלי: <bdi dir="ltr">{heDate(cycle.from)}</bdi> עד <bdi dir="ltr">{heDate(cycle.to)}</bdi>. המספרים מוצגים זה לצד זה ואינם מופחתים זה מזה.</p>
+      <section className={styles.metricGrid}>
+        <div className={`${styles.surface} ${styles.metricCard}`}><span className={styles.metricLabel}>נרשם על שמי</span><strong className={styles.metricValue} dir="ltr">{ilsFromAgorot(cycle.recordedAgorot)}</strong></div>
+        {cycle.viewerShareAgorot !== null && <div className={`${styles.surface} ${styles.metricCard}`}><span className={styles.metricLabel}>החלק שלי</span><strong className={styles.metricValue} dir="ltr">{ilsFromAgorot(cycle.viewerShareAgorot)}</strong></div>}
       </section>
       {cycle.viewerShareAgorot === null && <p className="status">לא חושב חלק שלך במחזור הזה.</p>}
       {cycle.unallocated.map((bucket) => <p className="status warn" key={bucket.reason}>{REASONS[bucket.reason]}: <bdi dir="ltr">{ilsFromAgorot(bucket.agorot)}</bdi> ({bucket.count})</p>)}
-      <section className="panel" style={{ maxWidth: 680, marginTop: 18 }}>
+      <section className={`${styles.surface} ${styles.editor}`}>
         <h2>הוצאות משותפות במחזור</h2>
         {cycle.entries.length === 0 ? <p>אין הוצאות שמיוחסות אליך במחזור הזה.</p> : cycle.entries.map((entry) => (
           <div className="row between" key={entry.purchaseId} style={{ padding: "12px 0", borderBottom: "1px solid var(--cream-3)" }}>

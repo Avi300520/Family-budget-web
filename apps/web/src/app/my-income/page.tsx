@@ -2,12 +2,14 @@
 
 import { notFound } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LockKeyhole } from "lucide-react";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
 import { ilsFromAgorot } from "../../lib/format";
 import { agorotFromInput, inputFromAgorot, isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../lib/sepacct";
 import { sepacct } from "../../lib/sepacctApi";
 import { useViewer } from "../../lib/useViewer";
+import styles from "../sepacct.module.css";
 
 const TITLE = "ההכנסה שלי";
 
@@ -81,22 +83,25 @@ export default function MyIncomePage() {
   return (
     <AppShell>
       <h1 className="page-title">{TITLE}</h1>
-      <section className="panel" style={{ maxWidth: 520 }}>
-        <h2>סכום חודשי</h2>
-        {/* `R-3`: this is the screen with the actual input box, and it gave the WEAKEST of the six
-            sibling guarantees in the product - it said "private" and never said from whom. The
-            strongest sentence the code supports is stated here, because this is where a person
-            decides whether to type the number at all. All three clauses are true: `member_income`
-            is read only by its owner (there is no route at any role that serves another member`s),
-            and `A61` forbids any ratio computed from it. */}
-        <p className="muted">הסכום פרטי: לא רואים אותו בן/בת הזוג ולא מנהלי הבית, הוא לא מצטרף לשום סכום משותף, והוא לא משפיע על יחס החלוקה של ההוצאות.</p>
-        <label htmlFor="own-income" style={{ display: "block", fontWeight: 600, marginBottom: "var(--sp-2)" }}>הכנסה בשקלים</label>
-        <input id="own-income" className="input mono" data-action="set-own-income" inputMode="decimal" dir="ltr" value={value} onChange={(event) => setValue(event.target.value.replace(/[^\d.]/g, ""))} aria-invalid={invalid || undefined} aria-describedby={invalid ? "own-income-error" : undefined} />
+      <section className={`${styles.surface} ${styles.incomeCard}`}>
+        <div className={styles.incomeLead}>
+          <span className={styles.incomeIcon}><LockKeyhole size={21} aria-hidden /></span>
+          <div>
+            <h2 className={styles.incomeTitle}>סכום חודשי</h2>
+            <p className={styles.incomeCopy}>רק את/ה רואה את הסכום. הוא לא מופיע אצל בן/בת הזוג או מנהלי הבית, לא מצטרף לתקציב המשותף ולא משנה את יחס החלוקה.</p>
+          </div>
+        </div>
+        <div className={styles.incomeField}>
+          <label htmlFor="own-income">הכנסה בשקלים</label>
+          <input id="own-income" className="input mono" data-action="set-own-income" inputMode="decimal" dir="ltr" value={value} onChange={(event) => setValue(event.target.value.replace(/[^\d.]/g, ""))} aria-invalid={invalid || undefined} aria-describedby={invalid ? "own-income-error" : undefined} />
+        </div>
         {invalid && <p id="own-income-error" className="status error" role="alert">אפשר להזין מספר עם עד שתי ספרות אחרי הנקודה.</p>}
-        <p className="muted">{saved === null ? "עדיין לא נשמר סכום. שדה ריק מוחק את מה שנשמר." : <>נשמר: <bdi className="mono" dir="ltr">{ilsFromAgorot(saved)}</bdi></>}</p>
-        <div className="row">
+        <div className={styles.incomeFooter}>
+          <p className={styles.savedState}>{saved === null ? "עדיין לא נשמר סכום. שדה ריק מוחק את מה שנשמר." : <>נשמר: <strong><bdi className="mono" dir="ltr">{ilsFromAgorot(saved)}</bdi></strong></>}</p>
+          <div className="row">
           <button type="button" className="button" data-action="save-own-income" onClick={() => void save()} aria-busy={saving} aria-disabled={invalid || undefined}>{saving ? "שומרים..." : "שמירה"}</button>
           {saved !== null && <button type="button" className="button secondary" data-action="delete-own-income" onClick={() => void clear()} aria-busy={saving}>מחיקת הסכום</button>}
+          </div>
         </div>
       </section>
     </AppShell>

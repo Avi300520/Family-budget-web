@@ -533,14 +533,13 @@ test("CC_UX item 4: a יחיד/ה household is never asked how it divides money 
   // household must still not see it. Both halves asserted so the cell cannot be green because the
   // flag happens to be unset in this process.
   assert.equal(visibleSteps(single).includes("separate"), false);
-  assert.equal(visibleSteps(single).includes("privateIncome"), false);
   assert.equal(visibleSteps(couple).includes("separate"), STEP_ORDER.includes("separate"));
-  assert.equal(visibleSteps(couple).includes("privateIncome"), STEP_ORDER.includes("privateIncome"));
-  // And nothing ELSE moved: skipping one step must not reorder or drop the other eight.
+  // The optional private-income field lives inside the separate-money step, so the spine contains
+  // one financial decision instead of a detour immediately after it.
   assert.deepEqual(
     visibleSteps(single),
-    STEP_ORDER.filter((s) => s !== "separate" && s !== "privateIncome"),
-    "the single-household spine did not remove both separate-money steps"
+    STEP_ORDER.filter((s) => s !== "separate"),
+    "the single-household spine did not remove the separate-money step"
   );
 });
 

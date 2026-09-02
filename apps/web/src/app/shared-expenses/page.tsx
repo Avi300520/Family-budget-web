@@ -12,6 +12,7 @@ import { heDate } from "../../lib/format";
 import { isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../lib/sepacct";
 import { sepacct, type PurchaseSplitDto } from "../../lib/sepacctApi";
 import { useViewer } from "../../lib/useViewer";
+import styles from "../sepacct.module.css";
 
 const TITLE = "הוצאה משותפת";
 
@@ -108,9 +109,9 @@ export default function SharedExpensesPage() {
     return (
       <AppShell>
         <h1 className="page-title">{TITLE}</h1>
-        <section className="panel" style={{ maxWidth: 680 }}>
-          <h2>לא נבחרה הוצאה</h2>
-          <p className="muted">חלוקה נקבעת תמיד על הוצאה מסוימת. בחרו אותה מרשימת ההוצאות שנרשמו.</p>
+        <section className={`${styles.surface} ${styles.emptyState}`}>
+          <h2 className={styles.emptyTitle}>לא נבחרה הוצאה</h2>
+          <p className={styles.emptyCopy}>חלוקה נקבעת על הוצאה מסוימת. בחרו אותה מרשימת ההוצאות שנרשמו, ואז אפשר לראות או לעדכן את החלוקה שלה.</p>
           <Link className="button secondary" href="/my-record">מה שנרשם</Link>
         </section>
       </AppShell>

@@ -225,9 +225,17 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
               `state.separateAccounts && !state.incomeRedacted` branch renders `ההכנסה שלך`
               hinted *"פרטית. בן/בת הזוג לא רואה את המספר הזה"*, carries NO household-income
               field at all, and `buildOnboardingPayload` sends no `budget.income` for it. */}
-          <p className="status" style={{ display: "block" }}>
-            היחס נשמר עכשיו ומתחיל לפעול כשמצטרף בן/בת הזוג. עד אז אין מה לחלק.
-            {" "}בהמשך נשאל על ההכנסה שלך בלבד, והיא נשארת פרטית - אין כאן הכנסה משותפת.
+          <div className="panel" style={{ display: "grid", gap: 12, padding: 16, background: "var(--cream-1)" }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16 }}>ההכנסה שלך</h3>
+              <p className="muted" style={{ margin: "4px 0 0" }}>רשות. המספר נשמר רק אצלך, לא מוצג למבוגרים אחרים בבית, ולא משנה את היחס שבחרת.</p>
+            </div>
+            <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })}
+              placeholder="18,000" ariaLabel="ההכנסה שלך" dataAction="set-private-income" />
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>אפשר להמשיך גם בלי סכום ולהוסיף או למחוק אותו אחר כך.</p>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>
+            היחס וההכנסה נשמרים בסיום ההגדרה. החלוקה מתחילה כשמצטרף בן/בת זוג; עד אז אין הוצאה לחלק.
           </p>
         </section>
       )}
@@ -275,24 +283,6 @@ export function CycleStep({ state, set }: StepProps) {
 }
 
 // ── Income / managed budget ──────────────────────────────────────────────────────
-export function PrivateIncomeStep({ state, set, editMode }: StepProps) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {editMode ? (
-        <p className="status" style={{ display: "block" }}>
-          את ההכנסה הפרטית עורכים בעמוד ״ההכנסה שלי״, כדי שלא תישמר בטיוטת ההצטרפות.
-        </p>
-      ) : (
-        <Field label="ההכנסה שלך" hint="רשות. המספר פרטי ונראה רק לך.">
-          <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })}
-            placeholder="18,000" autoFocus ariaLabel="ההכנסה שלך" dataAction="set-private-income" />
-        </Field>
-      )}
-      <p className="muted" style={{ margin: 0 }}>אפשר להמשיך בלי למלא סכום, ולהוסיף או למחוק אותו אחר כך.</p>
-    </div>
-  );
-}
-
 export function IncomeStep({ state, set, editMode }: StepProps) {
   // ── SEPACCT `CC_UX_BUILD` item 4, spec screen B — **THE ROOT FIX FOR THE VANISHING INCOME.**
   //

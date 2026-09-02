@@ -15,7 +15,7 @@ import { sepacct } from "../../lib/sepacctApi";
 import { agorotFromInput } from "../../lib/sepacct";
 
 // Steps where an empty answer is acceptable and a "skip" affordance is offered.
-const SKIPPABLE: ReadonlySet<StepKey> = new Set(["privateIncome", "fixed", "alerts"]);
+const SKIPPABLE: ReadonlySet<StepKey> = new Set(["fixed", "alerts"]);
 
 /** Edit mode (?mode=edit): re-enter the wizard to complete/correct an existing
  *  household baseline instead of creating a new one. Read once from the URL. */
@@ -58,7 +58,8 @@ export interface WizardController {
 /** The steps that carry a question, for THIS household. `done` is a celebration, not a step, and
  *  a household that is never asked about separate accounts must not see a segment for it — a
  *  progress bar that counts a screen you will not be shown is a progress bar that lies. */
-const interactiveSteps = (state: WizardState): ReadonlyArray<StepKey> => visibleSteps(state).filter((s) => s !== "done");
+const interactiveSteps = (state: WizardState, editMode: boolean): ReadonlyArray<StepKey> =>
+  visibleSteps(state).filter((step) => step !== "done" && !(editMode && step === "separate"));
 
 export function useOnboardingWizard(): WizardController {
   const router = useRouter();
@@ -157,7 +158,7 @@ export function useOnboardingWizard(): WizardController {
   // with nobody. The clamp is not defensive noise: `householdType` is chosen on `profile`, which
   // comes BEFORE `separate`, so going back and switching to `יחיד/ה` shortens the array under a
   // live index. Without it the last step lands on `undefined` and the wizard renders nothing.
-  const steps = useMemo(() => visibleSteps(state), [state]);
+  const steps = useMemo(() => interactiveSteps(state, editMode), [state, editMode]);
   const stepKey = (steps[Math.min(index, steps.length - 1)] ?? "welcome") as StepKey;
   const totals = useMemo(() => computeTotals(state), [state]);
 
@@ -305,7 +306,7 @@ export function useOnboardingWizard(): WizardController {
     stepKey === "welcome" ? (editMode ? "ממשיכים" : "מתחילים")
     : stepKey === "alerts" ? (editMode ? "שמירת השינויים" : "סיום")
     : "המשך";
-  const interactive = interactiveSteps(state);
+  const interactive = interactiveSteps(state, editMode);
   const stepIndex = interactive.indexOf(stepKey) + 1;
 
   return {

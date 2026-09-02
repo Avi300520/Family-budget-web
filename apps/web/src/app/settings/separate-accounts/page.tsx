@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LockKeyhole, ReceiptText } from "lucide-react";
 import type { SeparateAccountsArrangement } from "@shopping-assistant/shared-types";
 import { AppShell } from "../../../components/AppShell";
 import { LoadState } from "../../../components/LoadState";
@@ -11,6 +12,7 @@ import { isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../../lib/sepacct
 import { sepacct } from "../../../lib/sepacctApi";
 import { separateAccountsStateTitle } from "../../../lib/sepacctView";
 import { useViewer } from "../../../lib/useViewer";
+import styles from "../../sepacct.module.css";
 
 const TITLE = "הפרדת כספים";
 const pct = (bp: number) => `${(bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
@@ -18,6 +20,30 @@ const name = (value: string) => value.trim() || "חבר/ה בבית";
 
 function sharesOf(arrangement: SeparateAccountsArrangement) {
   return "shares" in arrangement ? arrangement.shares : [];
+}
+
+function ShareOverview({ arrangement }: { arrangement: SeparateAccountsArrangement }) {
+  const shares = sharesOf(arrangement);
+  if (shares.length === 0) return null;
+  const displayShares = arrangement.state === "pending" && arrangement.activeAdults.length === 1
+    ? [...shares, { userId: "pending", displayName: "המבוגר/ת שיצטרף/תצטרף", shareBp: 10000 - shares[0]!.shareBp }]
+    : shares;
+  return (
+    <div className={styles.shareSection}>
+      <p className={styles.shareLabel}><span>יחס החלוקה הנוכחי</span><bdi dir="ltr">100%</bdi></p>
+      <div className={styles.shareBar} aria-hidden="true">
+        {displayShares.map((share) => <span className={styles.shareSlice} key={share.userId} style={{ flexGrow: share.shareBp }} />)}
+      </div>
+      <div className={styles.shareGrid}>
+        {displayShares.map((share) => (
+          <div className={styles.shareCard} key={share.userId}>
+            <span className={styles.shareName}>{name(share.displayName)}</span>
+            <bdi className={styles.shareValue} dir="ltr">{pct(share.shareBp)}</bdi>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function StateSummary({ arrangement }: { arrangement: SeparateAccountsArrangement }) {
@@ -143,18 +169,17 @@ export default function SeparateAccountsSettingsPage() {
   return (
     <AppShell>
       <h1 className="page-title">{TITLE}</h1>
-      <section className="panel" style={{ maxWidth: 680 }} data-state={arrangement.state}>
-        <h2>{separateAccountsStateTitle(arrangement.state)}</h2>
-        <StateSummary arrangement={arrangement} />
-        {"shares" in arrangement && arrangement.shares.length > 0 && (
-          <ul>
-            {arrangement.shares.map((share) => <li key={share.userId}>{name(share.displayName)} - <bdi dir="ltr">{pct(share.shareBp)}</bdi></li>)}
-            {arrangement.state === "pending" && arrangement.activeAdults.length === 1 && (
-              <li>המבוגר/ת שיצטרף/תצטרף - <bdi dir="ltr">{pct(10000 - arrangement.shares[0]!.shareBp)}</bdi></li>
-            )}
-          </ul>
-        )}
-        {arrangement.state === "live" && <p className="muted">הוצאה שילד רושם נכנסת לסך הוצאות הבית ואינה מתחלקת ביניכם. ילדים אינם צד בחלוקה.</p>}
+      <section className={`${styles.surface} ${styles.hero}`} data-state={arrangement.state}>
+        <div className={styles.heroHeader}>
+          <div className={styles.heroCopy}>
+            <p className={styles.eyebrow}>כסף משותף</p>
+            <h2 className={styles.heroTitle}>{separateAccountsStateTitle(arrangement.state)}</h2>
+            <StateSummary arrangement={arrangement} />
+          </div>
+          {arrangement.state === "live" && <span className={styles.statePill}>פעיל</span>}
+        </div>
+        <ShareOverview arrangement={arrangement} />
+        {arrangement.state === "live" && <p className={styles.note}>הוצאה שילד רושם נכנסת לסך הוצאות הבית ואינה מתחלקת ביניכם. ילדים אינם צד בחלוקה.</p>}
         {arrangement.state === "pending" && arrangement.capabilities.canInviteAdult && <Link className="button secondary" data-action="invite-adult" href="/settings/members">שליחת הזמנה</Link>}
         {arrangement.state === "stalled" && arrangement.reason === "single_adult" && arrangement.capabilities.canInviteAdult && <Link className="button secondary" data-action="invite-adult" href="/settings/members">הזמנת מבוגר/ת</Link>}
         {arrangement.state === "joint" && arrangement.capabilities.canChangeMode && (
@@ -165,11 +190,33 @@ export default function SeparateAccountsSettingsPage() {
             void write({ separateAccounts: true, defaultSplit: shares });
           }}>מעבר לניהול בנפרד</button>
         )}
-        {canEdit && <RatioEditor arrangement={arrangement} saving={saving} onSave={(shares) => write({ separateAccounts: true, defaultSplit: shares })} />}
-        {canDisable && <button className="button secondary" type="button" data-action="disable-arrangement" disabled={saving} onClick={() => void write({ separateAccounts: false, defaultSplit: [] })}>כיבוי החלוקה</button>}
-        {error && <p className="status error" role="alert">{error}</p>}
       </section>
-      {arrangement.capabilities.canManageOwnIncome && <nav className="row" aria-label="המידע שלי" style={{ marginTop: 16 }}><Link data-action="open-own-income" href="/my-income">ההכנסה שלי</Link><Link data-action="open-my-record" href="/my-record">מה נרשם עליי</Link></nav>}
+      {canEdit && (
+        <section className={`${styles.surface} ${styles.editor}`} aria-label="שינוי יחס החלוקה">
+          <h2 className={styles.editorTitle}>שינוי יחס החלוקה</h2>
+          <p className={styles.editorSub}>היחס החדש יחול על הוצאות משותפות שיירשמו מכאן והלאה.</p>
+          <RatioEditor arrangement={arrangement} saving={saving} onSave={(shares) => write({ separateAccounts: true, defaultSplit: shares })} />
+        </section>
+      )}
+      {arrangement.capabilities.canManageOwnIncome && (
+        <nav className={styles.actionGrid} aria-label="המידע שלי">
+          <Link className={styles.actionCard} data-action="open-own-income" href="/my-income">
+            <span className={styles.actionIcon}><LockKeyhole size={20} aria-hidden /></span>
+            <span className={styles.actionText}><span className={styles.actionTitle}>ההכנסה שלי</span><span className={styles.actionSub}>פרטית ורק שלך</span></span>
+          </Link>
+          <Link className={styles.actionCard} data-action="open-my-record" href="/my-record">
+            <span className={styles.actionIcon}><ReceiptText size={20} aria-hidden /></span>
+            <span className={styles.actionText}><span className={styles.actionTitle}>מה נרשם עליי</span><span className={styles.actionSub}>הוצאות והחלק שלך במחזור</span></span>
+          </Link>
+        </nav>
+      )}
+      {canDisable && (
+        <section className={styles.dangerZone}>
+          <p className={styles.dangerCopy}>כיבוי החלוקה עוצר חלוקה אוטומטית של הוצאות חדשות. ההיסטוריה נשארת זמינה.</p>
+          <button className="button secondary" type="button" data-action="disable-arrangement" disabled={saving} onClick={() => void write({ separateAccounts: false, defaultSplit: [] })}>כיבוי החלוקה</button>
+        </section>
+      )}
+      {error && <p className="status error" role="alert">{error}</p>}
     </AppShell>
   );
 }
