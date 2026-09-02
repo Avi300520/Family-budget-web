@@ -8,7 +8,7 @@ import type { SeparateAccountsArrangement } from "@shopping-assistant/shared-typ
 import { AppShell } from "../../../components/AppShell";
 import { LoadState } from "../../../components/LoadState";
 import { heDate } from "../../../lib/format";
-import { isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../../lib/sepacct";
+import { isAbsent, SEPACCT_PERSONAL_PLAN_UI_ENABLED, SEPACCT_UI_ENABLED, SepacctError } from "../../../lib/sepacct";
 import { sepacct } from "../../../lib/sepacctApi";
 import { separateAccountsStateTitle } from "../../../lib/sepacctView";
 import { useViewer } from "../../../lib/useViewer";
@@ -204,7 +204,7 @@ export default function SeparateAccountsSettingsPage() {
         <nav className={styles.actionGrid} aria-label="המידע שלי">
           <Link className={styles.actionCard} data-action="open-own-income" href="/my-income">
             <span className={styles.actionIcon}><LockKeyhole size={20} aria-hidden /></span>
-            <span className={styles.actionText}><span className={styles.actionTitle}>ההכנסה שלי</span><span className={styles.actionSub}>פרטית ורק שלך</span></span>
+            <span className={styles.actionText}><span className={styles.actionTitle}>{SEPACCT_PERSONAL_PLAN_UI_ENABLED ? "ההכנסה והתוכנית האישית שלי" : "ההכנסה שלי"}</span><span className={styles.actionSub}>פרטיות ורק שלך</span></span>
           </Link>
           <Link className={styles.actionCard} data-action="open-my-record" href="/my-record">
             <span className={styles.actionIcon}><ReceiptText size={20} aria-hidden /></span>

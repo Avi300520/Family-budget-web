@@ -22,7 +22,7 @@ test("pending single-adult ratio shows the implied waiting share and a truthful 
   assert.match(settings, /pct\(pendingSingle \? 10000 : total\)/);
 });
 
-test("the critical mobile path exposes purpose locators, including explicit income deletion", () => {
+test("the critical mobile path exposes purpose locators, including private-plan management", () => {
   const controls = source("../app/onboarding/controls.tsx");
   const onboarding = source("../app/onboarding/steps.tsx");
   const income = source("../app/my-income/page.tsx");
@@ -32,6 +32,8 @@ test("the critical mobile path exposes purpose locators, including explicit inco
     assert.match(onboarding, new RegExp(`dataAction="${action}"`));
   }
   assert.match(income, /data-action="delete-own-income"/);
+  assert.match(income, /data-action="save-own-private-plan"/);
+  assert.match(income, /data-action="delete-own-private-plan"/);
   assert.match(shell, /data-action="open-navigation"/);
   assert.match(shell, /data-action=\{`navigate-/);
 });

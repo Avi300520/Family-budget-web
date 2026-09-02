@@ -6,7 +6,7 @@ import { LockKeyhole } from "lucide-react";
 import { AppShell } from "../../components/AppShell";
 import { LoadState } from "../../components/LoadState";
 import { ilsFromAgorot } from "../../lib/format";
-import { agorotFromInput, inputFromAgorot, isAbsent, SEPACCT_UI_ENABLED, SepacctError } from "../../lib/sepacct";
+import { agorotFromInput, inputFromAgorot, isAbsent, SEPACCT_PERSONAL_PLAN_UI_ENABLED, SEPACCT_UI_ENABLED, SepacctError } from "../../lib/sepacct";
 import { sepacct } from "../../lib/sepacctApi";
 import { useViewer } from "../../lib/useViewer";
 import styles from "../sepacct.module.css";
@@ -23,6 +23,10 @@ export default function MyIncomePage() {
   const [error, setError] = useState<string>();
   const [absent, setAbsent] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [privatePlan, setPrivatePlan] = useState<number | null>(null);
+  const [privatePlanValue, setPrivatePlanValue] = useState("");
+  const [privatePlanAvailable, setPrivatePlanAvailable] = useState(false);
+  const [savingPrivatePlan, setSavingPrivatePlan] = useState(false);
 
   useEffect(() => {
     if (viewer.status !== "ready") return;
@@ -36,6 +40,18 @@ export default function MyIncomePage() {
       if (isAbsent(cause)) setAbsent(true);
       else setError("לא הצלחנו לטעון את ההכנסה. נסו שוב.");
     });
+    if (SEPACCT_PERSONAL_PLAN_UI_ENABLED) {
+      void sepacct.getOwnPrivatePlan(viewer.householdId).then((data) => {
+        setPrivatePlan(data.monthlyAgorot);
+        setPrivatePlanValue(inputFromAgorot(data.monthlyAgorot));
+        setPrivatePlanAvailable(true);
+      }).catch((cause) => {
+        // A household that has not selected separate money has no private-plan resource. That is
+        // an ordinary state, not a dashboard-breaking error; all other failures remain visible
+        // through the primary income surface rather than pretending that a save succeeded.
+        if (!isAbsent(cause)) setError("לא הצלחנו לטעון את התוכנית האישית. נסו שוב.");
+      });
+    }
   }, [viewer.status, viewer.householdId]);
 
   if (absent) notFound();
@@ -79,6 +95,38 @@ export default function MyIncomePage() {
       setSaving(false);
     }
   };
+  const parsedPrivatePlan = agorotFromInput(privatePlanValue);
+  const privatePlanInvalid = !parsedPrivatePlan.ok;
+  const savePrivatePlan = async () => {
+    if (savingPrivatePlan || !parsedPrivatePlan.ok) return;
+    setSavingPrivatePlan(true);
+    setError(undefined);
+    try {
+      const result = await sepacct.saveOwnPrivatePlan(viewer.householdId!, parsedPrivatePlan.agorot);
+      setPrivatePlan(result.monthlyAgorot);
+      setPrivatePlanValue(inputFromAgorot(result.monthlyAgorot));
+    } catch (cause) {
+      if (isAbsent(cause)) setPrivatePlanAvailable(false);
+      else setError("לא הצלחנו לשמור את התוכנית האישית. נסו שוב.");
+    } finally {
+      setSavingPrivatePlan(false);
+    }
+  };
+  const clearPrivatePlan = async () => {
+    if (savingPrivatePlan) return;
+    setSavingPrivatePlan(true);
+    setError(undefined);
+    try {
+      const result = await sepacct.saveOwnPrivatePlan(viewer.householdId!, null);
+      setPrivatePlan(result.monthlyAgorot);
+      setPrivatePlanValue("");
+    } catch (cause) {
+      if (isAbsent(cause)) setPrivatePlanAvailable(false);
+      else setError("לא הצלחנו למחוק את התוכנית האישית. נסו שוב.");
+    } finally {
+      setSavingPrivatePlan(false);
+    }
+  };
 
   return (
     <AppShell>
@@ -104,6 +152,29 @@ export default function MyIncomePage() {
           </div>
         </div>
       </section>
+      {privatePlanAvailable && (
+        <section className={`${styles.surface} ${styles.incomeCard}`} style={{ marginTop: 16 }}>
+          <div className={styles.incomeLead}>
+            <span className={styles.incomeIcon}><LockKeyhole size={21} aria-hidden /></span>
+            <div>
+              <h2 className={styles.incomeTitle}>התוכנית האישית שלי</h2>
+              <p className={styles.incomeCopy}>זהו הסכום החודשי שתרצו לנהל עבור עצמכם. אחרי כל הוצאה פרטית או משותפת נציג לכם את ההוצאות הפרטיות שלכם ואת החלק המחושב שלכם בהוצאות הבית מול התוכנית הזאת. רק אתם רואים אותו; הוא אינו משנה את תקציב הבית או את יחס החלוקה.</p>
+            </div>
+          </div>
+          <div className={styles.incomeField}>
+            <label htmlFor="own-private-plan">סכום חודשי בשקלים</label>
+            <input id="own-private-plan" className="input mono" data-action="set-own-private-plan" inputMode="decimal" dir="ltr" value={privatePlanValue} onChange={(event) => setPrivatePlanValue(event.target.value.replace(/[^\d.]/g, ""))} aria-invalid={privatePlanInvalid || undefined} aria-describedby={privatePlanInvalid ? "own-private-plan-error" : undefined} />
+          </div>
+          {privatePlanInvalid && <p id="own-private-plan-error" className="status error" role="alert">אפשר להזין מספר עם עד שתי ספרות אחרי הנקודה.</p>}
+          <div className={styles.incomeFooter}>
+            <p className={styles.savedState}>{privatePlan === null ? "עדיין לא נשמרה תוכנית. שדה ריק מוחק את מה שנשמר." : <>נשמרה תוכנית של: <strong><bdi className="mono" dir="ltr">{ilsFromAgorot(privatePlan)}</bdi></strong></>}</p>
+            <div className="row">
+              <button type="button" className="button" data-action="save-own-private-plan" onClick={() => void savePrivatePlan()} aria-busy={savingPrivatePlan} aria-disabled={privatePlanInvalid || undefined}>{savingPrivatePlan ? "שומרים..." : "שמירה"}</button>
+              {privatePlan !== null && <button type="button" className="button secondary" data-action="delete-own-private-plan" onClick={() => void clearPrivatePlan()} aria-busy={savingPrivatePlan}>מחיקת התוכנית</button>}
+            </div>
+          </div>
+        </section>
+      )}
     </AppShell>
   );
 }
