@@ -96,9 +96,9 @@ function RatioEditor({ arrangement, saving, onSave }: {
     && adults.every((adult) => Number.isInteger(values[adult.userId]));
 
   return (
-    <section style={{ display: "grid", gap: 12, marginTop: 18 }} aria-label="יחס החלוקה">
+    <section className={styles.ratioEditor} aria-label="יחס החלוקה">
       {adults.length >= 3 && (
-        <label>השדה שמשלים ל־100%
+        <label className={styles.remainderChoice}>השדה שמשלים ל־100%
           <select className="select" value={remainderId} data-action="choose-remainder" onChange={(event) => {
             const nextId = event.target.value;
             setRemainderId(nextId);
@@ -109,20 +109,22 @@ function RatioEditor({ arrangement, saving, onSave }: {
           </select>
         </label>
       )}
-      {adults.map((adult) => (
-        <label key={adult.userId} style={{ display: "grid", gridTemplateColumns: "1fr 110px", alignItems: "center", gap: 12 }}>
-          <span>{name(adult.displayName)}</span>
-          <span className="row" style={{ gap: 6 }}>
-            <input className="input mono" type="number" min={0} max={100} step={1}
+      <div className={styles.ratioRows}>
+        {adults.map((adult) => (
+          <label className={styles.ratioRow} key={adult.userId}>
+            <span className={styles.ratioName}>{name(adult.displayName)}</span>
+            <span className={styles.ratioControl}>
+              <input className={`input mono ${styles.ratioInput}`} type="number" min={0} max={100} step={1}
               data-action={`set-share-${adult.userId}`} disabled={adults.length > 1 && adult.userId === remainderId}
               value={(values[adult.userId] ?? 0) / 100}
               onChange={(event) => setShare(adult.userId, Number(event.target.value))} />
-            <span aria-hidden>%</span>
-          </span>
-        </label>
-      ))}
-      {pendingSingle && <p className="muted">החלק שמחכה למבוגר/ת שיצטרף/תצטרף: <bdi dir="ltr">{pct(10000 - total)}</bdi></p>}
-      <p className={valid ? "muted" : "status warn"} aria-live="polite">סה״כ מוגדר: <bdi dir="ltr">{pct(pendingSingle ? 10000 : total)}</bdi></p>
+              <span aria-hidden>%</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {pendingSingle && <p className={`${styles.ratioTotal} muted`}>החלק שמחכה למבוגר/ת שיצטרף/תצטרף: <bdi dir="ltr">{pct(10000 - total)}</bdi></p>}
+      <p className={`${styles.ratioTotal} ${valid ? "muted" : "status warn"}`} aria-live="polite">סה״כ מוגדר: <bdi dir="ltr">{pct(pendingSingle ? 10000 : total)}</bdi></p>
       <button className="button" type="button" data-action="save-ratio" disabled={!valid || saving}
         onClick={() => void onSave(adults.map((adult) => ({ userId: adult.userId, shareBp: values[adult.userId] ?? 0 })))}>
         {saving ? "שומר…" : arrangement.state === "stalled" ? "תיקון והפעלת החלוקה" : arrangement.state === "inactive" ? "הפעלת החלוקה מחדש" : "שמירת היחס"}

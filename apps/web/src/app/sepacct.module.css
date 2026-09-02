@@ -122,6 +122,25 @@
 .editorTitle { margin: 0 0 4px; font-size: 17px; }
 .editorSub { margin: 0 0 16px; color: var(--text-2); font-size: 13px; line-height: 1.5; }
 
+.ratioEditor { display: grid; gap: 12px; margin-top: 16px; }
+.remainderChoice { display: grid; gap: 7px; color: var(--text-1); font-size: 13px; font-weight: 700; }
+.ratioRows { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.ratioRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 68px;
+  padding: 12px 14px;
+  border: 1px solid var(--cream-3);
+  border-radius: 13px;
+  background: var(--cream-1);
+}
+.ratioName { color: var(--text-1); font-weight: 800; }
+.ratioControl { display: flex; align-items: center; gap: 6px; direction: ltr; color: var(--text-2); font-size: 14px; font-weight: 700; }
+.ratioInput { width: 74px; min-width: 74px; padding-inline: 8px; text-align: center; }
+.ratioTotal { margin: 0; color: var(--text-2); font-size: 13px; }
+
 .actionGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
