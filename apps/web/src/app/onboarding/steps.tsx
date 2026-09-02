@@ -148,14 +148,24 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
         value={separate === null ? null : separate ? "apart" : "together"}
         onChange={(id) => set({ separateAccounts: id === "apart" })}
         options={[
-          { id: "together", emoji: "🤝", title: "יחד", sub: "קופה אחת. רואים את אותם מספרים." },
-          { id: "apart", emoji: "🧾", title: "בנפרד", sub: "לכל אחד הכסף שלו, וההוצאות המשותפות מתחלקות ביניכם." }
+          { id: "together", emoji: "🤝", title: "יחד", sub: "מכניסים ומנהלים את כל הכסף של הבית במקום אחד." },
+          { id: "apart", emoji: "🧾", title: "בנפרד, עם בית משותף", sub: "ההכנסה וההוצאות האישיות נשארות אישיות; הוצאות הבית מתחלקות ביחס שתבחרו." }
         ]}
       />
 
       {separate && (
         <section className="panel" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>איך מתחלק?</h2>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 18 }}>כך זה עובד בפועל</h2>
+            <p className="muted" style={{ margin: "6px 0 0" }}>הבחירה הזו חלה רק על הוצאות בית חדשות, ואפשר לשנות אותה בהגדרות בהמשך.</p>
+          </div>
+          <div className="panel" style={{ display: "grid", gap: 8, padding: 14, background: "var(--cream-1)" }}>
+            <p style={{ margin: 0 }}><strong>1. אישי נשאר אישי.</strong> ההכנסה שלך והוצאה שמסומנת אישית נשמרות אצלך.</p>
+            <p style={{ margin: 0 }}><strong>2. את הבית מנהלים יחד.</strong> חשמל, ארנונה, קניות וכל הוצאה משותפת מסומנים כהוצאת בית.</p>
+            <p style={{ margin: 0 }}><strong>3. היחס קובע את החלק של כל אחד.</strong> לדוגמה, בחלוקה של 50/50 חשבון חשמל של ₪1,000 שנרשם על שם אחד מכם מציג חלק של ₪500 לכל אחד.</p>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>ילדים אינם צד בחלוקה: הוצאה שילד רשם נכנסת לסך הוצאות הבית, אך אינה מחולקת בין המבוגרים ואינה חושפת להם הכנסה פרטית.</p>
+          <h3 style={{ margin: 0, fontSize: 16 }}>מה היחס שלכם בהוצאות הבית?</h3>
           <OptionCards
             cols={2}
             value={half ? "half" : "other"}
@@ -228,14 +238,14 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
           <div className="panel" style={{ display: "grid", gap: 12, padding: 16, background: "var(--cream-1)" }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 16 }}>ההכנסה שלך</h3>
-              <p className="muted" style={{ margin: "4px 0 0" }}>רשות. המספר נשמר רק אצלך, לא מוצג למבוגרים אחרים בבית, ולא משנה את היחס שבחרת.</p>
+              <p className="muted" style={{ margin: "4px 0 0" }}>רשות. זהו מספר פרטי, ואינו קובע את היחס או את התקציב המשותף. רק את/ה רואה אותו.</p>
             </div>
             <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })}
               placeholder="18,000" ariaLabel="ההכנסה שלך" dataAction="set-private-income" />
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>אפשר להמשיך גם בלי סכום ולהוסיף או למחוק אותו אחר כך.</p>
           </div>
           <p className="muted" style={{ margin: 0 }}>
-            היחס וההכנסה נשמרים בסיום ההגדרה. החלוקה מתחילה כשמצטרף בן/בת זוג; עד אז אין הוצאה לחלק.
+            בסיום נשמור את הבחירה ואת היחס. כשיש שני מבוגרים פעילים, כל הוצאת בית חדשה תקבל את החלוקה שבחרתם; עד אז היחס מחכה למבוגר/ת נוסף/ת.
           </p>
         </section>
       )}

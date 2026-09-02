@@ -955,7 +955,7 @@ const UNALLOCATED_LABELS: Record<PurchaseUnallocatedReason, string> = {
   allocation_failure: "החלוקה לא הושלמה"
 };
 
-function MyMoneyCard({ householdId, from, to }: { householdId: string; from: string; to: string }) {
+function MyMoneyCard({ householdId, from, to, personalSpent }: { householdId: string; from: string; to: string; personalSpent: number }) {
   const [totals, setTotals] = useState<SeparateAccountsFinancialCycle>();
   const [hidden, setHidden] = useState(!SEPACCT_UI_ENABLED);
 
@@ -985,6 +985,11 @@ function MyMoneyCard({ householdId, from, to }: { householdId: string; from: str
         <div className="panel"><span className="label">נרשמו על שמך</span><strong className="mono" dir="ltr">{ilsFromAgorot(totals.recordedAgorot)}</strong></div>
         <div className="panel"><span className="label">החלק שלך</span><strong className="mono" dir="ltr">{ilsFromAgorot(totals.viewerShareAgorot)}</strong></div>
       </div>
+      <div className="panel" style={{ marginTop: 12 }}>
+        <span className="label">הוצאות אישיות שלך במחזור</span>
+        <strong className="mono" dir="ltr">₪{personalSpent.toLocaleString("he-IL")}</strong>
+        <p className="muted" style={{ margin: "6px 0 0" }}>המספר הזה מוצג רק לך ואינו חלק מהחלוקה ביניכם.</p>
+      </div>
       {uniformViewerPercentage(totals) !== null && <p className="muted">האחוז האחיד במחזור: <bdi dir="ltr">{uniformViewerPercentage(totals)}</bdi></p>}
       {totals.unallocated.map((bucket) => <p className="status warn" key={bucket.reason}>{UNALLOCATED_LABELS[bucket.reason]}: <bdi dir="ltr">{ilsFromAgorot(bucket.agorot)}</bdi> ({bucket.count})</p>)}
       {/* The spec's link is "כל ההוצאות המשותפות →". It points at the page these two numbers
@@ -1006,7 +1011,7 @@ function FamilyView({
   categoryBudgets,
   memberColorMap,
 }: {
-  budget: BudgetCurrent & { mySpentAmount: number };
+  budget: BudgetCurrent & { mySpentAmount: number; myPersonalSpent: number };
   activeProjects: ProjectBudget[];
   role: string | undefined;
   householdId: string;
@@ -1023,7 +1028,7 @@ function FamilyView({
       {/* Spec screen E. Inside `FamilyView`, so a `limited_member` never reaches it — the page
           renders `LimitedMemberView` for them instead, and the route would 403 anyway. Two
           independent reasons, which is the posture decision #7 asks for. */}
-      <MyMoneyCard householdId={householdId} from={budget.periodStart} to={budget.periodEnd} />
+      <MyMoneyCard householdId={householdId} from={budget.periodStart} to={budget.periodEnd} personalSpent={budget.myPersonalSpent} />
 
       {/* Hero row: MonthProgress + InsightsStrip placeholder */}
       <div className="grid two">

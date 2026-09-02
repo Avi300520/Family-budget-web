@@ -58,8 +58,10 @@ export interface WizardController {
 /** The steps that carry a question, for THIS household. `done` is a celebration, not a step, and
  *  a household that is never asked about separate accounts must not see a segment for it — a
  *  progress bar that counts a screen you will not be shown is a progress bar that lies. */
-const interactiveSteps = (state: WizardState, editMode: boolean): ReadonlyArray<StepKey> =>
-  visibleSteps(state).filter((step) => step !== "done" && !(editMode && step === "separate"));
+const interactiveSteps = (state: WizardState, _editMode: boolean): ReadonlyArray<StepKey> =>
+  // Editing must include this decision. Hiding it made an inactive arrangement look impossible
+  // to restart from the place people naturally return to update the household.
+  visibleSteps(state).filter((step) => step !== "done");
 
 export function useOnboardingWizard(): WizardController {
   const router = useRouter();
@@ -232,7 +234,7 @@ export function useOnboardingWizard(): WizardController {
       // one-share shape would be refused `400 split.invalid` and the person would be told their
       // ratio failed to save when nothing was wrong with it. An existing household changes its
       // arrangement on `/settings/separate-accounts`, which is the only surface that can.
-      if (!editMode && state.separateAccounts !== null && saved.household?.id && saved.user?.id) {
+      if (state.separateAccounts !== null && saved.household?.id && saved.user?.id) {
         const householdId = saved.household.id;
         const missed: string[] = [];
         const shareBp = pendingSplitBp(state.separateSharePct);
@@ -244,13 +246,22 @@ export function useOnboardingWizard(): WizardController {
           missed.push("יחס החלוקה");
         } else {
           try {
-            // The PENDING shape: one share, naming the person who answered, with the counterpart
-            // unnamed because the counterpart has not joined. The backend stores it and does NOT
-            // declare; the declaration is minted when the second adult arrives and the remainder
-            // becomes theirs.
+            // Use the roster at save time. With one adult this is the server's pending shape;
+            // with two, both people are named so the arrangement can become live immediately.
+            const current = await sepacct.getConfig();
+            const adults = current.activeAdults;
+            if (!adults.some((adult) => adult.userId === saved.user!.id) || adults.length > 2) {
+              throw new Error("unsupported-adult-roster");
+            }
+            const defaultSplit = adults.length === 1
+              ? [{ userId: saved.user.id, shareBp }]
+              : adults.map((adult) => ({
+                userId: adult.userId,
+                shareBp: adult.userId === saved.user!.id ? shareBp : 10000 - shareBp
+              }));
             await sepacct.saveConfig(householdId, {
               separateAccounts: true,
-              defaultSplit: [{ userId: saved.user.id, shareBp }]
+              defaultSplit
             });
           } catch { missed.push("יחס החלוקה"); }
         }

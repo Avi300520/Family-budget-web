@@ -18,7 +18,7 @@ const STEP_META: Record<StepKey, { title: string; sub: string }> = {
   welcome: { title: "ברוכים הבאים לפינגטלי", sub: "כמה שאלות קצרות ונכין תקציב שמתנהל בוואטסאפ." },
   profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
   // The step ASKS now, so the subtitle is the question and not a description of the feature.
-  separate: { title: "איך אתם מנהלים את הכסף?", sub: "אפשר לשנות בכל שלב." },
+  separate: { title: "איך מנהלים כסף בבית הזה?", sub: "נבחר יחד את הגבול בין כסף אישי לבין הוצאות הבית." },
   cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
   income: { title: "כמה כסף נכנס - וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
   fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות - שכירות, חשבונות, מנויים ועוד." },
@@ -144,7 +144,7 @@ export default function OnboardingPage() {
     wizard.editMode && wizard.stepKey === "welcome"
       ? { title: "עדכון פרטי משק הבית", sub: "כל הפרטים כבר מלאים - אפשר לעבור ולעדכן מה שצריך." }
       : wizard.stepKey === "income" && wizard.state.separateAccounts
-        ? { title: "התקציב המשותף לניהול", sub: "הסכום המשותף שתרצו לנהל בבית, בלי לערב את ההכנסה הפרטית שלכם." }
+        ? { title: "התקציב המשותף לניהול", sub: "זה לא השכר של אף אחד: זה הסכום המשותף שתרצו לתכנן ולעקוב אחריו בבית." }
       : STEP_META[wizard.stepKey];
   const StepComponent = STEP_COMPONENTS[wizard.stepKey as Exclude<StepKey, "done">];
   const totals = computeTotals(wizard.state);
