@@ -16,6 +16,8 @@
  * seven-way split lives in the backend where the routes are.
  */
 export const SEPACCT_UI_ENABLED = process.env.NEXT_PUBLIC_SEPACCT_UI === "1";
+/** Private-plan storage has its own backend migration and operator switch. */
+export const SEPACCT_PERSONAL_PLAN_UI_ENABLED = process.env.NEXT_PUBLIC_SEPACCT_PERSONAL_PLAN === "1";
 
 /** As much of the `DomainError` envelope as a caller needs: the stable `code`. */
 export class SepacctError extends Error {

@@ -9,10 +9,11 @@ import {
   createDefaultState, computeTotals, validateStep, buildOnboardingPayload,
   buildStateFromBaseline, suggestedManagedBudget, loadDraft, saveDraft, clearDraft,
   humanizeOnboardingError, incomeRefusedNotice, STEP_ORDER, visibleSteps, pendingSplitBp,
-  type StepKey, type WizardState
+  FIXED_PRESETS, type StepKey, type WizardState, type WizardFixedExpense
 } from "../../lib/onboarding/model";
 import { sepacct } from "../../lib/sepacctApi";
 import { agorotFromInput } from "../../lib/sepacct";
+import { SEPACCT_PERSONAL_PLAN_UI_ENABLED } from "../../lib/sepacct";
 
 // Steps where an empty answer is acceptable and a "skip" affordance is offered.
 const SKIPPABLE: ReadonlySet<StepKey> = new Set(["fixed", "alerts"]);
@@ -75,6 +76,9 @@ export function useOnboardingWizard(): WizardController {
   const [editMode, setEditMode] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A failed self-only read must never be interpreted as "the person has no commitments" and
+  // overwritten by an empty snapshot on an edit save.
+  const privateRecurringReadyRef = useRef(false);
 
   // ── Bootstrap: resolve the user, redirect if already onboarded, restore draft ──
   useEffect(() => {
@@ -96,6 +100,7 @@ export function useOnboardingWizard(): WizardController {
             return;
           }
           setEditMode(true);
+          privateRecurringReadyRef.current = !SEPACCT_PERSONAL_PLAN_UI_ENABLED;
           setState(buildStateFromBaseline(
             {
               financialBaseline: me.household.financialBaseline,
@@ -106,12 +111,39 @@ export function useOnboardingWizard(): WizardController {
             },
             me.user.displayName ?? undefined
           ));
+          if (SEPACCT_PERSONAL_PLAN_UI_ENABLED) {
+            try {
+              const own = await sepacct.getOwnPrivateRecurringExpenses(me.household.id);
+              if (cancelled) return;
+              privateRecurringReadyRef.current = true;
+              const privateFixed: WizardFixedExpense[] = own.expenses.map((expense) => ({
+                key: `private_${expense.id}`,
+                serverId: expense.id,
+                sourcePresetId: null,
+                isCustom: true,
+                on: expense.isActive,
+                label: expense.label,
+                reportCat: expense.reportCat,
+                emoji: FIXED_PRESETS.find((preset) => preset.reportCat === expense.reportCat)?.emoji ?? "🔒",
+                amount: expense.amountAgorot / 100,
+                frequency: expense.frequency,
+                isEstimate: false,
+                alertOnChange: false,
+                billingDay: expense.billingDay,
+                scope: "personal"
+              }));
+              setState((current) => ({ ...current, fixed: [...current.fixed, ...privateFixed] }));
+            } catch {
+              // The capability is optional and may be dormant while this build is rolling out.
+            }
+          }
           // Intentionally do NOT set userIdRef in edit mode: that disables draft
           // autosave/restore, so a first-time onboarding draft is never polluted or
           // resurrected over the live baseline being edited.
           return;
         }
         const uid = me.user.id;
+        privateRecurringReadyRef.current = true;
         userIdRef.current = uid;
         const draft = loadDraft(uid, Date.now());
         if (draft) {
@@ -268,6 +300,36 @@ export function useOnboardingWizard(): WizardController {
           try {
             await sepacct.saveOwnIncome(householdId, income.agorot);
           } catch { missed.push("ההכנסה שלך"); }
+        }
+        const privatePlan = agorotFromInput(String(state.ownPrivatePlan ?? ""));
+        if (state.separateAccounts && SEPACCT_PERSONAL_PLAN_UI_ENABLED && privatePlan.ok && privatePlan.agorot !== null) {
+          try {
+            await sepacct.saveOwnPrivatePlan(householdId, privatePlan.agorot);
+          } catch { missed.push("התקציב האישי שלך"); }
+        }
+        if (state.separateAccounts && SEPACCT_PERSONAL_PLAN_UI_ENABLED && privateRecurringReadyRef.current) {
+          const privateRecurring = state.fixed
+            .filter((expense) => expense.scope === "personal")
+            .map((expense) => {
+              const amount = agorotFromInput(String(expense.amount ?? ""));
+              if (!amount.ok || amount.agorot === null || amount.agorot <= 0 || !expense.label.trim()) return null;
+              return {
+                ...(expense.serverId ? { id: expense.serverId } : {}),
+                label: expense.label.trim(),
+                amountAgorot: amount.agorot,
+                frequency: expense.frequency,
+                reportCat: expense.reportCat,
+                billingDay: expense.billingDay,
+                isActive: expense.on
+              };
+            });
+          if (privateRecurring.some((expense) => expense === null)) {
+            missed.push("private recurring commitments");
+          } else {
+            try {
+              await sepacct.replaceOwnPrivateRecurringExpenses(householdId, privateRecurring.filter((expense): expense is NonNullable<typeof expense> => expense !== null));
+            } catch { missed.push("private recurring commitments"); }
+          }
         }
         if (missed.length > 0) {
           // ⚠️ THE VERB AGREES WITH THE COUNT. `missed.join(" ו")` with ONE item rendered

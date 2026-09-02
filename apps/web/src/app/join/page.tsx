@@ -8,8 +8,9 @@ import { api } from "../../lib/api";
 import { PhoneInput } from "../../components/PhoneInput";
 import { DEFAULT_COUNTRY_ISO, dialForIso, toE164 } from "../../lib/countryCodes";
 import Link from "next/link";
-import { agorotFromInput, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
+import { agorotFromInput, SEPACCT_PERSONAL_PLAN_UI_ENABLED, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
 import { sepacct } from "../../lib/sepacctApi";
+import { WhatsAppCtaButton } from "../../components/WhatsAppCta";
 
 type Phase = "loading" | "auth" | "link_sent" | "preview" | "joining" | "done" | "error";
 
@@ -39,6 +40,8 @@ function JoinPageInner() {
   // picked out of it. Null on every failure path, which is what keeps screen D fail-open.
   const [arrangement, setArrangement] = useState<SeparateAccountsArrangement | null>(null);
   const [ownIncome, setOwnIncome] = useState("");
+  const [ownPrivatePlan, setOwnPrivatePlan] = useState("");
+  const [sharedPlan, setSharedPlan] = useState<{ monthly: number | null; spent: number | null }>({ monthly: null, spent: null });
 
   useEffect(() => {
     if (!token) { setPhase("error"); setError("קישור הזמנה חסר"); return; }
@@ -90,6 +93,19 @@ function JoinPageInner() {
         ? await api.joinHouseholdDirect(token, nameToSend)
         : await api.joinHousehold(token, nameToSend);
       setPhase("done");
+      const householdId = joined.household?.id;
+      setSharedPlan({
+        monthly: typeof joined.household?.monthlyBudgetAmount === "number" ? joined.household.monthlyBudgetAmount : null,
+        spent: null
+      });
+      if (householdId) {
+        try {
+          const budget = await api.budgetCurrent(householdId);
+          setSharedPlan({ monthly: budget.budgetAmount, spent: budget.spentAmount });
+        } catch {
+          // Joining succeeded; a transient dashboard read must not trap the new adult here.
+        }
+      }
       // ── `A63` / `CC_UX_BUILD` item 5 — **THE OTHER PARTY TO THE ARRANGEMENT GETS A SCREEN.** ──
       //
       // Half the users of a two-person arrangement are the person who did not configure it, and
@@ -156,6 +172,7 @@ function JoinPageInner() {
   if (phase === "done" && arrangement) {
     const config = arrangement;
     const shares = "shares" in config ? config.shares : [];
+    const formatMoney = (amount: number) => `${Math.round(amount).toLocaleString("he-IL")} ₪`;
     const managerText = config.managerNames.filter(Boolean).join(" ו");
     const continueFromIntro = async (saveIncome: boolean) => {
       if (saveIncome && ownIncome.trim() && household?.id) {
@@ -168,6 +185,19 @@ function JoinPageInner() {
           await sepacct.saveOwnIncome(household.id, parsed.agorot);
         } catch {
           setError("לא הצלחנו לשמור את ההכנסה. הסכום נשאר כאן כדי שתוכלו לנסות שוב.");
+          return;
+        }
+      }
+      if (SEPACCT_PERSONAL_PLAN_UI_ENABLED && ownPrivatePlan.trim() && household?.id) {
+        const parsed = agorotFromInput(ownPrivatePlan.replace(/,/g, ""));
+        if (!parsed.ok || parsed.agorot === null) {
+          setError("כתבו סכום חיובי עם עד שתי ספרות אחרי הנקודה, או השאירו את התקציב האישי ריק.");
+          return;
+        }
+        try {
+          await sepacct.saveOwnPrivatePlan(household.id, parsed.agorot);
+        } catch {
+          setError("לא הצלחנו לשמור את התקציב האישי. הסכום נשאר כאן כדי שתוכלו לנסות שוב.");
           return;
         }
       }
@@ -190,12 +220,16 @@ function JoinPageInner() {
         <main id="main" className="login-box">
           <h1 className="page-title" style={{ fontSize: 19, marginBottom: 14 }}>בבית הזה הכסף מנוהל בנפרד</h1>
           <ul style={{ margin: "0 0 18px", paddingInlineStart: "1.2em", display: "grid", gap: "var(--sp-2)" }}>
+            {managerText && <li><strong>{managerText}</strong> הגדיר/ה שהחשבונות בבית נפרדים.</li>}
+            {sharedPlan.monthly !== null && <li>תקציב הבית המשותף הוא <strong>{formatMoney(sharedPlan.monthly)}</strong> לחודש.</li>}
+            {sharedPlan.spent !== null && <li>כבר נרשמו בתקציב הבית <strong>{formatMoney(sharedPlan.spent)}</strong> במחזור הנוכחי.</li>}
             <li>
               {shares.length > 0
                 ? <>יחס ההוצאות המשותפות: {shares.map((share, index) => <span key={share.userId}>{index > 0 ? " · " : ""}{share.displayName.trim() || "חבר/ה"} <bdi dir="ltr">{(share.shareBp / 100).toFixed(2).replace(/\.?0+$/, "")}%</bdi></span>)}</>
                 : "עדיין לא נקבע יחס מלא להוצאות המשותפות."}
             </li>
             <li>{operatingCopy}</li>
+            <li>ילדים לא מקבלים יחס חלוקה ולא רואים תוכניות של מבוגרים. הם רואים רק את הקצבה האישית שהוגדרה להם.</li>
             <li>ההכנסה של כל אחד נשארת פרטית ונראית רק לו.</li>
           </ul>
           {!config.capabilities.canEditRatio && <p className="muted">{managerText ? `מנהלי הבית שאפשר לפנות אליהם: ${managerText}.` : "אפשר לפנות למנהלי הבית כדי לדבר על היחס."}</p>}
@@ -204,6 +238,13 @@ function JoinPageInner() {
             <input className="input mono" inputMode="decimal" data-action="set-own-income" value={ownIncome} onChange={(event) => setOwnIncome(event.target.value)} />
             <span className="muted">רק את/ה יכול/ה לראות ולשנות את הסכום.</span>
           </label>
+          {SEPACCT_PERSONAL_PLAN_UI_ENABLED && (
+            <label style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+              התקציב האישי שלך (לא חובה)
+              <input className="input mono" inputMode="decimal" data-action="set-own-private-plan" value={ownPrivatePlan} onChange={(event) => setOwnPrivatePlan(event.target.value)} />
+              <span className="muted">כולל הוצאות אישיות ואת החלק שלך בהוצאות הבית. רק את/ה רואה אותו.</span>
+            </label>
+          )}
           {error && <div className="status error" role="alert">{error}</div>}
           <div className="form">
             <button
@@ -213,6 +254,7 @@ function JoinPageInner() {
               המשך
             </button>
             <button type="button" className="button secondary" data-action="skip-own-income" onClick={() => void continueFromIntro(false)}>דלג/י</button>
+            <WhatsAppCtaButton label="רישום הוצאה ראשונה ב-WhatsApp" />
             {config.capabilities.canEditRatio
               ? <Link className="button secondary" data-action="edit-ratio" href="/settings/separate-accounts">עריכת היחס</Link>
               : <a className="button secondary" data-action="open-ratio-message" href={`https://wa.me/?text=${draft}`} target="_blank" rel="noreferrer">פתיחת הודעה למנהלי הבית</a>}

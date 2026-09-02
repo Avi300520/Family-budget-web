@@ -25,7 +25,7 @@ import { WishlistPanel } from "../../components/WishlistPanel";
 import { Donut } from "../../components/charts";
 import { api } from "../../lib/api";
 import { heDate, ilsFromAgorot } from "../../lib/format";
-import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
+import { SEPACCT_PERSONAL_PLAN_UI_ENABLED, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
 import { sepacct } from "../../lib/sepacctApi";
 import { shouldShowSeparateAccountsCard, uniformViewerPercentage } from "../../lib/sepacctView";
 import { redirectIfUnauthorized } from "../../lib/authGuard";
@@ -957,12 +957,16 @@ const UNALLOCATED_LABELS: Record<PurchaseUnallocatedReason, string> = {
 
 function MyMoneyCard({ householdId, from, to, personalSpent }: { householdId: string; from: string; to: string; personalSpent: number }) {
   const [totals, setTotals] = useState<SeparateAccountsFinancialCycle>();
+  const [privatePlanAgorot, setPrivatePlanAgorot] = useState<number | null>();
   const [hidden, setHidden] = useState(!SEPACCT_UI_ENABLED);
 
   useEffect(() => {
     if (!SEPACCT_UI_ENABLED) return;
-    void sepacct.getFinancialCycle(householdId, from, to)
-      .then(setTotals)
+    void Promise.all([
+      sepacct.getFinancialCycle(householdId, from, to),
+      SEPACCT_PERSONAL_PLAN_UI_ENABLED ? sepacct.getOwnPrivatePlan(householdId) : Promise.resolve({ monthlyAgorot: null })
+    ])
+      .then(([cycle, plan]) => { setTotals(cycle); setPrivatePlanAgorot(plan.monthlyAgorot); })
       // `404` (undeclared household, or the flag off) and a transient failure are NOT told apart,
       // and deliberately: the distinction matters to a caller that can act on it, and a dashboard
       // panel cannot. Both hide the card, which is the only outcome either one has.
@@ -990,6 +994,13 @@ function MyMoneyCard({ householdId, from, to, personalSpent }: { householdId: st
         <strong className="mono" dir="ltr">₪{personalSpent.toLocaleString("he-IL")}</strong>
         <p className="muted" style={{ margin: "6px 0 0" }}>המספר הזה מוצג רק לך ואינו חלק מהחלוקה ביניכם.</p>
       </div>
+      {privatePlanAgorot !== undefined && privatePlanAgorot !== null && (
+        <div className="panel" style={{ marginTop: 12 }}>
+          <span className="label">התוכנית האישית שלי במחזור</span>
+          <strong className="mono" dir="ltr">{ilsFromAgorot(Math.round(personalSpent * 100) + (totals.viewerShareAgorot ?? 0))} / {ilsFromAgorot(privatePlanAgorot)}</strong>
+          <p className="muted" style={{ margin: "6px 0 0" }}>כולל את ההוצאות האישיות שלך ואת החלק שחושב לך בהוצאות המשותפות.</p>
+        </div>
+      )}
       {uniformViewerPercentage(totals) !== null && <p className="muted">האחוז האחיד במחזור: <bdi dir="ltr">{uniformViewerPercentage(totals)}</bdi></p>}
       {totals.unallocated.map((bucket) => <p className="status warn" key={bucket.reason}>{UNALLOCATED_LABELS[bucket.reason]}: <bdi dir="ltr">{ilsFromAgorot(bucket.agorot)}</bdi> ({bucket.count})</p>)}
       {/* The spec's link is "כל ההוצאות המשותפות →". It points at the page these two numbers

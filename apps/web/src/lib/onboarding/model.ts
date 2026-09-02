@@ -142,6 +142,8 @@ export interface WizardFixedExpense {
   isEstimate: boolean;
   alertOnChange: boolean;
   billingDay: number | null;
+  /** Household commitments are shared; private commitments stay self-owned. */
+  scope: "household" | "personal";
 }
 
 export interface WizardState {
@@ -182,6 +184,8 @@ export interface WizardState {
    * figure to disappear.
    */
   ownIncome: number | "";
+  /** Optional private operational plan: private purchases plus this adult's household share. */
+  ownPrivatePlan: number | "";
   acceptTerms: boolean;
   acceptPrivacy: boolean;
   // cycle
@@ -236,6 +240,7 @@ export function createDefaultState(): WizardState {
     separateAccounts: null,
     separateSharePct: 50,
     ownIncome: "",
+    ownPrivatePlan: "",
     // Consent is captured passively at /login (browse-wrap per the /privacy page) and the backend
     // stamps consent_terms_at/consent_privacy_at unconditionally on completeOnboarding. Seed true so
     // the legacy consent gate in validateStep('profile') and the hardcoded acceptTerms/acceptPrivacy
@@ -292,7 +297,7 @@ function num(v: number | ""): number {
 }
 
 export function totalMonthlyFixed(state: WizardState): number {
-  return state.fixed.reduce((sum, f) => (f.on ? sum + monthlyOf(num(f.amount), f.frequency) : sum), 0);
+  return state.fixed.reduce((sum, f) => (f.on && f.scope !== "personal" ? sum + monthlyOf(num(f.amount), f.frequency) : sum), 0);
 }
 
 /** Income-mode suggested managed budget = income − monthly fixed (never below 0). */
@@ -511,7 +516,9 @@ export function buildOnboardingPayload(state: WizardState): OnboardingPayload {
           : { income: state.budgetMode === "income" ? num(state.income) : null })
     },
     fixedExpenses: state.fixed
-      .filter((f) => f.on)
+      // Pre-scope drafts/state are household commitments by definition. Treating an absent field
+      // as private would erase a pre-existing household fixed expense on its next wizard save.
+      .filter((f) => f.on && f.scope !== "personal")
       .map((f) => ({
         // SEPACCT stage 1 / `OD-5` (`SEPACCT_SPEC` 8.3) - SEND THE LINE'S SERVER ID BACK.
         //
@@ -659,6 +666,7 @@ export function redactDraftForStorage(state: WizardState): WizardState {
     // the narrow one; inverting this to an allowlist is the durable one and is filed, not done, so
     // that a privacy change and a refactor do not ship in the same commit.
     ownIncome: "",
+    ownPrivatePlan: "",
     managedBudget: "",
     displayName: "",
     householdName: "",
@@ -666,7 +674,9 @@ export function redactDraftForStorage(state: WizardState): WizardState {
     subBudgets: {},
     // Guard: a corrupt/stale in-flight draft can carry a non-array `fixed`; pass it through
     // untouched so redaction never throws (loadDraft's coerceDraftState repairs it on read).
-    fixed: Array.isArray(state.fixed) ? state.fixed.map((f) => ({ ...f, amount: "" })) : state.fixed,
+    fixed: Array.isArray(state.fixed)
+      ? state.fixed.filter((f) => f.scope !== "personal").map((f) => ({ ...f, amount: "" }))
+      : state.fixed,
   };
 }
 
@@ -722,7 +732,8 @@ function coerceFixedExpense(raw: unknown): WizardFixedExpense | null {
     frequency: inEnum(raw.frequency, FREQUENCY_IDS) ? raw.frequency : "monthly",
     isEstimate: raw.isEstimate === true,
     alertOnChange: raw.alertOnChange === true,
-    billingDay: typeof raw.billingDay === "number" && Number.isFinite(raw.billingDay) ? raw.billingDay : null
+    billingDay: typeof raw.billingDay === "number" && Number.isFinite(raw.billingDay) ? raw.billingDay : null,
+    scope: raw.scope === "personal" ? "personal" : "household"
   };
 }
 
@@ -824,7 +835,8 @@ function fixedFromBaseline(raw: unknown): WizardFixedExpense | null {
     frequency: inEnum(raw.frequency, FREQUENCY_IDS) ? raw.frequency : preset?.frequency ?? "monthly",
     isEstimate: raw.isEstimate === true,
     alertOnChange: raw.alertOnChange === true,
-    billingDay: typeof raw.billingDay === "number" && Number.isFinite(raw.billingDay) ? raw.billingDay : null
+    billingDay: typeof raw.billingDay === "number" && Number.isFinite(raw.billingDay) ? raw.billingDay : null,
+    scope: "household"
   };
 }
 

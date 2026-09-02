@@ -15,7 +15,7 @@ import {
   Stepper, ChipSelect, OptionCards, MoneyInput, DayChips, FreqPick, Field, MiniToggle, TextInput
 } from "./controls";
 import { NotificationsEditor } from "../../components/NotificationsEditor";
-import { SEPACCT_UI_ENABLED } from "../../lib/sepacct";
+import { SEPACCT_PERSONAL_PLAN_UI_ENABLED, SEPACCT_UI_ENABLED } from "../../lib/sepacct";
 
 export interface StepProps {
   state: WizardState;
@@ -268,10 +268,16 @@ export function PrivateMoneyStep({ state, set }: StepProps) {
           dataAction="set-private-income"
         />
       </Field>
-      <div className="status" style={{ display: "grid", gap: 6 }}>
-        <strong>ומה לגבי התקציב האישי?</strong>
-        <span>המערכת כיום מפרידה בין הוצאות אישיות לבין חלקך בהוצאות הבית. בהמשך תגדירו את תקציב הבית המשותף; חלקך בו מוצג בנפרד בכל הוצאה משותפת.</span>
-      </div>
+      {SEPACCT_PERSONAL_PLAN_UI_ENABLED ? (
+        <Field label="כמה כסף תרצה/י לנהל לעצמך החודש?" hint="התקציב האישי כולל גם הוצאות אישיות וגם את החלק שלך בהוצאות הבית. הוא פרטי ורק את/ה רואה אותו.">
+          <MoneyInput size="lg" value={state.ownPrivatePlan} onChange={(v) => set({ ownPrivatePlan: v })} placeholder="25,000" ariaLabel="התקציב האישי שלי" dataAction="set-private-plan" />
+        </Field>
+      ) : (
+        <div className="status" style={{ display: "grid", gap: 6 }}>
+          <strong>ומה לגבי התקציב האישי?</strong>
+          <span>המערכת מפרידה בין הוצאות אישיות לבין חלקך בהוצאות הבית. בהמשך תגדירו את תקציב הבית המשותף; חלקך בו מוצג בנפרד בכל הוצאה משותפת.</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -395,11 +401,12 @@ export function IncomeStep({ state, set, editMode }: StepProps) {
 }
 
 // ── Fixed expenses ────────────────────────────────────────────────────────────────
-function FixedExpenseCard({ item, onPatch, onRemove, precise }: {
+function FixedExpenseCard({ item, onPatch, onRemove, precise, showScope }: {
   item: WizardFixedExpense;
   onPatch: (patch: Partial<WizardFixedExpense>) => void;
   onRemove: () => void;
   precise: boolean;
+  showScope: boolean;
 }) {
   const monthly = monthlyOf(typeof item.amount === "number" ? item.amount : 0, item.frequency);
   return (
@@ -446,6 +453,19 @@ function FixedExpenseCard({ item, onPatch, onRemove, precise }: {
         </Field>
       )}
 
+      {showScope && (
+        <Field label="לאיזה כסף ההוצאה הקבועה שייכת?" hint="הוצאה משותפת נכנסת לתקציב הבית; הוצאה אישית נשארת פרטית ולא נראית לבן/בת הזוג.">
+          <ChipSelect
+            value={item.scope}
+            onChange={(v) => onPatch({ scope: v as WizardFixedExpense["scope"] })}
+            options={[
+              { id: "household", label: "משותפת לבית", emoji: "🏠" },
+              { id: "personal", label: "אישית שלי", emoji: "🔒" }
+            ]}
+          />
+        </Field>
+      )}
+
       {(item.isCustom || precise) && (
         <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
           {item.isCustom && <MiniToggle label="הסכום מוערך" on={item.isEstimate} onChange={(v) => onPatch({ isEstimate: v })} />}
@@ -464,6 +484,7 @@ export function FixedStep({ state, set }: StepProps) {
   // Quick mode keeps each fixed expense to its amount only; the frequency picker and
   // the per-expense change-alert toggle are precise-only.
   const precise = state.mode === "precise";
+  const showScope = state.separateAccounts === true && SEPACCT_PERSONAL_PLAN_UI_ENABLED;
   const activeKeys = new Set(state.fixed.map((f) => f.key));
 
   const togglePreset = (presetId: string) => {
@@ -475,7 +496,7 @@ export function FixedStep({ state, set }: StepProps) {
         key: preset.id, sourcePresetId: preset.id, isCustom: false, on: true,
         label: preset.label, reportCat: preset.reportCat, emoji: preset.emoji,
         amount: "", frequency: preset.frequency, isEstimate: preset.isEstimate ?? false,
-        alertOnChange: false, billingDay: null
+        alertOnChange: false, billingDay: null, scope: "household"
       };
       set({ fixed: [...state.fixed, entry] });
     }
@@ -485,7 +506,7 @@ export function FixedStep({ state, set }: StepProps) {
     const entry: WizardFixedExpense = {
       key: genId(), sourcePresetId: null, isCustom: true, on: true,
       label: "", reportCat: "misc", emoji: "📌", amount: "", frequency: "monthly",
-      isEstimate: true, alertOnChange: true, billingDay: null
+      isEstimate: true, alertOnChange: true, billingDay: null, scope: "household"
     };
     set({ fixed: [...state.fixed, entry] });
   };
@@ -495,7 +516,8 @@ export function FixedStep({ state, set }: StepProps) {
 
   const removeItem = (key: string) => set({ fixed: state.fixed.filter((f) => f.key !== key) });
 
-  const monthlyTotal = state.fixed.reduce((s, f) => (f.on ? s + monthlyOf(typeof f.amount === "number" ? f.amount : 0, f.frequency) : s), 0);
+  const monthlyTotal = state.fixed.reduce((s, f) => (f.on && f.scope !== "personal" ? s + monthlyOf(typeof f.amount === "number" ? f.amount : 0, f.frequency) : s), 0);
+  const privateMonthlyTotal = state.fixed.reduce((s, f) => (f.on && f.scope === "personal" ? s + monthlyOf(typeof f.amount === "number" ? f.amount : 0, f.frequency) : s), 0);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -521,7 +543,7 @@ export function FixedStep({ state, set }: StepProps) {
       {state.fixed.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {state.fixed.map((f) => (
-            <FixedExpenseCard key={f.key} item={f} precise={precise} onPatch={(patch) => patchItem(f.key, patch)} onRemove={() => removeItem(f.key)} />
+            <FixedExpenseCard key={f.key} item={f} precise={precise} showScope={showScope} onPatch={(patch) => patchItem(f.key, patch)} onRemove={() => removeItem(f.key)} />
           ))}
         </div>
       )}
@@ -535,7 +557,8 @@ export function FixedStep({ state, set }: StepProps) {
       </button>
 
       <div className="muted" style={{ fontSize: 13 }}>
-        סך הוצאות קבועות: <strong className="mono">{fmt(monthlyTotal)}</strong> לחודש
+        הוצאות קבועות של הבית: <strong className="mono">{fmt(monthlyTotal)}</strong> לחודש
+        {showScope && <> · אישיות מתוכננות: <strong className="mono">{fmt(privateMonthlyTotal)}</strong> לחודש</>}
       </div>
     </div>
   );

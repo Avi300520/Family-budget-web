@@ -72,6 +72,20 @@ export interface OwnIncomeDto {
   monthlyAgorot: number | null;
 }
 
+export interface OwnPrivatePlanDto {
+  monthlyAgorot: number | null;
+}
+
+export interface OwnPrivateRecurringExpenseDto {
+  id: string;
+  label: string;
+  amountAgorot: number;
+  frequency: import("@shopping-assistant/shared-types").FrequencyId;
+  reportCat: import("@shopping-assistant/shared-types").ReportCatId;
+  billingDay: number | null;
+  isActive: boolean;
+}
+
 
 /**
  * The api-client raises `ApiClientError`; SEPACCT surfaces branch on `SepacctError` via `isAbsent`,
@@ -136,6 +150,17 @@ export const sepacct = {
   /** §3 — PUT …/my-income. `null` clears it; a float is `400 income.invalid`, so send agorot. */
   saveOwnIncome: (householdId: string, monthlyAgorot: number | null) =>
     call<OwnIncomeDto>(`/api/v1/households/${householdId}/my-income`, { method: "PUT", ...body({ monthlyAgorot }) }),
+
+  getOwnPrivatePlan: (householdId: string) => call<OwnPrivatePlanDto>(`/api/v1/households/${householdId}/my-private-plan`),
+
+  saveOwnPrivatePlan: (householdId: string, monthlyAgorot: number | null) =>
+    call<OwnPrivatePlanDto>(`/api/v1/households/${householdId}/my-private-plan`, { method: "PUT", ...body({ monthlyAgorot }) }),
+
+  getOwnPrivateRecurringExpenses: (householdId: string) =>
+    call<{ expenses: OwnPrivateRecurringExpenseDto[] }>(`/api/v1/households/${householdId}/my-private-recurring-expenses`),
+
+  replaceOwnPrivateRecurringExpenses: (householdId: string, expenses: Array<Omit<OwnPrivateRecurringExpenseDto, "id"> & { id?: string }>) =>
+    call<{ expenses: OwnPrivateRecurringExpenseDto[] }>(`/api/v1/households/${householdId}/my-private-recurring-expenses`, { method: "PUT", ...body({ expenses }) }),
 
   /** One truthful cycle contract: viewer-only amounts, presence, and reconciliation buckets. */
   getFinancialCycle: (householdId: string, from: string, to: string) =>
