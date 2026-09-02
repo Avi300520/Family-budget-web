@@ -328,7 +328,7 @@ export function effectiveCycleDay(state: WizardState): number {
 }
 
 // ── Validation (per step) ───────────────────────────────────────────────────────
-export type StepKey = "welcome" | "profile" | "separate" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
+export type StepKey = "welcome" | "profile" | "separate" | "personal" | "cycle" | "income" | "fixed" | "budget" | "alerts" | "done";
 
 // The separate-accounts step ships DORMANT with the rest of SEPACCT: with the flag off the wizard
 // has no such step and asks no household about a feature whose every route answers 404.
@@ -336,8 +336,8 @@ export type StepKey = "welcome" | "profile" | "separate" | "cycle" | "income" | 
 // runtime-import-free (see the header); ../sepacct.SEPACCT_UI_ENABLED is the same expression and is
 // what every other call site uses.
 export const STEP_ORDER: ReadonlyArray<StepKey> = ([
-  "welcome", "profile", "separate", "cycle", "income", "fixed", "budget", "alerts", "done"
-] as StepKey[]).filter((step) => step !== "separate" || process.env.NEXT_PUBLIC_SEPACCT_UI === "1");
+  "welcome", "profile", "separate", "personal", "cycle", "income", "fixed", "budget", "alerts", "done"
+] as StepKey[]).filter((step) => (step !== "separate" && step !== "personal") || process.env.NEXT_PUBLIC_SEPACCT_UI === "1");
 
 /**
  * `CC_UX_BUILD` item 4 — THE STEPS THIS PARTICULAR HOUSEHOLD IS ASKED, in order.
@@ -359,7 +359,8 @@ export const STEP_ORDER: ReadonlyArray<StepKey> = ([
  */
 export function visibleSteps(state: Pick<WizardState, "householdType" | "separateAccounts">): ReadonlyArray<StepKey> {
   return STEP_ORDER.filter((step) =>
-    step !== "separate" || state.householdType !== "single");
+    (step !== "separate" || state.householdType !== "single")
+    && (step !== "personal" || state.separateAccounts === true));
 }
 
 /** Returns null when the step is valid, or a Hebrew error message when it is not. */

@@ -4,12 +4,14 @@ import test from "node:test";
 
 const source = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
 
-test("separate onboarding frames the second money screen as shared budget only", () => {
+test("separate onboarding separates private income from the shared-budget screen", () => {
   const page = source("../app/onboarding/page.tsx");
   const steps = source("../app/onboarding/steps.tsx");
   assert.match(page, /wizard\.stepKey === "income" && wizard\.state\.separateAccounts/);
   assert.match(page, /התקציב המשותף לניהול/);
-  assert.match(steps, /ההכנסה הפרטית נשמרת בנפרד ואינה נדרשת לחישוב התקציב או יחס החלוקה/);
+  assert.match(page, /personal: \{ title: "הכסף האישי שלך"/);
+  assert.match(steps, /export function PrivateMoneyStep/);
+  assert.match(steps, /ההכנסה החודשית שלך \(רשות\)/);
   assert.doesNotMatch(steps, /\{false &&/);
 });
 

@@ -529,13 +529,14 @@ test("CC_UX item 4: a יחיד/ה household is never asked how it divides money 
   // flag happens to be unset in this process.
   assert.equal(visibleSteps(single).includes("separate"), false);
   assert.equal(visibleSteps(couple).includes("separate"), STEP_ORDER.includes("separate"));
-  // The optional private-income field lives inside the separate-money step, so the spine contains
-  // one financial decision instead of a detour immediately after it.
+  // The private-money step appears only after somebody has actively chosen separate accounts.
+  // A single-person household sees neither the arrangement question nor a personal-income detour.
   assert.deepEqual(
     visibleSteps(single),
-    STEP_ORDER.filter((s) => s !== "separate"),
-    "the single-household spine did not remove the separate-money step"
+    STEP_ORDER.filter((s) => s !== "separate" && s !== "personal"),
+    "the single-household spine did not remove the separate-money steps"
   );
+  assert.equal(visibleSteps(couple).includes("personal"), STEP_ORDER.includes("personal"));
 });
 
 test("CC_UX item 4: pendingSplitBp converts by string surgery and refuses what is not a ratio", () => {

@@ -235,20 +235,43 @@ export function SeparateAccountsStep({ state, set }: StepProps) {
               `state.separateAccounts && !state.incomeRedacted` branch renders `ההכנסה שלך`
               hinted *"פרטית. בן/בת הזוג לא רואה את המספר הזה"*, carries NO household-income
               field at all, and `buildOnboardingPayload` sends no `budget.income` for it. */}
-          <div className="panel" style={{ display: "grid", gap: 12, padding: 16, background: "var(--cream-1)" }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 16 }}>ההכנסה שלך</h3>
-              <p className="muted" style={{ margin: "4px 0 0" }}>רשות. זהו מספר פרטי, ואינו קובע את היחס או את התקציב המשותף. רק את/ה רואה אותו.</p>
-            </div>
-            <MoneyInput size="lg" value={state.ownIncome} onChange={(v) => set({ ownIncome: v })}
-              placeholder="18,000" ariaLabel="ההכנסה שלך" dataAction="set-private-income" />
-            <p className="muted" style={{ margin: 0, fontSize: 13 }}>אפשר להמשיך גם בלי סכום ולהוסיף או למחוק אותו אחר כך.</p>
-          </div>
           <p className="muted" style={{ margin: 0 }}>
-            בסיום נשמור את הבחירה ואת היחס. כשיש שני מבוגרים פעילים, כל הוצאת בית חדשה תקבל את החלוקה שבחרתם; עד אז היחס מחכה למבוגר/ת נוסף/ת.
+            בהמשך נגדיר בשני מסכים נפרדים את ההכנסה הפרטית שלך ואת התקציב המשותף של הבית. אף אחד מהם לא קובע את יחס החלוקה. בסיום נשמור את הבחירה ואת היחס; כשיש שני מבוגרים פעילים, כל הוצאת בית חדשה תקבל את החלוקה שבחרתם.
           </p>
         </section>
       )}
+    </div>
+  );
+}
+
+// ── Private money (separate accounts only) ─────────────────────────────────────
+// This is deliberately its own decision, after the household arrangement and before the shared
+// cycle/budget. Income is private reference information; the household budget is a separate,
+// jointly visible plan. Keeping the two fields on one card was visually compact but semantically
+// wrong: it suggested that one number derived, exposed, or constrained the other.
+export function PrivateMoneyStep({ state, set }: StepProps) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <section className="panel" style={{ display: "grid", gap: 8, background: "var(--cream-1)" }}>
+        <h2 style={{ margin: 0, fontSize: 18 }}>הכסף האישי שלך נשאר שלך</h2>
+        <p className="muted" style={{ margin: 0 }}>
+          המספר הזה הוא לעיון אישי בלבד: בן/בת הזוג לא רואים אותו, והוא לא משנה את היחס ביניכם ולא את תקציב הבית.
+        </p>
+      </section>
+      <Field label="ההכנסה החודשית שלך (רשות)" hint="אפשר להוסיף אותה עכשיו או להשאיר ריק. רק את/ה יכול/ה לראות, לעדכן או למחוק את הסכום.">
+        <MoneyInput
+          size="lg"
+          value={state.ownIncome}
+          onChange={(v) => set({ ownIncome: v })}
+          placeholder="18,000"
+          ariaLabel="ההכנסה החודשית שלך"
+          dataAction="set-private-income"
+        />
+      </Field>
+      <div className="status" style={{ display: "grid", gap: 6 }}>
+        <strong>ומה לגבי התקציב האישי?</strong>
+        <span>המערכת כיום מפרידה בין הוצאות אישיות לבין חלקך בהוצאות הבית. בהמשך תגדירו את תקציב הבית המשותף; חלקך בו מוצג בנפרד בכל הוצאה משותפת.</span>
+      </div>
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { computeTotals, type StepKey } from "../../lib/onboarding/model";
 import { WhatsAppCtaButton, botWhatsAppLink } from "../../components/WhatsAppCta";
 import { useOnboardingWizard } from "./useOnboardingWizard";
 import {
-  WelcomeStep, ProfileStep, SeparateAccountsStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
+  WelcomeStep, ProfileStep, SeparateAccountsStep, PrivateMoneyStep, CycleStep, IncomeStep, FixedStep, BudgetStep, AlertsStep, type StepProps
 } from "./steps";
 import styles from "./onboarding.module.css";
 import { api } from "../../lib/api";
@@ -19,6 +19,7 @@ const STEP_META: Record<StepKey, { title: string; sub: string }> = {
   profile: { title: "קצת על הבית שלכם", sub: "כדי שנדע איך לבנות את התקציב נכון." },
   // The step ASKS now, so the subtitle is the question and not a description of the feature.
   separate: { title: "איך מנהלים כסף בבית הזה?", sub: "נבחר יחד את הגבול בין כסף אישי לבין הוצאות הבית." },
+  personal: { title: "הכסף האישי שלך", sub: "פרטי לגמרי ונפרד מתקציב הבית ומהיחס ביניכם." },
   cycle: { title: "איך החודש הכלכלי עובד", sub: "מתי מתחדש התקציב שלכם." },
   income: { title: "כמה כסף נכנס - וכמה לנהל", sub: "אפשר להזין הכנסה, או רק תקציב חודשי לניהול." },
   fixed: { title: "מה כבר חייב לצאת כל חודש", sub: "ההוצאות הקבועות - שכירות, חשבונות, מנויים ועוד." },
@@ -31,6 +32,7 @@ const STEP_COMPONENTS: Record<Exclude<StepKey, "done">, (props: StepProps) => Re
   welcome: WelcomeStep,
   profile: ProfileStep,
   separate: SeparateAccountsStep,
+  personal: PrivateMoneyStep,
   cycle: CycleStep,
   income: IncomeStep,
   fixed: FixedStep,
